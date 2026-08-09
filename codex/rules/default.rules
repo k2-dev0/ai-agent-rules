@@ -21,7 +21,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
     decision = "allow",
-    justification = "polish完了時の変更行規約を再検査し、現在HEADを一時receiptへ記録・検証します。",
+    justification = "polish完了時のscope path検査を確認し、現在HEADを一時receiptへ記録・検証します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/capture-scope.sh"],
@@ -31,7 +31,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/check-changed-rules.sh"],
     decision = "allow",
-    justification = "polish対象の変更行だけを読み取り専用で検査します。",
+    justification = "polish対象pathが開始scopeと一致し追跡済み・cleanであることを検査します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/deepseek/delegate.sh"],

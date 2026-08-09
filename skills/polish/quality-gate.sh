@@ -18,7 +18,7 @@ REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
 RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 RECEIPT="$RECEIPT_DIR/$FEATURE"
 SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
-RULES_RECEIPT="$RECEIPT_DIR/$FEATURE.rules"
+PATHS_RECEIPT="$RECEIPT_DIR/$FEATURE.paths"
 
 load_scope() {
   [ -f "$SCOPE_RECEIPT" ] || die "polish対象の開始receiptが無い: $FEATURE"
@@ -47,21 +47,21 @@ require_scope_clean() {
   done
 }
 
-verify_rules_receipt() {
-  [ -f "$RULES_RECEIPT" ] || die "polish変更行規約のreceiptが無い: $FEATURE"
-  RULES_REPOSITORY=$(sed -n '1p' "$RULES_RECEIPT")
-  RULES_HEAD=$(sed -n '2p' "$RULES_RECEIPT")
-  RULES_BASE=$(sed -n '3p' "$RULES_RECEIPT")
-  [ "$RULES_REPOSITORY" = "$REPOSITORY" ] || die "変更行規約receiptのリポジトリが一致しない"
-  [ "$RULES_HEAD" = "$(git rev-parse HEAD)" ] || die "変更行規約検査後にHEADが変わった"
-  [ "$RULES_BASE" = "$BASE" ] || die "変更行規約receiptの開始commitが一致しない"
+verify_paths_receipt() {
+  [ -f "$PATHS_RECEIPT" ] || die "polish scope path receiptが無い: $FEATURE"
+  PATHS_REPOSITORY=$(sed -n '1p' "$PATHS_RECEIPT")
+  PATHS_HEAD=$(sed -n '2p' "$PATHS_RECEIPT")
+  PATHS_BASE=$(sed -n '3p' "$PATHS_RECEIPT")
+  [ "$PATHS_REPOSITORY" = "$REPOSITORY" ] || die "scope path receiptのリポジトリが一致しない"
+  [ "$PATHS_HEAD" = "$(git rev-parse HEAD)" ] || die "scope path検査後にHEADが変わった"
+  [ "$PATHS_BASE" = "$BASE" ] || die "scope path receiptの開始commitが一致しない"
 }
 
 case "$MODE" in
   record)
     load_scope
     require_scope_clean
-    verify_rules_receipt
+    verify_paths_receipt
     mkdir -p "$RECEIPT_DIR" || die "quality gate receipt用の一時ディレクトリを作れない"
     HEAD=$(git rev-parse HEAD)
     printf '%s\n%s\n%s\n' "$REPOSITORY" "$HEAD" "$BASE" > "$RECEIPT" || die "quality gate receiptを記録できない"

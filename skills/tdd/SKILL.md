@@ -168,7 +168,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ```
 
-設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使う変更行規約検査は両modeで実行する。
+設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使うscope path検査は両modeで実行する。
 
 ## 例外停止
 
