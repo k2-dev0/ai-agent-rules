@@ -92,7 +92,9 @@
       "bash .claude/skills/deepseek/delegate.sh",
       "bash .claude/skills/deepseek/delegate.sh *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
-      "bash .claude/skills/e2e/apply-e2e-plan.sh *"
+      "bash .claude/skills/e2e/apply-e2e-plan.sh *",
+      "./base/scripts/run-unit.sh",
+      "./base/scripts/run-unit.sh *"
     ],
     "filesystem": {
       "denyWrite": [".git/hooks", ".git/config", ".env", ".env.*", ".claude"]

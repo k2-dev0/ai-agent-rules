@@ -39,6 +39,14 @@ prefix_rule(
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
 )
 
+# TDDで承認済みの対象テストを個別実行・再実行する固定runner。引数はtest pathだけを
+# 受け取るrunner側で処理し、任意のshellや他scriptへ許可を広げない。
+prefix_rule(
+    pattern = ["./base/scripts/run-unit.sh"],
+    decision = "allow",
+    justification = "承認済みTDDシナリオの対象unit testを既存runner経由で実行します。",
+)
+
 # delegate.sh が長時間実行になった場合の完了確認。ps -p は指定PIDの状態を読むだけで
 # filesystemやprocessへ変更を加えないため、動的PIDでも追加承認を不要にする。
 prefix_rule(

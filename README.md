@@ -183,6 +183,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 通常ファイルをEdit / `apply_patch`で変更する、または新規ファイルをWriteする | ✅ 自動 |
 | 既存ファイルを全面Writeする | 🙋 Claude Codeで確認 |
 | workspace sandbox内で空ディレクトリを作る（`mkdir`） | ✅ 自動 |
+| TDDで承認済みの対象testを`./base/scripts/run-unit.sh`で実行・再実行する | ✅ 自動 |
 | `package.json` / CI / migration file / Docker / Terraform を書き換える | 🙋 確認 |
 | `schema.prisma`を書き換え、`prisma format` / `validate` / `generate`を実行する | ✅ 自動 |
 | shellでファイル作成・上書き・metadata変更する（`cp` `touch` `chmod` `sed -i` 等） | 🙋 確認 |

@@ -42,6 +42,8 @@
       "Bash(bash .claude/skills/deepseek/delegate.sh:*)",
       "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh)",
       "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh:*)",
+      "Bash(./base/scripts/run-unit.sh)",
+      "Bash(./base/scripts/run-unit.sh:*)",
       "mcp__serena__onboarding",
       "mcp__serena__list_memories",
       "mcp__serena__write_memory",
