@@ -25,6 +25,12 @@ if
     # テストファイル自体は TDD の Red フェーズ。deny 対象外(棄権して settings に委ねる)
     echo "$FILE" | grep -q '\.test\.' && continue
 
+    # Prisma schemaは対応テストではなく format / validate / generate で検証する。
+    # 拡張子判定の偶然に依存せず、TDD契約上の明示的な除外として固定する。
+    case "$FILE" in
+      schema.prisma|*/schema.prisma) continue ;;
+    esac
+
     DIR=$(dirname "$FILE")
     BASE=$(basename "$FILE" | sed 's/\.[^.]*$//')
     EXT=$(basename "$FILE" | sed 's/^.*\.//')

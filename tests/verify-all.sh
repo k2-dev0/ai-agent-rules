@@ -230,6 +230,7 @@ grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$UNWIND_SKILL" && grep -Fq '
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CONDUCTOR_SKILL" && ok "conductor の完了更新は品質receiptを検証" || ng "conductor の品質receipt検証が無い"
 grep -Fq '旧`run-agent`の責務は現在の`conductor`が引き継いでいる' "$CONDUCTOR_SKILL" && grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$CONDUCTOR_SKILL" && grep -Fq '候補返却後のレビュー、採否、修正をDeepSeekへ戻さない' "$CONDUCTOR_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "旧run-agentはDeepSeek優先・上位fallback・上位修正へ固定" || ng "旧run-agentの初回実装・修正責務が不正"
+grep -Fq '`schema.prisma`自体はテスト対象外' "$TDD_SKILL" && grep -Fq 'シナリオ承認とStep 2・3を省略' "$TDD_SKILL" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$TDD_SKILL" && grep -Fq '変更対象が`schema.prisma`だけなら`tdd`のschema例外' "$CONDUCTOR_SKILL" && ok "tddはschema.prismaだけをテスト対象外に限定" || ng "tddのschema.prismaテスト除外境界が不正"
 if grep -Fq 'Skill(polish)' "$CONDUCTOR_SKILL" && \
    grep -q 'index更新と最終報告の前に `polish` を自動で実行する' "$CONDUCTOR_SKILL" && \
    ! grep -q 'unwind' "$CONDUCTOR_SKILL" && \
@@ -791,6 +792,10 @@ OUT=$(echo "$AP" | bash $H/require-test.sh)
 [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: marker 一致で執行(実機同形ペイロード)" || ng "require-test: marker 一致 out=[$OUT]"
 APMD=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: README.md\n+x\n*** End Patch"}}')
 [ -z "$(echo "$APMD" | bash $H/require-test.sh)" ] && ok "require-test: md のみのパッチは棄権" || ng "require-test: md が棄権されない"
+APPRISMA=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: front/prisma/schema.prisma\n+x\n*** End Patch"}}')
+[ -z "$(echo "$APPRISMA" | bash $H/require-test.sh)" ] && ok "require-test: schema.prisma は明示除外" || ng "require-test: schema.prisma を誤拒否"
+APPRISMA_TS=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: front/prisma/schema.prisma\n+x\n*** Add File: src/schema-change.ts\n+y\n*** End Patch"}}')
+[ "$(echo "$APPRISMA_TS" | bash $H/require-test.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: schema.prisma と未テストtsの混在を deny" || ng "require-test: schema例外がtsへ漏れた"
 APMX=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: a.md\n+x\n*** Add File: src/bar.ts\n+y\n*** End Patch"}}')
 [ "$(echo "$APMX" | bash $H/require-test.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: 複数ファイルパッチの一部違反を deny" || ng "require-test: 複数ファイル検査漏れ"
 APB=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"echo hi"}}')

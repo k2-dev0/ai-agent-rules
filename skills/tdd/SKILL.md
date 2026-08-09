@@ -28,6 +28,8 @@ hooks:
 
 テスト資産には、test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。
 
+`schema.prisma`自体はテスト対象外とし、対応するtest/specとRed/Greenを要求しない。変更対象が`schema.prisma`だけならシナリオ承認とStep 2・3を省略し、Step 4以降で実装する。Prisma CLIが導入済みなら既存scriptまたは`node_modules/.bin/prisma`からformat、validate、generateを実行して検証する。同じ設計に本体コードの公開挙動変更が含まれる場合、その挙動は通常どおりシナリオ、Red、Greenの対象とする。
+
 ## 通常ゲート
 
 通常のユーザー承認は、実装前の**シナリオ一括承認**だけとする。各シナリオについて前提、操作、期待結果を提示する。承認後、具体的なテストコードは[agent_name]が自動で作る。
@@ -85,7 +87,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 ### 7. [agent_name]がGreen・レビュー・修正を完了する
 
-対象テスト、関連回帰テスト、必要な型検査とlintを実行する。DeepSeek候補を反映した後は、[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
+対象テスト、関連回帰テスト、必要な型検査とlintを実行する。`schema.prisma`にはテストを要求せず、format、validate、generateのうち利用可能な検証を実行する。DeepSeek候補を反映した後は、[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
 
 ## 例外停止
 

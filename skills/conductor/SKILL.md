@@ -49,6 +49,8 @@ DeepSeekへ渡す許可パスに未コミット変更があれば、ユーザー
 
 コード変更では`tdd`を省略せず、シナリオ一括承認、test作成とRed、DeepSeek候補、上位モデルのレビュー・修正とGreenまで完了する。追跡対象は1ファイルずつ即コミットし、無視されたテスト資産は強制stageせず作業ツリーで検証する。
 
+変更対象が`schema.prisma`だけなら`tdd`のschema例外に従い、シナリオ、test作成、Red/Greenを要求せず、Prismaのformat、validate、generateで検証する。本体コードを同時に変更する場合、その公開挙動は通常の`tdd`から除外しない。
+
 DeepSeekを呼ぶ前に`../deepseek/DELEGATION.md`を全文読む。[agent_name]は最初の応答前に本体コードや`schema.prisma`のstub、雛形、部分実装を作らず、候補返却後のレビュー、採否、修正をDeepSeekへ戻さない。
 
 調査・ドキュメントだけの設計書は[agent_name]が通常どおり実行し、DeepSeek実装を呼ばない。

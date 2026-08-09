@@ -65,6 +65,7 @@ check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"too
 touch src/foo.test.ts
 check "require-test: テスト有り ts は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
 check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
+check "require-test: schema.prisma は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/prisma/schema.prisma"}}'
 check "require-test: Bash は棄権"             empty require-test.sh '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 
 # --- protect-git ---
