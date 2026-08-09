@@ -57,6 +57,14 @@ hooks:
 
 選んだ設計書の対象ファイルを、テスト資産、DeepSeekへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。test/spec、fixture、factory、mock、stub、fake、snapshot、Markdown、設定、依存関係、migration、Git管理ファイルはDeepSeekへ渡さない。委任対象pathに未コミット変更があればユーザー変更との衝突として停止する。
 
+機能名と、今回変更する追跡済み本体コードおよび`schema.prisma`の相対pathを確定し、変更前に次を1回実行する。新規pathはまだ存在しなくてよい。設計書path modeの機能名は`branch-<機能名>-prompt.md`から得る。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
+```
+
+これは後で`polish`が使う基準commitと対象pathを固定するだけで、品質検査や完了receiptの記録は行わない。開始前から対象pathがdirtyなら停止する。後から対象pathを推測追加しない。
+
 ### 2. 調査を委任してシナリオを承認する
 
 関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
@@ -118,7 +126,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 ### 9. polishと完了処理を行う
 
-設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから`polish`を必ず呼ぶ。機能名と、この実行で変更してコミットした追跡済み本体コードの相対path一覧を渡す。`polish`が変更した場合はStep 8とレビューをやり直し、変更をコミットして品質ゲートを再実行する。
+設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから、変更した全ファイルをまとめた単位で`polish`を呼ぶ。ファイルごとには呼ばない。機能名と、この実行で変更してコミットした追跡済み本体コードの相対path全件を渡す。`polish`は決定的toolの自動修正を必要範囲だけ再確認し、上位モデルによる判断修正後は全品質ゲートを先頭から反復してから返る。
 
 `from-prompt`では、polishが現在のHEADへquality receiptを記録した後だけ次を単独実行する。失敗時はindexを直接編集しない。
 
@@ -126,7 +134,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ```
 
-設計書path modeではquality receiptと`mark-prompt-done.sh`を使わず、indexへ触れない。
+設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使う変更行規約検査は両modeで実行する。
 
 ## 例外停止
 

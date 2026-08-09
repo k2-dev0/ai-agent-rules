@@ -21,7 +21,17 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
     decision = "allow",
-    justification = "polish完了時の現在HEADと作業ツリー状態だけを一時receiptへ記録・検証します。",
+    justification = "polish完了時の変更行規約を再検査し、現在HEADを一時receiptへ記録・検証します。",
+)
+prefix_rule(
+    pattern = ["bash", ".agents/skills/polish/capture-scope.sh"],
+    decision = "allow",
+    justification = "TDD開始時のHEADと対象pathだけを一時receiptへ記録します。",
+)
+prefix_rule(
+    pattern = ["bash", ".agents/skills/polish/check-changed-rules.sh"],
+    decision = "allow",
+    justification = "polish対象の変更行だけを読み取り専用で検査します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/deepseek/delegate.sh"],

@@ -1,7 +1,7 @@
 #!/bin/bash
-# polish 完了の receipt を記録・検証する固定実行器。
+# polish 完了後のHEADを記録・検証する。
 # receipt は一時領域に置き、設計書の index や作業ツリーを汚さない。
-set -u
+set -eu
 
 MODE="${1:-}"
 FEATURE="${2:-}"
@@ -17,14 +17,54 @@ REPOSITORY=$(git rev-parse --show-toplevel)
 REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
 RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 RECEIPT="$RECEIPT_DIR/$FEATURE"
+SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
+RULES_RECEIPT="$RECEIPT_DIR/$FEATURE.rules"
+
+load_scope() {
+  [ -f "$SCOPE_RECEIPT" ] || die "polish対象の開始receiptが無い: $FEATURE"
+  EXPECTED_REPOSITORY=$(sed -n '1p' "$SCOPE_RECEIPT")
+  BASE=$(sed -n '2p' "$SCOPE_RECEIPT")
+  [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || die "開始receiptのリポジトリが一致しない"
+  git cat-file -e "$BASE^{commit}" >/dev/null 2>&1 || die "開始commitが存在しない: $BASE"
+  git merge-base --is-ancestor "$BASE" HEAD || die "開始commitが現在HEADの祖先ではない"
+  PATHS=()
+  while IFS= read -r path; do
+    [ -n "$path" ] && PATHS+=("$path")
+  done < <(sed -n '3,$p' "$SCOPE_RECEIPT")
+  [ "${#PATHS[@]}" -gt 0 ] || die "開始receiptに対象pathが無い"
+}
+
+require_scope_clean() {
+  local path
+  for path in "${PATHS[@]}"; do
+    [ ! -d "$REPOSITORY/$path" ] || die "scopeはdirectoryではなく個別fileに限定する: $path"
+    if [ -e "$REPOSITORY/$path" ] || [ -L "$REPOSITORY/$path" ]; then
+      git ls-files --error-unmatch -- ":(literal)$path" >/dev/null 2>&1 || die "$path は未追跡またはignoredのまま"
+    else
+      git ls-tree -r --name-only "$BASE" -- ":(literal)$path" | grep -Fxq "$path" || die "$path は追跡済みfileでもcommit済み削除でもない"
+    fi
+    [ -z "$(git status --porcelain --untracked-files=all -- ":(literal)$path")" ] || die "$path に未コミット変更がある"
+  done
+}
+
+verify_rules_receipt() {
+  [ -f "$RULES_RECEIPT" ] || die "polish変更行規約のreceiptが無い: $FEATURE"
+  RULES_REPOSITORY=$(sed -n '1p' "$RULES_RECEIPT")
+  RULES_HEAD=$(sed -n '2p' "$RULES_RECEIPT")
+  RULES_BASE=$(sed -n '3p' "$RULES_RECEIPT")
+  [ "$RULES_REPOSITORY" = "$REPOSITORY" ] || die "変更行規約receiptのリポジトリが一致しない"
+  [ "$RULES_HEAD" = "$(git rev-parse HEAD)" ] || die "変更行規約検査後にHEADが変わった"
+  [ "$RULES_BASE" = "$BASE" ] || die "変更行規約receiptの開始commitが一致しない"
+}
 
 case "$MODE" in
   record)
-    git diff --quiet || die "未ステージングの追跡対象変更がある。polish後の変更を検証・コミットしてから記録すること"
-    git diff --cached --quiet || die "stage済み変更がある。polish後の変更をコミットしてから記録すること"
+    load_scope
+    require_scope_clean
+    verify_rules_receipt
     mkdir -p "$RECEIPT_DIR" || die "quality gate receipt用の一時ディレクトリを作れない"
     HEAD=$(git rev-parse HEAD)
-    printf '%s\n%s\n' "$REPOSITORY" "$HEAD" > "$RECEIPT" || die "quality gate receiptを記録できない"
+    printf '%s\n%s\n%s\n' "$REPOSITORY" "$HEAD" "$BASE" > "$RECEIPT" || die "quality gate receiptを記録できない"
     echo "recorded: $FEATURE $HEAD"
     ;;
   verify)
@@ -33,8 +73,8 @@ case "$MODE" in
     EXPECTED_HEAD=$(sed -n '2p' "$RECEIPT")
     [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || die "quality gate receiptのリポジトリが一致しない"
     [ "$EXPECTED_HEAD" = "$(git rev-parse HEAD)" ] || die "polish後にHEADが変わった。品質ゲートを再実行して記録し直すこと"
-    git diff --quiet || die "receipt記録後に未ステージングの追跡対象変更がある"
-    git diff --cached --quiet || die "receipt記録後にstage済み変更がある"
+    load_scope
+    require_scope_clean
     ;;
   *)
     die "mode は record または verify に限定する"
