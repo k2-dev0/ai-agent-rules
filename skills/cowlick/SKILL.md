@@ -25,6 +25,8 @@ meetingから渡された先頭引数だけを使う。
 4. 既存経路と新設予定の実行・永続化・運用境界を一列にし、境界を新設しない基準案を優先する。新しいpublic endpoint、queue、scheduler、worker、serverless function、外部接続、global/shared変更は、基準案で満たせない明示要件または既存制約がある場合だけ加える。
 5. `DESIGN_FORMAT.md`を全文読み、未承認の`.prompt.md`と`branch-<機能名>-prompt.md`だけをプロジェクトルートの`draft-prompt/`へ作る。正式領域へは書かない。
 
+疑似コードは予約語・構文を英語、新しく設計する識別子と処理内容を日本語で書く。圧縮は重複説明と同一の外枠に限定する。非自明な関数、validation、DB / API処理では、signature、guard順、条件・計算式、取得・sort条件、正常・errorの返却、dataの権威、副作用の順序がChangesにないまま`draft_ready`を返さない。
+
 ディレクトリがなければ、次をプロジェクトルートから単独実行する。workspace sandbox内の通常作成なので承認を要求せず、他commandと連結しない。
 
 ```bash
@@ -44,7 +46,7 @@ mkdir -p draft-prompt
 
 共通契約の代替調査まで使えない場合は、理由と未調査範囲を含む`research_blocked`をmeetingへ返す。重要な根拠は[agent_name]が実ファイルで再確認する。DeepSeekと代替subagentは探索だけを担当し、設計判断とドラフト更新は[agent_name]が行う。要件revisionと異なる判断が必要なら、選択肢、挙動差、推奨を含む`consultation_required`をmeetingへ返す。
 
-調査後に全設計書を横断し、各新設境界とglobal/shared変更が明示要件または既存制約へ直接対応し、基準案では満たせないことを確認する。設計選択同士にしか依存しない要素を残さない。満たせばファイル名と内容で識別できるdraft revisionと`draft_ready`を返して停止し、ponytailやapplyへ自動で進まない。
+調査後に全設計書を横断し、各新設境界とglobal/shared変更が明示要件または既存制約へ直接対応し、基準案では満たせないことを確認する。設計選択同士にしか依存しない要素を残さない。Changesが実装時の再設計を必要とせず、重要な分岐・式・順序・契約を保持していることも確認する。満たせばファイル名と内容で識別できるdraft revisionと`draft_ready`を返して停止し、ponytailやapplyへ自動で進まない。
 
 ## apply
 

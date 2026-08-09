@@ -39,6 +39,46 @@
 - <この1枚だけで判定できる条件>
 ````
 
-Changesでは予約語、構文、library API名を英語のまま使い、関数・引数・処理内容を日本語で書く。分岐とloopは文章へ畳まず`if`、`switch`、`for`等の構造を示す。error処理とDB書き込み、メール、外部APIなどの副作用を一つずつ書き、行数削減のために省略しない。実装時の英語識別子は固定しない。
+Changesの疑似コードでは、`export`、`import`、`async`、`function`、`=>`、`if`、`else`、`switch`、`for`、`while`、`const`、`let`、`return`、`await`、`try`、`catch`、`throw`、`null`、`true`、`false`などの予約語・構文とlibrary API名を英語のまま使う。新しく設計する関数、引数、変数、型、結果field、error名、処理内容は日本語で書く。既存symbol、schema field、file pathは参照を壊さないよう実名を保持する。分岐とloopは文章へ畳まず`if`、`switch`、`for`等の構造を示す。error処理とDB書き込み、メール、外部APIなどの副作用を一つずつ書き、行数削減のために省略しない。実装時の新しい英語識別子は固定しない。
+
+Changesは、実装者が挙動を再設計せずコードへ変換できる密度で書く。対象に応じて次を疑似コードへ含める。
+
+- 関数: `export` / local、同期 / `async`、引数、guardの評価順、導出値と計算式、正常結果と区別可能なerror、返却field
+- validation schema: `null`を含む入力形状、条件付き必須、形式条件、clientで検証する範囲とserverの最新dataで再検証する範囲
+- DB / API: 認証主体、`where`の全条件と日付境界、`orderBy`とtie-break、正とするdata、再取得・再検証、選択方法、公開するfield
+- 副作用: DB更新、メール、外部APIの実行順、field mapping、`await`、失敗時の扱い
+- 共通要素: 定数・配列の形、直接のconsumer、別の値から導出する上限などの関係
+
+「検証する」「取得する」「errorを返す」だけで済ませず、判定条件、取得条件、errorの区別を展開する。同じ処理を複数対象へ適用する場合は`for (対象 of [...])`へまとめてよいが、共通処理を省略せず、対象固有の差だけを別に示す。
+
+圧縮してよいのは重複説明と同一の外枠だけとする。guard順、条件式、境界の等号、計算式、sort・tie-break、正常・errorの返却field、状態遷移、副作用、dataの権威を文章一行へ畳まない。Summaryや完了条件でChangesを重複説明しない。
+
+次は書式と密度の例であり、この処理自体を要件として流用しない。
+
+```typescript
+// service.ts
+import { 既存の送信関数 } from "./既存経路"
+
+export async function 利用内容を確定する関数(使用方法, 入力件数, 候補一覧, 上限件数) {
+  if (使用方法 === null) {
+    return { 成功: false, エラー: "必須選択" }
+  }
+
+  const 使用件数 = 使用方法が全件使用
+    ? Math.min(候補一覧.length, 上限件数)
+    : 入力件数
+
+  if (使用件数 > 候補一覧.length) {
+    return { 成功: false, エラー: "保有件数超過" }
+  }
+
+  const 使用候補一覧 = 候補一覧.slice(0, 使用件数)
+  for (const 使用候補 of 使用候補一覧) {
+    await 既存の送信関数(使用候補)
+  }
+
+  return { 成功: true, 使用件数, 使用候補一覧 }
+}
+```
 
 対象ファイルと参照ruleは正確な相対パスで列挙する。完了条件にはChangesの実装、対象テスト、必要な型検査・formatを含める。conductorは1枚だけ読むため、別設計書を読まないと判定できる条件を置かない。
