@@ -17,12 +17,9 @@ die(){ echo "ERROR: $1" >&2; exit 1; }
 
 [[ "$NAME" =~ $NAME_RE ]] || die "invalid 機能名: $NAME (ASCII kebab-case only)"
 ENTRY="branch-$NAME-prompt.md"
-QUALITY_GATE="$(dirname "$0")/../polish/quality-gate.sh"
 
 [ -L "$INDEX" ] && die "index is a symlink: $INDEX"
 [ -f "$INDEX" ] || die "index not found: $INDEX"
-[ -x "$QUALITY_GATE" ] || die "polish品質ゲートが無い: $QUALITY_GATE"
-"$QUALITY_GATE" verify "$NAME" || die "polish品質ゲートが未完了: $NAME"
 
 ESC=$(printf '%s' "$ENTRY" | sed 's/\./\\./g')
 grep -qE "^[[:space:]]*-[[:space:]]*\[[ xX]\][[:space:]]+$ESC[[:space:]]*$" "$INDEX" \

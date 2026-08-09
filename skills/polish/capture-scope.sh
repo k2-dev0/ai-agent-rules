@@ -55,7 +55,6 @@ FEATURE="${1:-}"
 shift 2
 
 SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
-QUALITY_RECEIPT="$RECEIPT_DIR/$FEATURE"
 BASE=$(git rev-parse HEAD)
 mkdir -p "$RECEIPT_DIR" || die "scope receipt用の一時ディレクトリを作れない"
 TEMP_SCOPE="$SCOPE_RECEIPT.tmp.$$"
@@ -74,5 +73,4 @@ for path in "$@"; do
 done
 
 mv "$TEMP_SCOPE" "$SCOPE_RECEIPT" || die "scope receiptを記録できない"
-rm -f "$QUALITY_RECEIPT"
 echo "captured: $FEATURE $BASE"

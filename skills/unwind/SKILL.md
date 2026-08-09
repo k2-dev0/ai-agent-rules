@@ -14,7 +14,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 対象は親スキルが渡す、基準commitから実際に変更され現在も存在する**追跡済み本体コードの相対パス**だけとする。test、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスが渡されない場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
 
-実行前に`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行し、親スキルから受け取ったpathが出力と順序込みで完全一致することを確認する。directory、glob、開始scope全件、repository全体を渡された場合は検出を始めず親スキルへ拒否を返す。出力が空ならDeepSeekを呼ばず、対象なしとして返す。
+親スキルが`list-changed`で確定したpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。pathが空ならDeepSeekを呼ばず、対象なしとして返す。
 
 - `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
 - `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない

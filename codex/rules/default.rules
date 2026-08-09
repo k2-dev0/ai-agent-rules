@@ -21,7 +21,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
     decision = "allow",
-    justification = "polish完了時のscope path検査を確認し、現在HEADを一時receiptへ記録・検証します。",
+    justification = "polish対象が実変更pathと一致し、追跡済み・cleanであることを確認します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/capture-scope.sh"],

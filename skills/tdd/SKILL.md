@@ -86,7 +86,7 @@ Step 1で設計書を選んでからStep 5のDeepSeek初回実装候補を受領
 bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 ```
 
-これは後で`polish`が使う基準commitと対象pathを固定するだけで、品質検査や完了receiptの記録は行わない。開始前から対象pathがdirtyなら停止する。後から対象pathを推測追加しない。
+これは後で`polish`が使う基準commitと対象pathを固定するだけで、品質検査は行わない。開始前から対象pathがdirtyなら停止する。後から対象pathを推測追加しない。
 
 ### 2. 調査を委任してシナリオを承認する
 
@@ -162,15 +162,15 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 ### 9. polishと完了処理を行う
 
-設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`は同じ決定的selectorで入力を再検証し、formatter・lint・`unwind`を実変更pathだけへ適用する。決定的toolの自動修正を必要範囲だけ再確認し、上位モデルによる判断修正後は全品質ゲートを先頭から反復してから返る。
+設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`をその実変更pathだけへ適用し、最後のscope path検査で入力の完全一致とtracked・cleanだけを確認する。決定的toolの自動修正を必要範囲だけ再確認し、上位モデルによる判断修正後は全品質ゲートを先頭から反復してから返る。
 
-`from-prompt`では、polishが現在のHEADへquality receiptを記録した後だけ次を単独実行する。失敗時はindexを直接編集しない。
+`from-prompt`では、polishのscope path検査が成功した後だけ次を単独実行する。失敗時はindexを直接編集しない。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ```
 
-設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使うscope path検査は両modeで実行する。
+設計書path modeでは`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使うscope path検査は両modeで実行する。
 
 ## 例外停止
 
@@ -190,6 +190,6 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミットである理由を完了報告に含めた
 - polishの品質ゲートが完了した
-- `from-prompt`では同じ機能名・現在のHEADのquality receiptを検証してindexを更新した
+- `from-prompt`ではpolishのscope path検査後にindexを更新した
 
 対象設計書、承認シナリオ、Red、Green、DeepSeekの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミットを完了報告へ含める。`from-prompt`ではindexの残件数も含める。

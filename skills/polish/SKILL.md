@@ -17,7 +17,7 @@ disable-model-invocation: true
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-開始scopeの基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済み本体コードだけがscope順で返る。この出力と完全一致する相対path全件を一括入力とし、開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`へ渡さず、最終scope検査だけで確認する。出力が空なら実行表と`unwind`を省略し、scope path検査へ進む。
+開始scopeの基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済み本体コードだけがscope順で返る。この出力と完全一致する相対path全件を一括入力とし、開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`・scope path検査の対象外にする。出力が空なら実行表と`unwind`を省略し、scope path検査へ進む。
 
 各実変更pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは実変更pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheckとPrisma検証はファイル単位で安全に分割できないため、実変更pathが属するpackageまたはschemaだけを起点に既存単位で実行する。
 
@@ -47,13 +47,13 @@ packageごとに上から実行する。既存scriptを第一選択にし、scri
 
 ## scope path検査
 
-実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから`list-changed`を再実行する。pathは最新の出力と同じ順序で全件渡す。出力が空なら`--`の後へpathを付けない。
+実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから、polish開始時に得た実変更pathを同じ順序で全件渡す。`list-changed`をもう一度実行しない。入力が空なら`--`の後へpathを付けない。
 
 ```bash
-bash [skills_root]/polish/quality-gate.sh check <機能名> -- <実変更path>...
+bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
 ```
 
-開始receiptのrepository・基準commit・候補path一覧を読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。開始scope内の全pathについて追跡済みまたはcommit済み削除であること、cleanであることを検査する。path形式、重複、directory、symlinkは開始時の`capture-scope.sh`が検査し、ここで同じ規則を重複実装しない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
+開始receiptのrepository・基準commit・候補path一覧を読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。入力された実変更pathだけが追跡済みかつcleanであることを検査する。完了receiptの記録や後続での再検証は行わない。path形式、directory、symlinkは開始時の`capture-scope.sh`が検査し、ここで同じ規則を重複実装しない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
 
 ## 反復条件
 
@@ -68,13 +68,3 @@ bash [skills_root]/polish/quality-gate.sh check <機能名> -- <実変更path>..
 | tool未導入、設定競合、実行不能 | 再実行で隠さず停止して未実行項目を返す |
 
 決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。上位モデルがコードを判断して修正した場合は全品質ゲートを再実行する。最終の一周がすべて成功した時だけ完了し、ファイル単位の起動へ分割しない。
-
-## tdd from-prompt への完了通知
-
-`tdd`の`from-prompt` modeから機能名と本体コードの相対path一覧を渡されて実行した場合は、すべての品質ゲート（scope path検査とDeepSeekによる再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。設計書path modeでは記録しない。
-
-```bash
-bash [skills_root]/polish/quality-gate.sh record <機能名> -- <実変更path>...
-```
-
-`record`はscope path検査をもう一度行い、現在の HEAD、基準commit、実変更path一覧を同じreceiptへ固定する。設計書path modeでは`check`だけを使い、receiptは記録しない。失敗した場合は完了を報告せず、変更の検証とコミットをやり直す。
