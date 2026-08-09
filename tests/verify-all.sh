@@ -314,6 +314,11 @@ git config user.name tester
 printf '# research spec\n' > spec.md
 git add spec.md
 git commit -qm "test: research fixture"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" smoke > delegate-smoke.out 2>&1 && grep -Fq 'smoke: ok model=' delegate-smoke.out; then
+  ok "delegate-deepseek: smokeは状態保存なしで疎通確認を完了"
+else
+  ng "delegate-deepseek: smokeの状態更新no-opが不正"; cat delegate-smoke.out
+fi
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research empty-research spec.md > delegate-empty.out 2>&1; then
   ok "delegate-deepseek: Bash 3.2で変更ゼロのresearchを完了"
 else

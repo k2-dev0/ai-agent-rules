@@ -133,8 +133,8 @@ write_task_state() {
   local updated_at
   local state_temp
 
-  [ -n "$TASK_STATE" ] || return
-  [ -d "$TASK_RUNTIME" ] || return
+  [ -n "$TASK_STATE" ] || return 0
+  [ -d "$TASK_RUNTIME" ] || return 0
   updated_at=$(date +%s)
   state_temp="$TASK_STATE.tmp"
   jq -n \
