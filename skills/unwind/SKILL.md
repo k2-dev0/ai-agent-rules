@@ -21,7 +21,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 実行
 
-1. `../deepseek/DELEGATION.md`を全文読み、現在のHEADへ`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、対象パスを明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
+1. 現在のHEADへDeepSeekの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、対象パスを明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
 2. DeepSeek が返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
    - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause

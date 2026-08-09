@@ -24,7 +24,6 @@ ai-agent-rules/
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── deepseek/           # 調査・候補実装を隔離実行する共通基盤
-│   ├── conductor/          # 旧run-agent。設計書1枚のDeepSeek初回実装を統括して停止
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── errand/             # 設計書なしの軽微な実装をDeepSeekへ限定委任
 │   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
@@ -36,8 +35,8 @@ ai-agent-rules/
 │   ├── context-update/     # 知見の更新
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
 ├── hooks/
-│   └── shell/              # PreToolUse hook 本体（hook-io.sh がスキーマ差分を吸収）
-├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / conductor が使用）
+│   └── shell/              # PreToolUse hook 本体（必須契約の全文注入を含む）
+├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / tdd が使用）
 ├── e2e/                # .e2e.md の配置先シード（e2e スキルが使用）
 ├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
 ├── codex/              # Codex 用の設定（config.toml, hooks.json, rules/）
@@ -116,7 +115,7 @@ $bootstrap codex
 
 `preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idでDeepSeekを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
 
-`errand`、`tdd`、旧`run-agent`である`conductor`では、初回実装をDeepSeekへ委任する。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。上位モデル相当のsubagentを利用できるなら許可パス限定で優先する。候補が返った後の採否・レビュー・修正は最初から上位モデルの責務なので、不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
+`errand`と`tdd`では、初回実装をDeepSeekへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
 
 固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
@@ -133,7 +132,7 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
   <mode固有の引数>
 ```
 
-時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約し、DeepSeekを呼ぶ各スキルが実行前に全文を読む。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加える。
+時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約する。DeepSeek実行器の初回呼び出し直前にhookが契約全文をcontextへ注入して呼び出しを一度止め、同一session・同一内容のreceiptがある再試行だけを通す。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加える。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 

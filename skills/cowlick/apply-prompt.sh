@@ -47,7 +47,7 @@ BAD=$(grep -nE '^[[:space:]]*-[[:space:]]*\[[ xX]\]' "$SRC_DIR/$INDEX_NAME" \
 $BAD"
 
 # index が並べた設計書と、実体として存在する設計書が 1:1 で対応することを検査する。
-# 食い違ったまま反映すると conductor が存在しないファイルを掴む／実装されない設計書が残る。
+# 食い違ったまま反映すると tdd from-prompt が存在しないファイルを掴む／実装されない設計書が残る。
 REFS=$(grep -oE 'branch-[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?-prompt\.md' "$SRC_DIR/$INDEX_NAME" | sort -u)
 HAVE=$(printf '%s' "$FILES" | sort -u)
 [ "$REFS" = "$HAVE" ] || die "index と設計書が一致しない

@@ -52,9 +52,9 @@ disable-model-invocation: true
 
 `unwind` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、DeepSeek へ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
 
-## conductor への完了通知
+## tdd from-prompt への完了通知
 
-`conductor` から機能名と本体コードの相対パス一覧を渡されて実行した場合は、すべての品質ゲート（DeepSeek による再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。
+`tdd`の`from-prompt` modeから機能名と本体コードの相対path一覧を渡されて実行した場合は、すべての品質ゲート（DeepSeekによる再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。設計書path modeでは記録しない。
 
 ```bash
 bash [skills_root]/polish/quality-gate.sh record <機能名>

@@ -1,5 +1,5 @@
 #!/bin/bash
-# mark-prompt-done: conductor が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
+# mark-prompt-done: tdd from-prompt が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
 # 実装順リスト上で [ ] から [x] へ倒す。
 # .[agent_name]/ は sandbox の denyWrite で保護されておりエージェントは直接書き込めないため、
 # 進捗の記録もこの固定処理へ閉じ込める。本スクリプトにできるのは「対象 1 行のチェックボックスを

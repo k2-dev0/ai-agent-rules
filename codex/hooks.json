@@ -61,6 +61,11 @@
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-locks.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/load-required-contract.sh\"",
+            "timeout": 5
           }
         ]
       },
@@ -120,6 +125,11 @@
           {
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/commit-gate.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/load-required-contract.sh\"",
             "timeout": 5
           }
         ]

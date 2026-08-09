@@ -35,6 +35,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/commit-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/load-required-contract.sh"
           }
         ]
       },
@@ -75,8 +79,8 @@
       "bash .claude/skills/bootstrap/init-agent.sh *",
       "bash .claude/skills/cowlick/apply-prompt.sh",
       "bash .claude/skills/cowlick/apply-prompt.sh *",
-      "bash .claude/skills/conductor/mark-prompt-done.sh",
-      "bash .claude/skills/conductor/mark-prompt-done.sh *",
+      "bash .claude/skills/tdd/mark-prompt-done.sh",
+      "bash .claude/skills/tdd/mark-prompt-done.sh *",
       "bash .claude/skills/polish/quality-gate.sh",
       "bash .claude/skills/polish/quality-gate.sh *",
       "bash .claude/skills/rebase/rebase.sh",

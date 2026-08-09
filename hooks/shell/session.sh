@@ -1,7 +1,7 @@
 #!/bin/bash
 # UserPromptSubmit / SessionEnd hook: codex の skill スコープ再現を担う。
-# - UserPromptSubmit: $tdd / $prototype の明示起動を検知し、セッション別の
-#   session marker を作成する（require-test.sh / prototype.sh が参照）
+# - UserPromptSubmit: workflow skill の明示起動を検知し、セッション別の
+#   session marker を作成する（各PreToolUse hookが参照）
 # - SessionEnd: 自セッションの marker を削除する（残っても別セッションには無害だが掃除する）
 # claude では skill frontmatter hooks が同じ役割を担うため本 hook は棄権する。
 exec 2>/dev/null
@@ -12,7 +12,7 @@ case "$(hook_event_name)" in
   UserPromptSubmit)
     PROMPT=$(hook_prompt)
     [ -z "$PROMPT" ] && exit 0
-    for SKILL in tdd prototype; do
+    for SKILL in tdd prototype meeting cowlick; do
       if echo "$PROMPT" | grep -q "\$$SKILL"; then
         F=$(hook_skill_session_file "$SKILL")
         mkdir -p "$(dirname "$F")"
@@ -22,6 +22,7 @@ case "$(hook_event_name)" in
     ;;
   SessionEnd)
     rm -f "$(hook_cwd)/.codex/tmp/session."*".$(hook_session_id)"
+    rm -f "$(hook_cwd)/.codex/tmp/required-reading."*".$(hook_session_id)"
     ;;
 esac
 exit 0

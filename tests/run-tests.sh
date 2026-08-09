@@ -3,7 +3,9 @@
 # Claude Code スキーマの入力を食わせ、deny / ask / 棄権(出力なし) を検証する。
 # 単体では動かない: verify-all.sh が配置シミュレーションを作ってからコピーして実行する。
 #   実行は `bash tests/verify-all.sh`
-H="$(cd "$(dirname "$0")" && pwd)/.claude/hooks/shell"
+SUITE_ROOT="$(cd "$(dirname "$0")" && pwd)"
+H="$SUITE_ROOT/.claude/hooks/shell"
+cd "$SUITE_ROOT"
 PASS=0; FAIL=0
 
 # hook にJSON入力を与えて stdout を返すヘルパー関数
@@ -67,6 +69,31 @@ check "require-test: テスト有り ts は棄権"    empty require-test.sh '{"t
 check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
 check "require-test: schema.prisma は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/prisma/schema.prisma"}}'
 check "require-test: Bash は棄権"             empty require-test.sh '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
+
+# --- load-required-contract ---
+READING_CWD=$PWD
+rm -f .claude/tmp/required-reading.*.READ1 .claude/tmp/required-reading.*.READ2
+COWLICK_EDIT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:"draft-prompt/branch-sample-prompt.md"}}')
+COWLICK_FIRST=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh" cowlick-design)
+if matches_expected deny "$COWLICK_FIRST" && echo "$COWLICK_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '## Changes'; then
+  PASS=$((PASS+1)); echo "ok   required-reading: cowlick形式を初回編集前に全文注入"
+else
+  FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式を注入できない -> [$COWLICK_FIRST]"
+fi
+COWLICK_SECOND=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh" cowlick-design)
+if matches_expected empty "$COWLICK_SECOND"; then
+  PASS=$((PASS+1)); echo "ok   required-reading: cowlick形式receipt後は棄権"
+else
+  FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
+fi
+DELEGATE_INPUT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/deepseek/delegate.sh survey task --hard-seconds 120 --idle-seconds 30 --poll-seconds 10 --reason scope=x,difficulty=x,basis=x -- README.md"}}')
+DELEGATE_FIRST=$(echo "$DELEGATE_INPUT" | bash "$H/load-required-contract.sh")
+if matches_expected deny "$DELEGATE_FIRST" && echo "$DELEGATE_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'DeepSeek委任の共通契約'; then
+  PASS=$((PASS+1)); echo "ok   required-reading: DeepSeek契約を初回委任前に全文注入"
+else
+  FAIL=$((FAIL+1)); echo "FAIL required-reading: DeepSeek契約を注入できない -> [$DELEGATE_FIRST]"
+fi
+check "required-reading: DeepSeek契約receipt後は棄権" empty load-required-contract.sh "$DELEGATE_INPUT"
 
 # --- protect-git ---
 check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'

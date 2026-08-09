@@ -52,7 +52,7 @@ bug修正を含むドラフトでは、報告された症状とroot causeを分�
 
 ## 調査の委任
 
-既存実装、実行方式、標準・native機能、導入済み依存の調査はDeepSeekの`survey`へ委任する。実行前に`../deepseek/DELEGATION.md`を全文読み、CLI、時間選択、再試行、上位モデルへの引き継ぎに従う。DeepSeekと代替subagentは探索と根拠収集だけを担当し、設計判断、横断比較、採否、ドラフト修正は[agent_name]が行う。
+既存実装、実行方式、標準・native機能、導入済み依存の調査はDeepSeekの`survey`へ委任する。設計判断、横断比較、採否、ドラフト修正は[agent_name]が行う。
 
 1. 個別設計書より先にドラフト一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索させる
 2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探させる

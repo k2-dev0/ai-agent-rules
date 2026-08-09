@@ -11,7 +11,7 @@
 | `.prompt.md` | 実装順の`- [ ] branch-<機能名>-prompt.md`だけを並べるindex |
 | `branch-<機能名>-prompt.md` | 1機能の自己完結した設計書 |
 
-機能名はbranch名に使えるASCII kebab-caseとする。全項目を未完了で作り、`[x]`への変更はconductorだけが行う。依存される機能を先に並べる。
+機能名はbranch名に使えるASCII kebab-caseとする。全項目を未完了で作り、`[x]`への変更は`tdd`の`from-prompt` modeだけが行う。依存される機能を先に並べる。
 
 1設計書はおおむね1 branch、squash後の1 commitとする。APIとvalidation schema、migrationとschema変更、helper・定数とその利用箇所、テストと対象実装は同じ設計書へ置く。UI componentはcomponent単位で分ける。
 
@@ -39,7 +39,7 @@
 - <この1枚だけで判定できる条件>
 ````
 
-Changesの疑似コードでは、`export`、`import`、`async`、`function`、`=>`、`if`、`else`、`switch`、`for`、`while`、`const`、`let`、`return`、`await`、`try`、`catch`、`throw`、`null`、`true`、`false`などの予約語・構文とlibrary API名を英語のまま使う。新しく設計する関数、引数、変数、型、結果field、error名、処理内容は日本語で書く。既存symbol、schema field、file pathは参照を壊さないよう実名を保持する。分岐とloopは文章へ畳まず`if`、`switch`、`for`等の構造を示す。error処理とDB書き込み、メール、外部APIなどの副作用を一つずつ書き、行数削減のために省略しない。実装時の新しい英語識別子は固定しない。
+Changesの疑似コードでは、言語の予約語・演算子・構文、組み込み型と組み込みobject、標準library・外部library・frameworkのAPI、instance method・property名を英語で書く。既存symbol、schema field、file pathも参照を壊さないよう実名を保持する。新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語で書く。分岐とloopは文章へ畳まず構文で示し、error処理とDB書き込み、メール、外部APIなどの副作用を一つずつ書き、行数削減のために省略しない。実装時の新しい英語識別子は固定しない。
 
 Changesは、実装者が挙動を再設計せずコードへ変換できる密度で書く。対象に応じて次を疑似コードへ含める。
 
@@ -81,4 +81,4 @@ export async function 利用内容を確定する関数(使用方法, 入力件�
 }
 ```
 
-対象ファイルと参照ruleは正確な相対パスで列挙する。完了条件にはChangesの実装、対象テスト、必要な型検査・formatを含める。conductorは1枚だけ読むため、別設計書を読まないと判定できる条件を置かない。
+対象ファイルと参照ruleは正確な相対パスで列挙する。完了条件にはChangesの実装、対象テスト、必要な型検査・formatを含める。`tdd`は1枚だけ読むため、別設計書を読まないと判定できる条件を置かない。

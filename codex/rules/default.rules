@@ -14,7 +14,7 @@ prefix_rule(
     justification = "確認済みドラフトをdraft-prompt/から固定の.codex/prompt/へ移します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/conductor/mark-prompt-done.sh"],
+    pattern = ["bash", ".agents/skills/tdd/mark-prompt-done.sh"],
     decision = "allow",
     justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )

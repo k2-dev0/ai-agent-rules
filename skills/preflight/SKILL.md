@@ -21,7 +21,7 @@ user-invocable: false
 
 ## 調査の委任
 
-コードベースの事実確認はDeepSeekの`survey`へ委任する。実行前に`../deepseek/DELEGATION.md`を全文読み、CLI、時間選択、再試行、上位モデルへの引き継ぎに従う。DeepSeekと代替subagentは探索と根拠収集だけを担当し、設計・要件・採否判断は[agent_name]が行う。
+コードベースの事実確認はDeepSeekの`survey`へ委任する。設計・要件・採否判断は[agent_name]が行う。
 
 1. 上位モデルが、確認したい仮説、探索範囲、期待する根拠を具体的な調査項目へ分ける
 2. 独立した調査項目はそれぞれ固有の task-id で固定実行器へ委任する

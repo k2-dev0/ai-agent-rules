@@ -101,10 +101,15 @@ hook_skill_session_file() { echo "$(hook_cwd)/.codex/tmp/session.$1.$(hook_sessi
 # 指定スキルの marker が現在のセッションに存在するか判定する関数
 hook_skill_session_active() { [ -f "$(hook_skill_session_file "$1")" ]; }
 
-# 決定 JSON(deny)を stdout へ出し、理由をエージェントに伝えて hook を終える関数
-hook_deny() {
+# 決定 JSON(deny)を組み立てる。出力前にreceipt等を確定するhookからも再利用する。
+hook_deny_json() {
   jq -n --arg r "$1" \
     '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$r}}'
+}
+
+# 決定 JSON(deny)を stdout へ出し、理由をエージェントに伝えて hook を終える関数
+hook_deny() {
+  hook_deny_json "$1"
   exit 0
 }
 
