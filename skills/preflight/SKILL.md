@@ -22,6 +22,7 @@ user-invocable: false
 ## 調査の委任
 
 コードベースの事実確認はDeepSeekの`survey`へ委任する。設計・要件・採否判断は[agent_name]が行う。
+`survey`は必ず`bash [skills_root]/deepseek/delegate.sh survey`で実行する。
 
 1. 上位モデルが、確認したい仮説、探索範囲、期待する根拠を具体的な調査項目へ分ける
 2. 独立した調査項目はそれぞれ固有の task-id で固定実行器へ委任する

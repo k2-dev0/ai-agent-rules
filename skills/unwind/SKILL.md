@@ -21,6 +21,8 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 実行
 
+DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`nesting`は必ず`bash [skills_root]/deepseek/delegate.sh nesting`で実行する。
+
 1. 現在のHEADへDeepSeekの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、対象パスを明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
 2. DeepSeek が返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。

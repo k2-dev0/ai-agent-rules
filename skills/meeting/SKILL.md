@@ -6,6 +6,7 @@ allowed-tools:
   - Skill(cowlick *)
   - Skill(ponytail)
   - AskUserQuestion
+  - Bash
 disable-model-invocation: true
 ---
 
@@ -36,6 +37,8 @@ preflight → cowlick draft → ponytail → ユーザー承認 → cowlick appl
 | **cowlick apply** | 最終承認済みのドラフトだけを正式反映する |
 
 DeepSeekと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、ドラフトの採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
+
+このpipelineで初めてDeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。同一sessionのpreflight、cowlick、ponytailはこの一回の準備を共有し、各内部skillで`prepare`を繰り返さない。
 
 後段で前提が崩れた場合は、影響する phase まで戻す。
 

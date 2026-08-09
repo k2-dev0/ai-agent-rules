@@ -275,6 +275,9 @@ case "$MODE" in
     shift
     NESTING_PATHS=("$@")
     ;;
+  prepare)
+    [ "$#" -eq 0 ] || fail "prepare mode does not accept arguments"
+    ;;
   smoke)
     [ "$#" -eq 0 ] || fail "smoke mode does not accept arguments"
     ;;
@@ -283,13 +286,18 @@ case "$MODE" in
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
     [ "$#" -eq 1 ] || fail "show mode requires task id"
     ;;
-  *) fail "mode must be research, survey, implement, errand, nesting, smoke, or show" ;;
+  *) fail "mode must be research, survey, implement, errand, nesting, prepare, smoke, or show" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git repository"
 cd "$REPO_ROOT" || fail "cannot enter repository root"
+
+if [ "$MODE" = "prepare" ]; then
+  printf '%s\n' 'deepseek: delegation contract ready'
+  exit 0
+fi
 
 if [ "$MODE" = "show" ]; then
   RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"

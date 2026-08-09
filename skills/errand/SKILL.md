@@ -32,6 +32,8 @@ disable-model-invocation: true
 
 ## 実行手順
 
+DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`errand`は必ず`bash [skills_root]/deepseek/delegate.sh <mode>`で実行する。
+
 1. 依頼から公開挙動、完了条件、候補pathを固定する。識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
 2. DeepSeekの`survey`を必ず1回実行し、最寄りの同型実装1件、置換する要素、対象path、既存テストと検証commandを返させる。網羅監査は依頼しない。
 3. 次がすべて一意ならerrandを続け、一つでも欠ければ変更せず停止する。

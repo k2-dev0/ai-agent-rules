@@ -2,6 +2,8 @@
 
 DeepSeekを呼ぶスキルは、この文書を全文読んでから実行する。個別スキルと矛盾する場合は、対象範囲などmode固有の制約を個別スキルから、この文書のCLI・時間・失敗処理を共通契約として適用する。
 
+各workflow入口はsessionで最初の委任前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行する。初回はhookがこの契約全文をcontextへ注入して操作を止めるため、内容を反映して`prepare`を再実行してから対象modeへ進む。同じworkflow配下のskillはこの準備を共有する。同一session・同一契約内容のreceiptはtask-idやmodeに依存せず、後続の`prepare`と委任で全文を再注入しない。
+
 ## 責務
 
 | 工程 | 担当 |

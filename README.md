@@ -123,6 +123,8 @@ surveyは実行ステップ数を固定上限で打ち切り、上限到達時�
 
 `survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。固定値を惰性で使い回してはならない。
 
+各workflow入口はsessionで最初にDeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行する。`prepare`は外部通信せず、初回だけPreToolUse hookが共通契約を注入して操作を止めるための固定入口である。同じworkflow配下のskillは一回の準備を共有する。
+
 ```bash
 bash [skills_root]/deepseek/delegate.sh <mode> \
   --hard-timeout-minutes <総待機分> \
@@ -132,7 +134,7 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
   <mode固有の引数>
 ```
 
-時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約する。DeepSeek実行器の初回呼び出し直前にhookが契約全文をcontextへ注入して呼び出しを一度止め、同一session・同一内容のreceiptがある再試行だけを通す。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加える。
+時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約する。DeepSeek実行器のsession最初の呼び出し直前にhookが契約全文をcontextへ注入して呼び出しを一度止め、同一session・同一内容のreceiptがある再試行だけを通す。receiptはtask-idやmodeに依存しないため、同じsessionの後続委任では全文を再注入しない。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加える。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 

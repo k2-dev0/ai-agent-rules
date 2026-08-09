@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse hook: 判断前に必須の共通契約を、最初の保護操作を止めて全文注入する。
-# 同一session・同一内容ではreceiptを検証して棄権し、操作の再試行を通す。
+# task-idやmodeにかかわらず、同一session・同一内容ではreceiptを検証して棄権し、後続操作を通す。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 

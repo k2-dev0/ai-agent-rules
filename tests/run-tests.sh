@@ -86,7 +86,7 @@ if matches_expected empty "$COWLICK_SECOND"; then
 else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
 fi
-DELEGATE_INPUT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/deepseek/delegate.sh survey task --hard-seconds 120 --idle-seconds 30 --poll-seconds 10 --reason scope=x,difficulty=x,basis=x -- README.md"}}')
+DELEGATE_INPUT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/deepseek/delegate.sh prepare"}}')
 DELEGATE_FIRST=$(echo "$DELEGATE_INPUT" | bash "$H/load-required-contract.sh")
 if matches_expected deny "$DELEGATE_FIRST" && echo "$DELEGATE_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'DeepSeek委任の共通契約'; then
   PASS=$((PASS+1)); echo "ok   required-reading: DeepSeek契約を初回委任前に全文注入"
@@ -94,6 +94,8 @@ else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: DeepSeek契約を注入できない -> [$DELEGATE_FIRST]"
 fi
 check "required-reading: DeepSeek契約receipt後は棄権" empty load-required-contract.sh "$DELEGATE_INPUT"
+DELEGATE_NEXT_TASK=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/deepseek/delegate.sh errand --hard-timeout-minutes 2 --idle-timeout-seconds 60 --poll-seconds 10 --timeout-reason scope=src/foo.ts,difficulty=low,basis=hook-contract-reuse errand-task boolean変更 -- src/foo.ts"}}')
+check "required-reading: 同一sessionの別mode・taskでは再注入しない" empty load-required-contract.sh "$DELEGATE_NEXT_TASK"
 
 # --- protect-git ---
 check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'

@@ -120,6 +120,11 @@ grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要で�
 grep -q '^  survey)' "$DS" && grep -q 'survey mode requires task id and instruction' "$DS" && grep -q '識別子の完全一致と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順' "$DS" && grep -q '根拠が揃った時点で直ちに終了' "$DS" && ok "DeepSeek survey: 根拠に応じて調査範囲を段階拡張" || ng "DeepSeek surveyの段階調査契約が不正"
 grep -q '^  show)' "$DS" && grep -q 'show mode requires task id' "$DS" && grep -q "cannot extract DeepSeek report" "$DS" && ok "DeepSeek結果: report抽出と固定showを提供" || ng "DeepSeek結果の固定取得経路が不正"
 grep -q '^  errand)' "$DS" && grep -q 'errand mode requires task id, instruction, --, and production paths' "$DS" && grep -q '短い実装指示に従い' "$DS" && ok "DeepSeek errand: 設計書なしの限定実装を受け付ける" || ng "DeepSeek errand実装モードが不正"
+if grep -q '^  prepare)' "$DS" && grep -q 'delegation contract ready' "$DS" && grep -Fq 'delegate.sh prepare' "$REPO/skills/deepseek/DELEGATION.md" && [ "$(OPENROUTER_API_KEY= bash "$DS" prepare)" = 'deepseek: delegation contract ready' ]; then
+  ok "DeepSeek prepare: API key・外部通信なしの共通契約入口を提供"
+else
+  ng "DeepSeek prepareの固定入口が不正"
+fi
 
 BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
 BOOTSTRAP_FAILURES="$REPO/skills/bootstrap/FAILURES.md"
@@ -141,7 +146,7 @@ REQUIRED_READING_HOOK="$REPO/hooks/shell/load-required-contract.sh"
 for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
-grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq 'ユーザーが `$meeting` を明示して' "$MEETING_SKILL" && grep -Fq '`$meeting` の明示呼び出しでだけ起動する' "$MEETING_SKILL" && grep -Fq '通常の自然言語による軽微な修正・追加依頼では起動しない' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(cowlick *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ok "meetingを明示起動だけに限定する" || ng "meetingの起動境界・skill境界が不正"
+grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq 'ユーザーが `$meeting` を明示して' "$MEETING_SKILL" && grep -Fq '`$meeting` の明示呼び出しでだけ起動する' "$MEETING_SKILL" && grep -Fq '通常の自然言語による軽微な修正・追加依頼では起動しない' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(cowlick *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && grep -Fq '  - Bash' "$MEETING_SKILL" && ok "meetingを明示起動だけに限定する" || ng "meetingの起動境界・skill境界が不正"
 grep -q 'preflight → cowlick draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
 for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
@@ -161,7 +166,7 @@ if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit
 else
   ok "ponytailは調査toolだけを事前許可"
 fi
-grep -Fq 'DeepSeekの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'DeepSeekの`survey`へ委任' "$PONYTAIL_SKILL" && grep -Fq 'deepseek/DELEGATION.md' "$REQUIRED_READING_HOOK" && ok "設計調査とDeepSeek契約の必要時注入" || ng "設計調査またはDeepSeek契約hookが不正"
+grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$MEETING_SKILL" && grep -Fq '各内部skillで`prepare`を繰り返さない' "$MEETING_SKILL" && grep -Fq 'DeepSeekの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh research' "$COWLICK_SKILL" && grep -Fq 'DeepSeekの`survey`へ委任' "$PONYTAIL_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh survey' "$PONYTAIL_SKILL" && grep -Fq 'deepseek/DELEGATION.md' "$REQUIRED_READING_HOOK" && ok "meetingが一度prepareして設計調査を固定実行器へ接続" || ng "meetingのprepareまたは設計調査の固定実行器が不正"
 grep -Fq '明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ' "$DEEPSEEK_CONTRACT" && grep -Fq '合計2回失敗したら上位モデルが引き継ぐ' "$DEEPSEEK_CONTRACT" && grep -Fq -- '--timeout-reason' "$DEEPSEEK_CONTRACT" && ok "DeepSeek共通契約がfallbackと時間理由を一元管理" || ng "DeepSeek共通契約のfallbackまたは時間理由が不足"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
@@ -212,7 +217,7 @@ echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
 grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
-grep -Fq 'DeepSeekの`survey`を必ず1回実行' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ実装指示と`--`以降の許可path' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeek実装境界を固定" || ng "errand の実装境界が不正"
+grep -Fq 'DeepSeekの`survey`を必ず1回実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh <mode>' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ実装指示と`--`以降の許可path' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はprepare・固定実行器とDeepSeek実装境界を固定" || ng "errand のprepare・固定実行器または実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$DS" && grep -q 'new allowed path must not be ignored' "$DS" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装が前提である' "$ERRAND_SKILL" && grep -Fq '許可パスが複数あることだけを理由に停止してはならない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration commandと別workflow skillは実行しない' "$ERRAND_SKILL" && ok "errand は複数pathとPrisma schemaを許可しmigrationを禁止" || ng "errand の複数path・Prisma境界が不正"
 grep -Fq '採用部分を許可pathへ反映して初回実装' "$ERRAND_SKILL" && grep -Fq '所属packageの既存typecheck' "$ERRAND_SKILL" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$ERRAND_SKILL" && ok "errand は候補反映と検証範囲を固定" || ng "errand の候補反映または検証範囲が曖昧"
@@ -242,13 +247,13 @@ MARK_PROMPT_DONE_SCRIPT="$REPO/skills/tdd/mark-prompt-done.sh"
 [ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq 'DeepSeekの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind は機械的検出をDeepSeek、修正判断を上位へ固定" || ng "unwind の検出・判断責務分離が無い"
+grep -Fq 'DeepSeekの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind はprepare・固定実行器で機械的検出をDeepSeek、修正判断を上位へ固定" || ng "unwind のprepare・固定実行器または検出・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && ok "tdd はpolishの差分scopeだけを変更前に記録" || ng "tdd のpolish差分scope記録器が不正"
 [ -x "$CHANGED_RULES_SCRIPT" ] && bash -n "$CHANGED_RULES_SCRIPT" && grep -Fq '固定した開始commitから対象pathへ追加・置換された現在行だけを、既存ESLintのAST診断で検査' "$POLISH_SKILL" && grep -Fq '`no-magic-numbers`診断のうち変更行に一致するものだけ' "$POLISH_SKILL" && ok "polish は共通規約を変更行だけへ適用" || ng "polish の変更行規約checkerが不正"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality receiptを記録した後だけ' "$TDD_SKILL" && ok "tdd from-prompt の完了更新は品質receiptを検証" || ng "tdd from-prompt の品質receipt検証が無い"
 grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書path>` |' "$TDD_SKILL" && grep -Fq '設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
-grep -Fq 'DeepSeekの`survey`へ委任' "$TDD_SKILL" && grep -Fq '候補が返った後の採否は上位モデルのレビュー責務' "$TDD_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はDeepSeek初回実装・上位fallback・上位修正へ固定" || ng "tdd の初回実装・修正責務が不正"
+grep -Fq 'DeepSeekの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq '候補が返った後の採否は上位モデルのレビュー責務' "$TDD_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・DeepSeek初回実装・上位fallback・上位修正へ固定" || ng "tdd のprepare・固定実行器・DeepSeek初回実装・上位fallback・上位修正が不正"
 grep -Fq 'survey前に関連コードをGrep / Glob / git logで探索しない' "$TDD_SKILL" && grep -Fq '不足があれば調査項目を絞った新しいsurveyへ戻す' "$TDD_SKILL" && ! grep -Fq '設計書と関連コードを読み' "$TDD_SKILL" && ok "tdd はコード調査をDeepSeek surveyへ先行委任" || ng "tdd が上位モデルの先行探索を許可"
 grep -Fq 'テストシナリオ設計 | 可 | 禁止' "$TDD_SKILL" && grep -Fq 'テストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$TDD_SKILL" && grep -Fq '[agent_name]が正常系、境界値、異常系、副作用、回帰リスクとテスト構造を設計' "$TDD_SKILL" && ok "tddのテスト設計と実装を上位モデルへ固定" || ng "tddがテスト設計をDeepSeekへ委任可能"
 grep -Fq '`schema.prisma`自体はテスト対象外' "$TDD_SKILL" && grep -Fq 'シナリオ承認とStep 3・4を省略' "$TDD_SKILL" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$TDD_SKILL" && ok "tddはschema.prismaだけをテスト対象外に限定" || ng "tddのschema.prismaテスト除外境界が不正"

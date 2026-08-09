@@ -70,6 +70,7 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 ### 2. 調査を委任してシナリオを承認する
 
 関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
+DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/deepseek/delegate.sh <mode>`で実行する。
 
 [agent_name]はsurvey前に関連コードをGrep / Glob / git logで探索しない。report受領後も直接読むのは重要な`file:line`の確認だけとし、不足があれば調査項目を絞った新しいsurveyへ戻す。共通契約の失敗条件を満たすまで自力の横断探索へ切り替えない。
 
