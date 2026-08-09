@@ -110,10 +110,11 @@ grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "Dee
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
 grep -q 'SURVEY_SCOPE_COUNT="4"' "$DS" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$DS" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$DS" && grep -q '"steps":$survey_max_steps' "$DS" && grep -q -- '--agent delegate' "$DS" && ok "DeepSeek survey: 4段階ごとのagent step上限を固定" || ng "DeepSeek surveyのstep上限が不正"
 grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$DS" && grep -q 'requires explicit --hard-timeout-minutes' "$DS" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$DS" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$DS" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$DS" && grep -q '^validate_timeout_reason()' "$DS" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$DS" && grep -q '^monitor_opencode()' "$DS" && grep -q '^terminate_process_group()' "$DS" && grep -q 'FINAL_STATUS=124' "$DS" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$DS" && ok "DeepSeek timeout: 明示値・理由・安全比率・固定smokeを検証して記録" || ng "DeepSeek timeout設定または理由の記録処理が不正"
-grep -q '^write_task_state()' "$DS" && grep -q '^stop_running_children()' "$DS" && grep -q 'task is already active or has unfinished state' "$DS" && grep -q 'effective_status' "$DS" && grep -q 'source_snapshot:"HEAD"' "$DS" && ok "DeepSeek lifecycle: task状態・重複拒否・source snapshotを記録" || ng "DeepSeek lifecycle管理が不正"
+grep -q '^write_task_state()' "$DS" && grep -q '^stop_running_children()' "$DS" && grep -q 'task is already active or has unfinished state' "$DS" && grep -q 'effective_status' "$DS" && grep -q 'HEAD+ignored-agent-context' "$DS" && grep -q 'context_snapshot_paths' "$DS" && ok "DeepSeek lifecycle: task状態・重複拒否・入力snapshotを記録" || ng "DeepSeek lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$DS" && grep -q '"external_directory":"deny"' "$DS" && grep -q 'opencode --pure run' "$DS" && ok "DeepSeek権限: shell・外部dir・pluginを拒否" || ng "DeepSeek権限境界が不正"
+grep -Fq '".git/**":"deny"' "$DS" && grep -Fq '"**/.env.*":"deny"' "$DS" && ! grep -Fq '".codex/**":"deny"' "$DS" && ! grep -Fq '".claude/**":"deny"' "$DS" && ! grep -Fq '".agents/**":"deny"' "$DS" && grep -Fq '隔離入力の.codex/**、.claude/**、.agents/**' "$DS" && ok "DeepSeek読み取り: agent設定を根拠として許可しGit・envを拒否" || ng "DeepSeekのagent設定・Git・env読み取り境界が不正"
 grep -Fq 'trap cleanup EXIT' "$DS" && grep -Fq "trap 'exit 130' INT" "$DS" && grep -Fq "trap 'exit 143' TERM" "$DS" && ok "DeepSeek中断: cleanup後に処理を継続しない" || ng "DeepSeekのsignal終了処理が不正"
 grep -q 'SMOKE_PROMPT="hello"' "$DS" && grep -q 'if \$mode == "smoke" then "deny"' "$DS" && ok "DeepSeek smoke: hello固定・tool全拒否" || ng "DeepSeek smokeのpromptまたは権限が不正"
 grep -q '^  nesting)' "$DS" && grep -q '修正案・コード変更は不要です' "$DS" && grep -q 'nesting path must be tracked' "$DS" && ok "DeepSeek nesting: 本体コードだけを読み取り検出" || ng "DeepSeek nesting検出モードが不正"
@@ -453,6 +454,13 @@ git config user.name tester
 printf '# research spec\n' > spec.md
 git add spec.md
 git commit -qm "test: research fixture"
+printf '/.codex/\n/.agents/\n/AGENTS.md\n' > .git/info/exclude
+mkdir -p .codex/prompt .codex/rules .codex/tmp .agents/skills/sample
+printf '# ignored agent instructions\n' > AGENTS.md
+printf '# ignored design\n' > .codex/prompt/ignored-design.md
+printf '# ignored rules\n' > .codex/rules/ignored.rules
+printf '# ignored skill\n' > .agents/skills/sample/SKILL.md
+printf 'must not enter delegated worktree\n' > .codex/tmp/private.txt
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" smoke > delegate-smoke.out 2>&1 && grep -Fq 'smoke: ok model=' delegate-smoke.out; then
   ok "delegate-deepseek: smokeは状態保存なしで疎通確認を完了"
 else
@@ -487,7 +495,7 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
 else
   ng "delegate-deepseek: 変更ゼロのresult.jsonが不正"
 fi
-printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 12)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 12)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\n[ -f AGENTS.md ] && [ -f .codex/prompt/ignored-design.md ] && [ -f .codex/rules/ignored.rules ] && [ -f .agents/skills/sample/SKILL.md ] && [ ! -e .codex/tmp/private.txt ] || exit 42\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
 SURVEY_SOURCE_HEAD=$(git rev-parse HEAD)
@@ -498,10 +506,10 @@ else
 fi
 SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey"
 SURVEY_RESULT="$SURVEY_ROOT/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/.empty-survey.task" ]; then
-  ok "delegate-deepseek: surveyは調査指示をspecへ永続化しない"
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD+ignored-agent-context" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ "$(jq -c '.context_snapshot_paths' "$SURVEY_RESULT")" = '[".agents/skills/sample/SKILL.md",".codex/prompt/ignored-design.md",".codex/rules/ignored.rules","AGENTS.md"]' ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/.empty-survey.task" ]; then
+  ok "delegate-deepseek: surveyはignored agent資料を監査可能なsnapshotとして読む"
 else
-  ng "delegate-deepseek: surveyの一時指示またはresult.jsonが不正"
+  ng "delegate-deepseek: surveyのignored agent資料snapshotまたはresult.jsonが不正"
 fi
 if grep -Fq "$SURVEY_EXACT_IDENTIFIER" "$SURVEY_ROOT/report.md" && grep -Fq '機能語・ドメイン語' "$SURVEY_ROOT/report.md" && grep -Fq '根拠が揃った時点で直ちに終了' "$SURVEY_ROOT/report.md" && grep -Fq 'report:' delegate-survey.out; then
   ok "delegate-deepseek: surveyの識別子と段階終了条件をreportへ返却"
@@ -655,6 +663,15 @@ else
   ng "delegate-deepseek: 総時間timeoutまたは部分出力の扱いが不正"; cat delegate-timeout-hard.out; cat "$HARD_TIMEOUT_ROOT/result.json"
 fi
 rm -f "$DELEGATE_BIN/date" "$DELEGATE_BIN/sleep" "$TIMEOUT_CLOCK" "$TIMEOUT_PID_FILE"
+printf '#!/bin/bash\nprintf '\''changed ignored rule\\n'\'' > .codex/rules/ignored.rules\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" rejected-context-mutation 'ignored ruleを調査する' > delegate-rejected-context.out 2>&1; then
+  ng "delegate-deepseek: 読み取りsnapshotの変更を許可した"
+elif grep -Fq 'DeepSeek changed an ignored context file: .codex/rules/ignored.rules' delegate-rejected-context.out && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/rejected-context-mutation" ]; then
+  ok "delegate-deepseek: 読み取りsnapshotの変更をhash検証で拒否"
+else
+  ng "delegate-deepseek: 読み取りsnapshotの変更検出が不正"; cat delegate-rejected-context.out
+fi
 printf '#!/bin/bash\ntouch protected-change.txt\nprintf '\''{"type":"text","text":"done"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research "${DELEGATE_TIMEOUT_ARGS[@]}" rejected-research spec.md > delegate-rejected.out 2>&1; then
