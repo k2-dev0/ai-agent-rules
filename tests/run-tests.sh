@@ -61,6 +61,22 @@ check_bash_rewrite() { # name expected-command hook command
   check_rewrite "$1" "$2" "$3" "$INPUT"
 }
 
+# --- session / source repository context ---
+printf '# 設定配布元リポジトリ\n\nsource-only context\n' > SOURCE_REPOSITORY.md
+SOURCE_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SOURCE1",cwd:$cwd,prompt:"変更して"}')
+SOURCE_FIRST=$(run session.sh "$SOURCE_INPUT")
+if echo "$SOURCE_FIRST" | grep -Fq 'source-only context' && [ -f .claude/tmp/source-repository.SOURCE1 ]; then
+  PASS=$((PASS+1)); echo "ok   session: 配布元説明を初回promptへ注入"
+else
+  FAIL=$((FAIL+1)); echo "FAIL session: 配布元説明を注入できない -> [$SOURCE_FIRST]"
+fi
+check "session: 同じsessionでは配布元説明を再注入しない" empty session.sh "$SOURCE_INPUT"
+SOURCE_END=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SOURCE1",cwd:$cwd}')
+run session.sh "$SOURCE_END" >/dev/null
+[ ! -f .claude/tmp/source-repository.SOURCE1 ] && { PASS=$((PASS+1)); echo "ok   session: 配布元説明receiptを終了時に掃除"; } || { FAIL=$((FAIL+1)); echo "FAIL session: 配布元説明receiptの掃除漏れ"; }
+rm -f SOURCE_REPOSITORY.md
+check "session: 配布先では配布元説明を注入しない" empty session.sh "$SOURCE_INPUT"
+
 # --- require-test ---
 mkdir -p src && rm -f src/foo.ts src/foo.test.ts src/bar.tsx
 check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'

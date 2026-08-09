@@ -15,6 +15,7 @@
 ```
 ai-agent-rules/
 ├── AGENTS.md           # エージェントが従う最上位の規約
+├── SOURCE_REPOSITORY.md # 配布元だけでsessionへ注入する説明（配布対象外）
 ├── rules/              # AGENTS.md から分離したパターン別の規約
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
@@ -155,6 +156,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 ## 注意
 
+- `SOURCE_REPOSITORY.md` は配布元でだけ使う。UserPromptSubmit hookがsessionごとに一度だけ注入し、`setup-agent`は配置先へコピーしない。
 - 本リポジトリはテンプレートなので、`bootstrap` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れ検証は `init-agent.sh` 内で完結させる。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
