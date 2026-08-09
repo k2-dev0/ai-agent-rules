@@ -34,6 +34,12 @@ preflight が付けた **明示要件**、**禁止・制約**、**受入済み t
 設計書へ分割する前に、全体の既存実行経路と新設予定の実行・永続化・運用境界を一列に並べる。preflight の「境界を新設しない基準案」と比較し、基準案が要件を満たすならそれを初期ドラフトにする。新しい public endpoint、queue、scheduler、worker、serverless function、外部接続、global/shared 変更は、基準案が満たせない明示要件または既存制約がある場合だけ追加する。
 
 ドラフトは「後述の構成の一式」を **プロジェクトルートの `draft-prompt/`** に作る（`.prompt.md` + `branch-<機能名>-prompt.md` × N）。
+存在しなければ、プロジェクトルートから次のコマンドを単独で実行する。Codexではworkspace sandbox内の通常のディレクトリ作成として扱うため、承認を要求しない。shell wrapperや他commandとの連結へ書き換えない。
+
+```bash
+mkdir -p draft-prompt
+```
+
 ディレクトリの中身はこの 2 種類だけにすること。メモや作業ファイルを同居させると Step 5 のスクリプトが弾く。
 
 - Why: ユーザーがレビューする対象なので、エディタでそのまま開ける場所に置く。セッションの一時領域（scratchpad / `$TMPDIR`）はパスが不規則でユーザーが確認しづらい

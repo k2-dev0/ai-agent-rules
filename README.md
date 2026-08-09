@@ -142,6 +142,10 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 ## 承認の挙動
 
+承認の有無は「書き込みかどうか」だけで決めない。workspace sandbox内で完結し、既存内容を失わない可逆操作は自動化する。既存ファイルの上書き・metadata変更・削除、保護対象への変更、外部通信は確認または禁止へ倒す。
+
+このため、通常ファイルへの構造化された Edit / `apply_patch`、新規ファイルの Write、空ディレクトリを作る `mkdir` は自動実行する。一方、既存ファイルの全面Writeと、対象や上書きをcommand文字列だけから完全には判定できない汎用shell writerは確認する。`mkdir -p draft-prompt`もcowlick固有の特例ではなく、この共通原則で承認不要になる。
+
 両エージェントで共通化している主な挙動:
 
 | やろうとすること | どうなる |
@@ -149,10 +153,12 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 単一commandでファイルを読む・探す（`ls` `cat` `rg` `find -print` `nl` `sort`） | ✅ 自動 |
 | 委任processの完了状態を確認する（`ps -p <PID> ...`） | ✅ 自動 |
 | 検証済み読み取りcommandの出力を`/dev/null`へ捨てる | ✅ 自動 |
-| 通常ファイルを書き換える（コード・テスト・ドキュメント） | ✅ 自動 |
+| 通常ファイルをEdit / `apply_patch`で変更する、または新規ファイルをWriteする | ✅ 自動 |
+| 既存ファイルを全面Writeする | 🙋 Claude Codeで確認 |
+| workspace sandbox内で空ディレクトリを作る（`mkdir`） | ✅ 自動 |
 | `package.json` / CI / migration file / Docker / Terraform を書き換える | 🙋 確認 |
 | `schema.prisma`を書き換え、`prisma format` / `validate` / `generate`を実行する | ✅ 自動 |
-| shellで作成・上書き・metadata変更する（`cp` `mkdir` `chmod` `sed -i` 等） | 🙋 確認 |
+| shellでファイル作成・上書き・metadata変更する（`cp` `touch` `chmod` `sed -i` 等） | 🙋 確認 |
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
 | `commit-subject.sh` が生成・検証する契約に従うコミット | ✅ 自動 |

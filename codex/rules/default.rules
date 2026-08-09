@@ -81,15 +81,15 @@ prefix_rule(
     justification = "共有hookがstage件数・対象名・日本語メッセージを検証するため、契約準拠commitを許可します。",
 )
 
-# option無しでもfilesystemへ書くcommandは、対象を確認してから実行する。固定スクリプトは
-# 上の限定allowに一致するため、内部実装のcp/mkdirまで個別承認にはならない。
+# option無しでも既存ファイルの内容・metadataを変え得るcommandは、対象を確認してから実行する。
+# mkdirはworkspace sandbox内で空ディレクトリを作るだけなので確認対象にしない。固定スクリプトは
+# 上の限定allowに一致するため、内部実装のcp等まで個別承認にはならない。
 prefix_rule(
-    pattern = [["cp", "install", "rsync", "touch", "mkdir", "chmod", "chown", "chgrp", "ln", "patch"]],
+    pattern = [["cp", "install", "rsync", "touch", "chmod", "chown", "chgrp", "ln", "patch"]],
     decision = "prompt",
     justification = "filesystemへの作成・上書き・metadata変更の対象を確認してから実行します。",
     match = [
         "cp source.txt target.txt",
-        "mkdir build-output",
         "chmod +x script.sh",
     ],
     not_match = [
