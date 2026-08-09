@@ -100,8 +100,6 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $bootstrap codex
 ```
 
-設計作成でユーザーが `$meeting` を**明示した場合だけ**、`meeting` をユーザー向け入口として呼び出す。軽微な修正・追加を含む通常の自然言語依頼で、エージェントが `meeting` を勝手に挟んではならない。明示起動後は、エージェントが `preflight → cowlick draft → ponytail → cowlick apply` を必要に応じて再実行し、ユーザーにはコードベースから判定できない設計判断だけを一度に一つ確認する。`ponytail` は設計書ごとの成立確認ではなく、全設計書のruntime topologyを平坦化し、境界を新設しない代替案との比較と要件への対応付けが完了するまで設計をreadyにしない。
-
 ### DeepSeekへの調査・実装委任
 
 役割分担は次で固定する。
