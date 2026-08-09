@@ -1,7 +1,7 @@
 ---
 name: tdd
 description: 承認済み設計を、シナリオ一括承認を唯一の通常ゲートとしてTDD実装する。DeepSeekが本体コードとPrisma schemaの初回実装、[agent_name]がテスト・レビュー・候補反映後の修正を担当する。
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
 hooks:
   PreToolUse:
@@ -22,7 +22,7 @@ hooks:
 | テストシナリオ提案 | 可 | 相談として提案のみ可 |
 | テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
 | 設計資産の変更 | cowlickの承認後だけ可 | 禁止 |
-| 許可された本体コードと`schema.prisma`の初回実装 | 禁止 | 可 |
+| 許可された本体コードと`schema.prisma`の初回実装 | DeepSeekの2回連続応答失敗または認証失敗後だけ可 | 可 |
 | DeepSeek候補反映後の本体コード修正 | 可 | 禁止 |
 | テスト実行・レビュー・Git | 可 | 禁止 |
 
@@ -63,10 +63,16 @@ hooks:
 共通のDeepSeek委任実行器を使い、設計書と変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
 
 ```bash
-bash [skills_root]/deepseek/delegate.sh implement <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
+bash [skills_root]/deepseek/delegate.sh implement \
+  --hard-timeout-minutes <総待機分> \
+  --idle-timeout-seconds <無通信秒> \
+  --poll-seconds <確認間隔秒> \
+  <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
 ```
 
-DeepSeekは隔離worktreeで初回実装の候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。[agent_name]は候補反映前にstub、雛形、部分実装を作らず、DeepSeekの失敗・timeout・候補拒否を自力の初回実装へ切り替える理由にしてはならない。
+委任前に、変更範囲、実装量、難易度から総待機時間、無通信timeout、確認間隔を決め、3値と理由を明示する。DeepSeekは隔離worktreeで初回実装の候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。
+
+[agent_name]は候補反映前にstub、雛形、部分実装を作らない。接続失敗、timeout、最終応答欠落などで候補を取得できない場合は、新しいtask-idと明示的に選び直したtimeout / pollで1回だけ再委任する。2回続けて応答に失敗した場合は上位モデルが初回実装を引き継ぎ、上位モデル相当のAgent / subagentを利用できるなら許可パス限定で優先し、使えなければ[agent_name]自身が実装する。API key欠落、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ上位モデルの代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落は応答失敗に数えず停止する。
 
 ### 5. 相談を処理する
 
@@ -87,7 +93,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 - テスト環境検出、値のハードコード、assertion攻略がない
 - 承認済み設計とシナリオに一致する
 
-問題があればパッチ全体を拒否し、新しいtask-idで再委任するか停止する。[agent_name]が同じ初回実装を代替してはならない。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
+候補が返った後の採否は上位モデルのレビュー責務である。安全に修正できる問題なら、候補を土台に[agent_name]が直接直す。許可外変更や設計逸脱でパッチ全体を拒否しても、DeepSeekへレビュー・修正を戻さず、[agent_name]が承認済み設計の範囲で実装を完成させる。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
 
 ### 7. [agent_name]がGreen・レビュー・修正を完了する
 
@@ -102,7 +108,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 - OpenCode、API key、依存コマンドがない
 - DeepSeekが許可外パスを変更した
 - ユーザーの未コミット変更と対象パスが衝突する
-- 同じ原因で委任が繰り返し失敗する
+- 2回の応答失敗後も上位モデルの実装経路を利用できない
 - DB、依存関係、公開APIなど承認範囲外の変更が必要になる
 
 ## 完了条件

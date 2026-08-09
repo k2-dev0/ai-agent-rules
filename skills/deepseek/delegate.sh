@@ -11,26 +11,25 @@ readonly SURVEY_SCOPE_COUNT="4"
 readonly SURVEY_STEPS_PER_SCOPE="3"
 readonly SURVEY_MAX_STEPS="$((SURVEY_SCOPE_COUNT * SURVEY_STEPS_PER_SCOPE))"
 readonly TIMEOUT_MINUTE_SECONDS="60"
-readonly TIMEOUT_POLL_SECONDS="5"
 readonly TIMEOUT_TERM_GRACE_SECONDS="10"
 readonly SMOKE_HARD_TIMEOUT_MINUTES="1"
 readonly SMOKE_IDLE_TIMEOUT_SECONDS="30"
-readonly SURVEY_HARD_TIMEOUT_MINUTES="4"
-readonly NESTING_HARD_TIMEOUT_MINUTES="4"
-readonly ERRAND_HARD_TIMEOUT_MINUTES="5"
-readonly RESEARCH_HARD_TIMEOUT_MINUTES="10"
-readonly IMPLEMENT_HARD_TIMEOUT_MINUTES="10"
-readonly DEFAULT_IDLE_TIMEOUT_MINUTES="2"
+readonly SMOKE_POLL_SECONDS="5"
 readonly SMOKE_PROMPT="hello"
 readonly SMOKE_ERROR_LINE_LIMIT="20"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
 readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 
 MODE="${1:-}"
-TASK_ID="${2:-}"
-SPEC_PATH="${3:-}"
-DIRECT_INSTRUCTION="${3:-}"
+TASK_ID=""
+SPEC_PATH=""
+DIRECT_INSTRUCTION=""
 NESTING_PATHS=()
+HARD_TIMEOUT_MINUTES=""
+HARD_TIMEOUT_SECONDS=""
+IDLE_TIMEOUT_SECONDS=""
+TIMEOUT_POLL_SECONDS=""
+TIMEOUT_POLICY_SOURCE=""
 OPENCODE_PID=""
 TIMEOUT_MONITOR_PID=""
 TASK_RUNTIME=""
@@ -63,20 +62,32 @@ extract_report() {
   ' "$1"
 }
 
-select_timeouts() {
-  IDLE_TIMEOUT_SECONDS="$((DEFAULT_IDLE_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
-  case "$MODE" in
-    smoke)
-      HARD_TIMEOUT_SECONDS="$((SMOKE_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
-      IDLE_TIMEOUT_SECONDS="$SMOKE_IDLE_TIMEOUT_SECONDS"
-      ;;
-    survey) HARD_TIMEOUT_SECONDS="$((SURVEY_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
-    nesting) HARD_TIMEOUT_SECONDS="$((NESTING_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
-    errand) HARD_TIMEOUT_SECONDS="$((ERRAND_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
-    research) HARD_TIMEOUT_SECONDS="$((RESEARCH_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
-    implement) HARD_TIMEOUT_SECONDS="$((IMPLEMENT_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))" ;;
-    *) fail "timeout policy is not defined for mode: $MODE" ;;
+validate_positive_integer() {
+  local option_name="$1"
+  local option_value="$2"
+
+  case "$option_value" in
+    ''|*[!0-9]*|0) fail "$option_name must be a positive integer" ;;
   esac
+}
+
+configure_timeouts() {
+  if [ "$MODE" = "smoke" ]; then
+    HARD_TIMEOUT_MINUTES="$SMOKE_HARD_TIMEOUT_MINUTES"
+    HARD_TIMEOUT_SECONDS="$((SMOKE_HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
+    IDLE_TIMEOUT_SECONDS="$SMOKE_IDLE_TIMEOUT_SECONDS"
+    TIMEOUT_POLL_SECONDS="$SMOKE_POLL_SECONDS"
+    TIMEOUT_POLICY_SOURCE="fixed-smoke"
+    return
+  fi
+
+  validate_positive_integer "--hard-timeout-minutes" "$HARD_TIMEOUT_MINUTES"
+  validate_positive_integer "--idle-timeout-seconds" "$IDLE_TIMEOUT_SECONDS"
+  validate_positive_integer "--poll-seconds" "$TIMEOUT_POLL_SECONDS"
+  HARD_TIMEOUT_SECONDS="$((HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
+  [ "$IDLE_TIMEOUT_SECONDS" -lt "$HARD_TIMEOUT_SECONDS" ] || fail "idle timeout must be shorter than hard timeout"
+  [ "$TIMEOUT_POLL_SECONDS" -le "$IDLE_TIMEOUT_SECONDS" ] || fail "poll interval must not exceed idle timeout"
+  TIMEOUT_POLICY_SOURCE="explicit"
 }
 
 process_group_alive() {
@@ -148,7 +159,11 @@ write_task_state() {
     --argjson updated_at "$updated_at" \
     --arg source_head "$SOURCE_HEAD" \
     --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
-    '{mode:$mode,task_id:$task_id,lifecycle_status:$lifecycle_status,exit_status:(if $exit_status == "" then null else ($exit_status | tonumber) end),runner_pid:$runner_pid,opencode_pid:(if $opencode_pid == "" then null else ($opencode_pid | tonumber) end),started_at:$started_at,updated_at:$updated_at,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status}' \
+    --arg timeout_policy_source "$TIMEOUT_POLICY_SOURCE" \
+    --argjson idle_timeout_seconds "$IDLE_TIMEOUT_SECONDS" \
+    --argjson hard_timeout_seconds "$HARD_TIMEOUT_SECONDS" \
+    --argjson poll_seconds "$TIMEOUT_POLL_SECONDS" \
+    '{mode:$mode,task_id:$task_id,lifecycle_status:$lifecycle_status,exit_status:(if $exit_status == "" then null else ($exit_status | tonumber) end),runner_pid:$runner_pid,opencode_pid:(if $opencode_pid == "" then null else ($opencode_pid | tonumber) end),started_at:$started_at,updated_at:$updated_at,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,timeout_policy_source:$timeout_policy_source,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds}' \
     > "$state_temp" || return 1
   mv "$state_temp" "$TASK_STATE"
 }
@@ -183,37 +198,64 @@ validate_repo_path() {
   done
 }
 
+if [ "$#" -gt 0 ]; then
+  shift
+fi
+
+case "$MODE" in
+  research|survey|implement|errand|nesting)
+    [ "$#" -ge 6 ] || fail "$MODE mode requires explicit --hard-timeout-minutes, --idle-timeout-seconds, and --poll-seconds"
+    [ "$1" = "--hard-timeout-minutes" ] || fail "$MODE mode requires --hard-timeout-minutes first"
+    HARD_TIMEOUT_MINUTES="$2"
+    [ "$3" = "--idle-timeout-seconds" ] || fail "$MODE mode requires --idle-timeout-seconds second"
+    IDLE_TIMEOUT_SECONDS="$4"
+    [ "$5" = "--poll-seconds" ] || fail "$MODE mode requires --poll-seconds third"
+    TIMEOUT_POLL_SECONDS="$6"
+    shift 6
+    configure_timeouts
+    ;;
+  smoke) configure_timeouts ;;
+esac
+
 case "$MODE" in
   research|implement)
+    TASK_ID="${1:-}"
+    SPEC_PATH="${2:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -ge 3 ] || fail "$MODE mode requires task id and spec path"
-    shift 3
+    [ "$#" -ge 2 ] || fail "$MODE mode requires task id and spec path"
+    shift 2
     ;;
   survey)
+    TASK_ID="${1:-}"
+    DIRECT_INSTRUCTION="${2:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -eq 3 ] || fail "survey mode requires task id and instruction"
+    [ "$#" -eq 2 ] || fail "survey mode requires task id and instruction"
     [ -n "$DIRECT_INSTRUCTION" ] || fail "survey instruction must not be empty"
-    shift 3
+    shift 2
     ;;
   errand)
+    TASK_ID="${1:-}"
+    DIRECT_INSTRUCTION="${2:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -ge 5 ] || fail "errand mode requires task id, instruction, --, and production paths"
+    [ "$#" -ge 4 ] || fail "errand mode requires task id, instruction, --, and production paths"
     [ -n "$DIRECT_INSTRUCTION" ] || fail "errand instruction must not be empty"
-    [ "$4" = "--" ] || fail "errand mode requires -- before production paths"
-    shift 4
+    [ "$3" = "--" ] || fail "errand mode requires -- before production paths"
+    shift 3
     ;;
   nesting)
+    TASK_ID="${1:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -ge 3 ] || fail "nesting mode requires task id and at least one production path"
-    shift 2
+    [ "$#" -ge 2 ] || fail "nesting mode requires task id and at least one production path"
+    shift
     NESTING_PATHS=("$@")
     ;;
   smoke)
-    [ "$#" -eq 1 ] || fail "smoke mode does not accept arguments"
+    [ "$#" -eq 0 ] || fail "smoke mode does not accept arguments"
     ;;
   show)
+    TASK_ID="${1:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -eq 2 ] || fail "show mode requires task id"
+    [ "$#" -eq 1 ] || fail "show mode requires task id"
     ;;
   *) fail "mode must be research, survey, implement, errand, nesting, smoke, or show" ;;
 esac
@@ -267,7 +309,6 @@ fi
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v opencode >/dev/null 2>&1 || fail "opencode is required"
 [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
-select_timeouts
 
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
   validate_repo_path "$SPEC_PATH"
@@ -582,13 +623,15 @@ jq -n \
   --argjson elapsed_seconds "$OPENCODE_ELAPSED_SECONDS" \
   --argjson idle_timeout_seconds "$IDLE_TIMEOUT_SECONDS" \
   --argjson hard_timeout_seconds "$HARD_TIMEOUT_SECONDS" \
+  --argjson poll_seconds "$TIMEOUT_POLL_SECONDS" \
   --argjson termination_grace_seconds "$TIMEOUT_TERM_GRACE_SECONDS" \
+  --arg timeout_policy_source "$TIMEOUT_POLICY_SOURCE" \
   --arg source_head "$SOURCE_HEAD" \
   --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,termination_grace_seconds:$termination_grace_seconds,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"

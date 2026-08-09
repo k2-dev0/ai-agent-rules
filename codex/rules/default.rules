@@ -44,7 +44,7 @@ prefix_rule(
         "bash .agents/skills/deepseek/delegate.sh smoke",
     ],
     not_match = [
-        "bash .agents/skills/deepseek/delegate.sh research task-id spec.md",
+        "bash .agents/skills/deepseek/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 task-id spec.md",
     ],
 )
 prefix_rule(

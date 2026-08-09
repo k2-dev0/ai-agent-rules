@@ -104,15 +104,37 @@ $bootstrap codex
 
 ### DeepSeekへの調査・実装委任
 
-コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。
+役割分担は次で固定する。
 
-`preflight`と`ponytail`は汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、応答欠落ではサブエージェントへ切り替えず、新しいtask-idで固定実行器を一度だけ再試行する。自身のサブエージェントを代替利用できるのは、API key未設定、HTTP 401、invalid API key、authentication failedなど、認証情報の欠落または拒否を出力で明示的に確認できた場合だけである。非zero status、key usage取得失敗、403、一時的な接続失敗から認証失敗を推測してはならない。
+| 工程 | 担当 | 境界 |
+|---|---|---|
+| 設計に必要なコードベース探索・根拠収集 | DeepSeek | `delegate.sh`を最優先。設計判断はしない |
+| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行い、DeepSeekや調査subagentへ渡さない |
+| 承認済み範囲の初回実装 | DeepSeek | 本体コードと`schema.prisma`だけを隔離worktreeで変更する |
+| 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後はDeepSeekへ戻さない |
+| ネストなど変更要否を含まない機械的検出 | DeepSeek | 上位モデルは返却候補について修正する／しないを判断する |
 
-`errand`と旧`run-agent`である`conductor`では、依頼された本体コードと`schema.prisma`の初回実装を必ずDeepSeekの候補パッチから始める。候補を反映した後のテスト・レビュー・修正はCodexまたはClaudeが直接担当し、DeepSeekへ戻さない。DeepSeekの失敗・timeout・候補拒否を、上位モデルによる初回実装へ切り替える理由にはしない。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。`survey`は依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。通常は返却されたreportを採用して同じ範囲を重複調査しない。重要な根拠の再確認と、そこから何を設計へ採用するかは上位モデルが担当する。
+
+`preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idでDeepSeekを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
+
+`errand`、`tdd`、旧`run-agent`である`conductor`では、初回実装をDeepSeekへ委任する。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。上位モデル相当のsubagentを利用できるなら許可パス限定で優先する。候補が返った後の採否・レビュー・修正は最初から上位モデルの責務なので、不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
+
+固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
 
-全modeのOpenCode実行には、JSONLへ新しいeventが出ない無通信timeoutと総実行時間timeoutを併用する。`smoke`は30秒無通信・1分総時間、`survey`と`nesting`は2分無通信・4分総時間、`errand`は2分無通信・5分総時間、`research`と`implement`は2分無通信・10分総時間を上限とする。timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。自動retryや途中tool出力からの結論生成は行わず、`result.json`へtimeout種別・経過時間・終了statusを記録し、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。
+`survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。固定値を惰性で使い回してはならない。
+
+```bash
+bash [skills_root]/deepseek/delegate.sh <mode> \
+  --hard-timeout-minutes <総待機分> \
+  --idle-timeout-seconds <無通信秒> \
+  --poll-seconds <確認間隔秒> \
+  <mode固有の引数>
+```
+
+実行器は無通信timeoutと総実行時間timeoutを併用し、指定値と確認間隔をtask stateと`result.json`へ記録する。timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
 task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
 

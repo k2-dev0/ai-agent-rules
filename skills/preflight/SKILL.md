@@ -24,20 +24,26 @@ user-invocable: false
 コードベースの事実確認が必要なら、探索と根拠収集を DeepSeek へ委任する。汎用の Agent / subagent tool ではなく、次の固定実行器を最優先で使う。
 
 ```bash
-bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>
+bash [skills_root]/deepseek/delegate.sh survey \
+  --hard-timeout-minutes <総待機分> \
+  --idle-timeout-seconds <無通信秒> \
+  --poll-seconds <確認間隔秒> \
+  <task-id> <調査指示>
 ```
 
-固定実行器が返る前に、同じ調査を Agent / subagent へ並行委任してはならない。接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、応答欠落は認証失敗ではない。これらの一時障害では新しい task-id で固定実行器を一度再試行し、再試行後も失敗したら `blocked` として失敗範囲を返す。
+各実行前に、調査範囲と難易度から総待機時間、無通信timeout、確認間隔を決め、3値とその理由を明示する。固定値を無条件に使い回さない。再試行でも新しいtask-idと、その試行に選んだ3値を改めて明示する。
 
-自身の Agent / subagent を代替利用できるのは、`OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed` など、認証情報の欠落または拒否を出力で明示的に確認できた場合だけとする。単なる非zero status、`cannot read OpenRouter key usage`、403、接続失敗、timeoutから認証失敗を推測してはならない。認証失敗時の代替も、利用可能な下位モデルを読み取り専用で使い、変更系 tool を与えない。
+固定実行器が返る前に、同じ調査を Agent / subagent へ並行委任してはならない。接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗として数える。最初の失敗後は新しいtask-idで固定実行器を1回だけ再試行する。2回続けて失敗した場合は、上位モデルが調査を引き継ぐ。上位モデル相当の Agent / subagent を利用できるなら読み取り専用で優先し、利用できなければ[agent_name]自身が調査する。
 
-上位モデルの context は、調査項目の設計、調査結果の反証、要件判断に使う。
+`OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed` など、認証情報の欠落または拒否を出力で明示的に確認した場合は再試行せず、直ちに同じ上位モデルの代替経路へ切り替える。単なる非zero status、`cannot read OpenRouter key usage`、403、接続失敗、timeoutから認証失敗を推測してはならない。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず `blocked` とする。
+
+DeepSeekと代替subagentは、コードベースの探索と根拠収集だけを担当する。設計判断、要件判断、調査結果の採否は必ずオーケストレーターである上位モデルが行う。
 
 1. 上位モデルが、確認したい仮説、探索範囲、期待する根拠を具体的な調査項目へ分ける
 2. 独立した調査項目はそれぞれ固有の task-id で固定実行器へ委任する
 3. 下位モデルには変更系 tool を与えず、`file:line` の根拠、確認できない事項、反証候補だけを返させる
 4. 上位モデルが重要な根拠を実ファイルで再確認する。下位モデルの自己申告だけで論点を確定しない
-5. 固定実行器と、認証失敗時に限る代替手段のどちらも使えない、または参照先がない場合は調査不能な範囲を報告し、上位モデルの推測で穴埋めしない
+5. 固定実行器を2回使っても応答を得られず、上位モデルの代替調査も使えない、または参照先がない場合は調査不能な範囲を報告し、推測で穴埋めしない
 
 上位モデル自身による広範なコード探索を避ける。上位モデルが直接読むのは、委任内容を組み立てるための入口と、重要な根拠の再確認に必要な箇所に絞る。
 

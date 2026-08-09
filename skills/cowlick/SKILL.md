@@ -1,7 +1,7 @@
 ---
 name: cowlick
 description: "meeting から draft または apply mode で呼ばれ、確定要件から未承認の設計ドラフトを作るか、ponytail 後に最終承認された同一 revision を @.[agent_name]/prompt/ へ正式反映する"
-allowed-tools: Read, Write, Edit, Bash
+allowed-tools: Read, Write, Edit, Bash, Agent
 user-invocable: false
 ---
 
@@ -52,17 +52,23 @@ mkdir -p draft-prompt
 各設計書の初期ドラフトを、固定実行器の`research`モードへ1枚ずつ渡す。
 
 ```
-bash [skills_root]/deepseek/delegate.sh research <task-id> draft-prompt/branch-<機能名>-prompt.md
+bash [skills_root]/deepseek/delegate.sh research \
+  --hard-timeout-minutes <総待機分> \
+  --idle-timeout-seconds <無通信秒> \
+  --poll-seconds <確認間隔秒> \
+  <task-id> draft-prompt/branch-<機能名>-prompt.md
 ```
 
+- 各実行前に、設計書の調査範囲と難易度からtimeoutと確認間隔の3値を決め、値と理由を明示する。再試行でも固定値を惰性で再利用せず、改めて明示する
 - DeepSeekは読み取り専用とし、コード、テスト、設計ドラフトを変更させない
 - 調査結果は`file:line`の根拠、不明点、設計リスクとして返させる
 - 各設計書について、設計書ごと削除できる既存経路、新しいendpointやruntime resourceを使わない入口、既存のdeployment・scheduling・failure recovery patternを探させる
 - ドラフトの新設要素が別の新しい失敗モードと緩和策を生んでいる場合は、原因側と緩和策をまとめて消せる反証を探させる
 - [agent_name]が重要な根拠を実ファイルで再確認する。DeepSeekの自己申告だけで設計へ採用しない
-- 調査失敗、予算超過、ZDR対応先なしの場合は理由と未調査範囲を含む `research_blocked` を meeting へ返し、推測で穴埋めしない
+- 接続失敗、timeout、最終応答欠落などの応答失敗では、新しいtask-idで固定実行器を1回だけ再試行する。2回続けて失敗したら、上位モデル相当のAgent / subagentを読み取り専用で優先し、使えなければ[agent_name]自身が調査を引き継ぐ
+- API key欠落、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ上位モデルの代替経路へ切り替える。予算超過、ZDR対応先なし、依存command欠落、参照先欠落は応答失敗に数えず、理由と未調査範囲を含む `research_blocked` を meeting へ返す
 
-調査結果を踏まえて[agent_name]がドラフトを更新する。要件 revision と異なる判断が必要ならユーザーへ直接質問せず、選択肢、挙動差、推奨を含む `consultation_required` を meeting へ返す。
+DeepSeekと代替subagentはコードベースの探索と根拠収集だけを担当する。調査結果を踏まえた設計判断とドラフト更新は、必ずオーケストレーターである[agent_name]が行う。要件 revision と異なる判断が必要ならユーザーへ直接質問せず、選択肢、挙動差、推奨を含む `consultation_required` を meeting へ返す。
 
 調査を反映した後、全設計書をもう一度横断して、新設境界とglobal/shared変更のそれぞれが明示要件または既存制約へ直接対応していること、境界を新設しない基準案では満たせない根拠があることを確認する。設計選択同士の依存だけで必要性を説明している要素を残さない。
 
