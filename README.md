@@ -104,7 +104,11 @@ $bootstrap codex
 
 ### DeepSeekへの調査・実装委任
 
-コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。`errand`と旧`run-agent`である`conductor`では、依頼された本体コードと`schema.prisma`の初回実装を必ずDeepSeekの候補パッチから始める。候補を反映した後のテスト・レビュー・修正はCodexまたはClaudeが直接担当し、DeepSeekへ戻さない。DeepSeekの失敗・timeout・候補拒否を、上位モデルによる初回実装へ切り替える理由にはしない。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。調査は`bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>`で行う。surveyは依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。新規機能の類似例を全体から探す依頼では最後まで広げられる。通常は返却されたreportを採用して同じ範囲を重複調査しない。report内の矛盾、根拠不足、下位モデルの失敗、またはユーザーから異議がある場合だけ、上位モデルが独立して読み取り調査し、必要に応じて範囲を広げる。Read / Grep / Glob / 安全な単一検索コマンドは物理的に禁止せず、書き込みだけをsandboxと保護hookで制限する。
+
+`preflight`と`ponytail`は汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、応答欠落ではサブエージェントへ切り替えず、新しいtask-idで固定実行器を一度だけ再試行する。自身のサブエージェントを代替利用できるのは、API key未設定、HTTP 401、invalid API key、authentication failedなど、認証情報の欠落または拒否を出力で明示的に確認できた場合だけである。非zero status、key usage取得失敗、403、一時的な接続失敗から認証失敗を推測してはならない。
+
+`errand`と旧`run-agent`である`conductor`では、依頼された本体コードと`schema.prisma`の初回実装を必ずDeepSeekの候補パッチから始める。候補を反映した後のテスト・レビュー・修正はCodexまたはClaudeが直接担当し、DeepSeekへ戻さない。DeepSeekの失敗・timeout・候補拒否を、上位モデルによる初回実装へ切り替える理由にはしない。固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 
 surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
 

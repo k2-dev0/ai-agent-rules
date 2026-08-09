@@ -146,17 +146,19 @@ for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
     ok "内部skillをmodelが呼べる: $(basename "$(dirname "$INTERNAL_SKILL")")"
   fi
 done
-if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
+if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|AskUserQuestion)'; then
   ng "preflightに書き込みtoolがある"
 else
   ok "preflightは読み取り専用"
 fi
-if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|Bash|AskUserQuestion)'; then
-  ng "ponytailが広域書き込み・Bash・質問toolを事前許可"
+if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|AskUserQuestion)'; then
+  ng "ponytailが広域書き込み・質問toolを事前許可"
 else
   ok "ponytailは調査toolだけを事前許可"
 fi
-grep -q 'DeepSeek など利用可能な下位モデル' "$PREFLIGHT_SKILL" && grep -q 'DeepSeek など利用可能な下位モデル' "$PONYTAIL_SKILL" && ok "調査を下位モデルへ委任" || ng "下位モデル委任の記述漏れ"
+grep -Fq 'deepseek/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'deepseek/delegate.sh survey' "$PONYTAIL_SKILL" && ok "調査をDeepSeek固定実行器へ委任" || ng "DeepSeek固定実行器の記述漏れ"
+grep -Fq '固定実行器を最優先' "$PREFLIGHT_SKILL" && grep -Fq '固定実行器を最優先' "$PONYTAIL_SKILL" && grep -Fq '認証情報の欠落または拒否を出力で明示的に確認できた場合だけ' "$PREFLIGHT_SKILL" && grep -Fq '認証情報の欠落または拒否を出力で明示的に確認できた場合だけ' "$PONYTAIL_SKILL" && ok "subagent fallbackを明示的な認証失敗だけに限定" || ng "subagent fallbackの認証境界が不足"
+grep -Fq '接続失敗、DNS・TLS error' "$PREFLIGHT_SKILL" && grep -Fq '接続失敗、DNS・TLS error' "$PONYTAIL_SKILL" && grep -Fq '新しい task-id で固定実行器を一度再試行' "$PREFLIGHT_SKILL" && grep -Fq '新しい task-id で固定実行器を一度再試行' "$PONYTAIL_SKILL" && ok "一時的な接続失敗はDeepSeek固定実行器で再試行" || ng "DeepSeek接続失敗時の再試行境界が不足"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '**横断 topology**' "$PONYTAIL_SKILL" && grep -Fq '**最小代替案**' "$PONYTAIL_SKILL" && grep -Fq '**原因・緩和対**' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '次をすべて満たすまで.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"

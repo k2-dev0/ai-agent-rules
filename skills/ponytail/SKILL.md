@@ -1,7 +1,7 @@
 ---
 name: ponytail
 description: "cowlick が作った未承認の設計ドラフトを全設計書横断で監査し、要件へのtraceability、境界を新設しない代替案、原因除去、既存の実行方式の再利用を比較して、過剰な実装計画を削る"
-allowed-tools: Read, Grep, Glob, Agent
+allowed-tools: Read, Grep, Glob, Bash, Agent
 user-invocable: false
 ---
 
@@ -45,12 +45,22 @@ user-invocable: false
 
 ## 調査の委任
 
-既存実装、実行方式、標準機能、native機能、導入済み依存の調査は、DeepSeek など利用可能な下位モデルの読み取り専用 subagent へ委任する。上位モデルは調査項目の設計、横断比較、採否判断、ドラフト修正に集中する。
+既存実装、実行方式、標準機能、native機能、導入済み依存の調査は DeepSeek へ委任する。汎用の Agent / subagent tool ではなく、次の固定実行器を最優先で使う。
+
+```bash
+bash [skills_root]/deepseek/delegate.sh survey <task-id> <調査指示>
+```
+
+固定実行器が返る前に、同じ調査を Agent / subagent へ並行委任してはならない。接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、応答欠落は認証失敗ではない。これらの一時障害では新しい task-id で固定実行器を一度再試行し、再試行後も失敗したら `blocked` として失敗範囲を返す。
+
+自身の Agent / subagent を代替利用できるのは、`OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed` など、認証情報の欠落または拒否を出力で明示的に確認できた場合だけとする。単なる非zero status、`cannot read OpenRouter key usage`、403、接続失敗、timeoutから認証失敗を推測してはならない。認証失敗時の代替も、利用可能な下位モデルを読み取り専用で使い、変更系 tool を与えない。
+
+上位モデルは調査項目の設計、横断比較、採否判断、ドラフト修正に集中する。
 
 1. 個別設計書より先にドラフト一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索させる
 2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探させる
 3. 各新設要素が別の新設要素のためだけに必要になっていないか、現ドラフトを不要とする反証を探させる
-4. 残った個別論点だけを並行委任し、`file:line`、再利用候補の契約、適用できない理由、未確認事項を返させる
+4. 残った個別論点だけを固有の task-id で固定実行器へ委任し、`file:line`、再利用候補の契約、適用できない理由、未確認事項を返させる
 5. 上位モデルが重要な根拠を実ファイルで再確認し、下位モデルの提案をそのまま採用しない
 
 下位モデルへドラフトの変更を許可しない。探索結果を受けて設計を変える責任は上位モデルが持つ。
