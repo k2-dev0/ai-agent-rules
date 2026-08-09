@@ -45,15 +45,19 @@ disable-model-invocation: true
 
 DeepSeekへ渡す許可パスに未コミット変更があれば、ユーザー変更との衝突として停止する。
 
+関連コード、rules、既存テスト、実行commandを調べる前に`../deepseek/DELEGATION.md`を全文読み、対象設計の識別子と対象パスを保持した`survey`を同期実行する。最寄りの同型実装、適用rules、既存テスト形式、初期化・検証command、設計とコードの不一致を`file:line`で返させ、task-idとreportを`tdd`へ引き渡す。
+
+上位モデルはsurvey前に関連コードをGrep / Glob / git logで探索しない。直接読むのはindex、対象設計書、reportが示した重要な根拠の該当箇所だけとする。reportに必要な根拠がなければ調査項目を絞って新しいtask-idでsurveyし、自力の横断探索へ切り替えない。上位モデルが調査を引き継げるのは共通契約の失敗条件を満たした場合だけとする。
+
 ### 3. tddをフル実行する
 
 コード変更では`tdd`を省略せず、シナリオ一括承認、test作成とRed、DeepSeek候補、上位モデルのレビュー・修正とGreenまで完了する。追跡対象は1ファイルずつ即コミットし、無視されたテスト資産は強制stageせず作業ツリーで検証する。
 
 変更対象が`schema.prisma`だけなら`tdd`のschema例外に従い、シナリオ、test作成、Red/Greenを要求せず、Prismaのformat、validate、generateで検証する。本体コードを同時に変更する場合、その公開挙動は通常の`tdd`から除外しない。
 
-DeepSeekを呼ぶ前に`../deepseek/DELEGATION.md`を全文読む。[agent_name]は最初の応答前に本体コードや`schema.prisma`のstub、雛形、部分実装を作らず、候補返却後のレビュー、採否、修正をDeepSeekへ戻さない。
+[agent_name]はDeepSeekの実装候補が返る前に本体コードや`schema.prisma`のstub、雛形、部分実装を作らず、候補返却後のレビュー、採否、修正をDeepSeekへ戻さない。
 
-調査・ドキュメントだけの設計書は[agent_name]が通常どおり実行し、DeepSeek実装を呼ばない。
+調査・ドキュメントだけの設計書でもコードベースの事実収集はsurvey結果を使い、分析と文章化を[agent_name]が行う。DeepSeekの実装modeは呼ばない。
 
 ### 4. DeepSeekの相談を処理する
 
