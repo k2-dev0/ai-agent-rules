@@ -7,11 +7,19 @@ disable-model-invocation: true
 
 ## 目的
 
-呼び出し元が開始時に固定した本体コードだけを整形・静的検査し、scope path検査と`unwind`を通す。
+呼び出し元が開始時に固定した候補のうち、実際に変更された本体コードだけを整形・静的検査し、scope path検査と`unwind`を通す。
 
 ## 入力と対象
 
-機能名と変更済み**追跡済み本体コードの相対path**全件を一括入力にする。ファイルごとに分割起動しない。不足時は差分から補完せず失敗にする。対象は`tdd`が変更前に`capture-scope.sh`で固定したpathと完全一致させる。各pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。
+機能名を受け取り、最初に次を実行する。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
+```
+
+開始scopeの基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済み本体コードだけがscope順で返る。この出力と完全一致する相対path全件を一括入力とし、開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`へ渡さず、最終scope検査だけで確認する。出力が空なら実行表と`unwind`を省略し、scope path検査へ進む。
+
+各実変更pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは実変更pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheckとPrisma検証はファイル単位で安全に分割できないため、実変更pathが属するpackageまたはschemaだけを起点に既存単位で実行する。
 
 ## 実行表
 
@@ -33,19 +41,19 @@ packageごとに上から実行する。既存scriptを第一選択にし、scri
 
 ## 制御フローネストの品質ゲート
 
-実行表が成功した後に`unwind`を必ず呼ぶ。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
+実行表が成功した後に、実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
 
 `unwind` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、DeepSeek へ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
 
 ## scope path検査
 
-実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから次を実行する。pathは入力と同じ順序で全件渡す。
+実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから`list-changed`を再実行する。pathは最新の出力と同じ順序で全件渡す。出力が空なら`--`の後へpathを付けない。
 
 ```bash
-bash [skills_root]/polish/check-changed-rules.sh <機能名> -- <相対path>...
+bash [skills_root]/polish/quality-gate.sh check <機能名> -- <実変更path>...
 ```
 
-開始receiptのrepository・基準commit・相対path一覧と、現在の入力pathを順序込みで完全一致させる。各pathが個別file、追跡済みまたはcommit済み削除、cleanであることだけを検査し、現在HEADへreceiptを記録する。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
+開始receiptのrepository・基準commit・候補path一覧を読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。開始scope内の全pathについて追跡済みまたはcommit済み削除であること、cleanであることを検査する。path形式、重複、directory、symlinkは開始時の`capture-scope.sh`が検査し、ここで同じ規則を重複実装しない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
 
 ## 反復条件
 
@@ -66,7 +74,7 @@ bash [skills_root]/polish/check-changed-rules.sh <機能名> -- <相対path>...
 `tdd`の`from-prompt` modeから機能名と本体コードの相対path一覧を渡されて実行した場合は、すべての品質ゲート（scope path検査とDeepSeekによる再検出を含む）を終え、追跡対象の変更をコミットした後に次を実行する。設計書path modeでは記録しない。
 
 ```bash
-bash [skills_root]/polish/quality-gate.sh record <機能名>
+bash [skills_root]/polish/quality-gate.sh record <機能名> -- <実変更path>...
 ```
 
-この receipt は現在の HEAD と追跡対象の clean 状態を結び付ける。失敗した場合は完了を報告せず、変更の検証とコミットをやり直す。
+`record`はscope path検査をもう一度行い、現在の HEAD、基準commit、実変更path一覧を同じreceiptへ固定する。設計書path modeでは`check`だけを使い、receiptは記録しない。失敗した場合は完了を報告せず、変更の検証とコミットをやり直す。

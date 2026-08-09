@@ -34,8 +34,6 @@
       "Bash(bash .claude/skills/polish/quality-gate.sh:*)",
       "Bash(bash .claude/skills/polish/capture-scope.sh)",
       "Bash(bash .claude/skills/polish/capture-scope.sh:*)",
-      "Bash(bash .claude/skills/polish/check-changed-rules.sh)",
-      "Bash(bash .claude/skills/polish/check-changed-rules.sh:*)",
       "Bash(bash .claude/skills/rebase/rebase.sh)",
       "Bash(bash .claude/skills/rebase/rebase.sh:*)",
       "Bash(bash .claude/skills/deepseek/delegate.sh)",

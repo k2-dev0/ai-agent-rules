@@ -62,11 +62,15 @@ check_bash_rewrite() { # name expected-command hook command
 }
 
 # --- require-test ---
-mkdir -p src && rm -f src/foo.ts src/foo.test.ts src/bar.tsx
+mkdir -p src/hooks && rm -f src/foo.ts src/foo.test.ts src/bar.tsx src/bar.jsx src/useDevice.ts src/hooks/use-device.ts src/data.hook.ts
 check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
 touch src/foo.test.ts
 check "require-test: テスト有り ts は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
 check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
+check "require-test: jsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.jsx"}}'
+check "require-test: useX hook は棄権"        empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/useDevice.ts"}}'
+check "require-test: hooks directory は棄権"  empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/hooks/use-device.ts"}}'
+check "require-test: .hook.ts は棄権"         empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/data.hook.ts"}}'
 check "require-test: schema.prisma は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/prisma/schema.prisma"}}'
 check "require-test: Bash は棄権"             empty require-test.sh '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 

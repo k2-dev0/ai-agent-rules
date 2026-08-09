@@ -110,6 +110,8 @@ DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`�
 
 承認済みシナリオと受領済みの調査パケットだけをテストへ変換する。変更対象のテスト資産と自分が書いた内容は読んでよいが、importやfixtureを確かめるために本体コード、既存基盤、同型testを検索・再読してはならない。足りない事実は限定surveyで補う。追跡対象のファイルは1ファイルずつ即コミットする。無視されたテスト資産は `git add -f` / `git add --force` を使わず、作業ツリーに残して検証と後続工程を継続する。テストの意味を変えるために既存assertionを弱めてはならない。
 
+`.jsx` / `.tsx` componentとReact hookには隣接unit testを作らず、テスト資産の必須対象にも数えない。承認済みシナリオが画面挙動を要求する場合は既存のintegration / E2E境界で検証し、そのためだけにcomponentまたはhookのunit testを新設しない。
+
 ### 4. Redを確認する
 
 対象テストをプロジェクトのtest script経由で実行し、実装不足または期待値との差で失敗することを確認する。
@@ -160,7 +162,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 ### 9. polishと完了処理を行う
 
-設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから、変更した全ファイルをまとめた単位で`polish`を呼ぶ。ファイルごとには呼ばない。機能名と、この実行で変更してコミットした追跡済み本体コードの相対path全件を渡す。`polish`は決定的toolの自動修正を必要範囲だけ再確認し、上位モデルによる判断修正後は全品質ゲートを先頭から反復してから返る。
+設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`は同じ決定的selectorで入力を再検証し、formatter・lint・`unwind`を実変更pathだけへ適用する。決定的toolの自動修正を必要範囲だけ再確認し、上位モデルによる判断修正後は全品質ゲートを先頭から反復してから返る。
 
 `from-prompt`では、polishが現在のHEADへquality receiptを記録した後だけ次を単独実行する。失敗時はindexを直接編集しない。
 

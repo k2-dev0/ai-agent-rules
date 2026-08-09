@@ -31,6 +31,12 @@ if
       schema.prisma|*/schema.prisma) continue ;;
     esac
 
+    # JSX/TSX componentとReact hookには隣接unit testを強制しない。
+    # hookは慣例的なdirectory・basenameだけを対象にし、一般のuse語を誤除外しない。
+    case "$FILE" in
+      */hooks/*|*/use[A-Z]*.ts|*/use[A-Z]*.js|*/use-*.ts|*/use-*.js|*.hook.ts|*.hook.js) continue ;;
+    esac
+
     DIR=$(dirname "$FILE")
     BASE=$(basename "$FILE" | sed 's/\.[^.]*$//')
     EXT=$(basename "$FILE" | sed 's/^.*\.//')

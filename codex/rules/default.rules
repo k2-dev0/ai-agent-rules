@@ -29,11 +29,6 @@ prefix_rule(
     justification = "TDD開始時のHEADと対象pathだけを一時receiptへ記録します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/polish/check-changed-rules.sh"],
-    decision = "allow",
-    justification = "polish対象pathが開始scopeと一致し追跡済み・cleanであることを検査します。",
-)
-prefix_rule(
     pattern = ["bash", ".agents/skills/deepseek/delegate.sh"],
     decision = "allow",
     justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",

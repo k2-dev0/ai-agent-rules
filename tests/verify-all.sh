@@ -243,24 +243,24 @@ UNWIND_SKILL="$REPO/skills/unwind/SKILL.md"
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 QUALITY_GATE_SCRIPT="$REPO/skills/polish/quality-gate.sh"
 CAPTURE_SCOPE_SCRIPT="$REPO/skills/polish/capture-scope.sh"
-SCOPE_PATHS_SCRIPT="$REPO/skills/polish/check-changed-rules.sh"
 MARK_PROMPT_DONE_SCRIPT="$REPO/skills/tdd/mark-prompt-done.sh"
 [ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
 grep -Fq 'DeepSeekの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind はprepare・固定実行器で機械的検出をDeepSeek、修正判断を上位へ固定" || ng "unwind のprepare・固定実行器または検出・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
-[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && ok "tdd はpolishの差分scopeだけを変更前に記録" || ng "tdd のpolish差分scope記録器が不正"
-[ -x "$SCOPE_PATHS_SCRIPT" ] && bash -n "$SCOPE_PATHS_SCRIPT" && grep -Fq '各pathが個別file、追跡済みまたはcommit済み削除、cleanであることだけを検査' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$SCOPE_PATHS_SCRIPT" && ok "polish は独自コード規約を廃止してscope pathだけを検査" || ng "polish のscope path checkerが不正"
+[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ok "tdd は開始scopeを固定して実変更pathだけを選択" || ng "tdd の実変更path selectorが不正"
+grep -Fq 'quality-gate.sh check <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish はquality gateで実変更pathと追跡状態だけを検査" || ng "polish の実変更path検査が不正"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality receiptを記録した後だけ' "$TDD_SKILL" && ok "tdd from-prompt の完了更新は品質receiptを検証" || ng "tdd from-prompt の品質receipt検証が無い"
 grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書path>` |' "$TDD_SKILL" && grep -Fq '設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
 grep -Fq 'DeepSeekの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/deepseek/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq '候補が返った後の採否は上位モデルのレビュー責務' "$TDD_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・DeepSeek初回実装・上位fallback・上位修正へ固定" || ng "tdd のprepare・固定実行器・DeepSeek初回実装・上位fallback・上位修正が不正"
 grep -Fq 'Step 1で設計書を選んでからStep 5のDeepSeek初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq 'DeepSeekの`file:line`はreportの監査根拠' "$TDD_SKILL" && grep -Fq 'reportだけで[agent_name]がシナリオ設計とテスト資産の作成を完了' "$TDD_SKILL" && grep -Fq '単なる情報不足や「念のため」は疑義に含めず' "$TDD_SKILL" && grep -Fq '疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示' "$TDD_SKILL" && grep -Fq '正常終了したが不完全なreportを、[agent_name]のRead / Grep / Glob / shell検索で補完してはならない' "$TDD_SKILL" && grep -Fq '足りない事実は限定surveyで補う' "$TDD_SKILL" && ! grep -Fq 'report受領後も直接読むのは重要な`file:line`の確認だけ' "$TDD_SKILL" && ok "tdd は通常調査をDeepSeek、上位調査をfallback・具体的疑義へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
 grep -Fq 'テストシナリオ設計 | 可 | 禁止' "$TDD_SKILL" && grep -Fq 'テストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$TDD_SKILL" && grep -Fq '[agent_name]が正常系、境界値、異常系、副作用、回帰リスクとテスト構造を設計' "$TDD_SKILL" && ok "tddのテスト設計と実装を上位モデルへ固定" || ng "tddがテスト設計をDeepSeekへ委任可能"
-grep -Fq '`schema.prisma`自体はテスト対象外' "$TDD_SKILL" && grep -Fq 'シナリオ承認とStep 3・4を省略' "$TDD_SKILL" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$TDD_SKILL" && ok "tddはschema.prismaだけをテスト対象外に限定" || ng "tddのschema.prismaテスト除外境界が不正"
+grep -Fq '`schema.prisma`自体はテスト対象外' "$TDD_SKILL" && grep -Fq 'シナリオ承認とStep 3・4を省略' "$TDD_SKILL" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$TDD_SKILL" && ok "tddはschema.prismaの検証境界を固定" || ng "tddのschema.prisma検証境界が不正"
+grep -Fq '`.jsx` / `.tsx` componentとReact hookには隣接unit testを作らず' "$TDD_SKILL" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$TDD_SKILL" && grep -Fq '無関係なpackageのtestやproject全体のtestは追加しない' "$TDD_SKILL" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$TDD_SKILL" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$TDD_SKILL" && ok "tddは調査commandと最終検証の範囲を固定" || ng "tddの調査commandまたは最終検証が曖昧"
-grep -Fq '機能名と変更済み**追跡済み本体コードの相対path**全件を一括入力' "$POLISH_SKILL" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$POLISH_SKILL" && grep -Fq 'Prismaの`format`、`validate`、`generate`' "$POLISH_SKILL" && grep -Fq '複数formatterまたはlinter設定が支配' "$POLISH_SKILL" && ok "polishは対象pathと検証toolを決定的に選ぶ" || ng "polishの対象pathまたは検証toolが曖昧"
-grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq '変更した全ファイルをまとめた単位で`polish`を呼ぶ' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd はpolish後だけfrom-promptのindexを更新" || ng "tdd のpolish品質ゲートが不正"
+grep -Fq '開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない' "$POLISH_SKILL" && grep -Fq 'typecheckとPrisma検証はファイル単位で安全に分割できない' "$POLISH_SKILL" && grep -Fq '実変更pathだけを渡して`unwind`を必ず呼ぶ' "$POLISH_SKILL" && grep -Fq 'directory、glob、開始scope全件、repository全体を渡された場合は検出を始めず' "$UNWIND_SKILL" && ok "polishとunwindは実変更pathだけを対象化" || ng "polishまたはunwindが開始scope全件を許可"
+grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq '開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけfrom-promptのindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
 grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq '変更前に次を1回実行' "$TDD_SKILL" && ok "tdd はpolish対象の基準commitとpathを変更前に固定" || ng "tdd のscope path固定が不正"
 grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '上位モデルがコードを判断して修正した場合は全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
 
@@ -323,7 +323,6 @@ AP=".claude/skills/cowlick/apply-prompt.sh"
 MD=".claude/skills/tdd/mark-prompt-done.sh"
 QG=".claude/skills/polish/quality-gate.sh"
 CS=".claude/skills/polish/capture-scope.sh"
-CP=".claude/skills/polish/check-changed-rules.sh"
 mkdir -p draft-prompt
 printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
 echo api > draft-prompt/branch-user-api-prompt.md
@@ -366,14 +365,15 @@ rm -rf draft-prompt
 if bash "$MD" billing > mark-without-quality-gate.out 2>&1; then ng "mark-prompt-done: 品質receipt無しを通した"; else ok "mark-prompt-done: 品質receipt無しを拒否"; fi
 mkdir -p src
 printf 'export function legacyNumber() { return 99 }\n' > src/rules.ts
-git add src/rules.ts
+printf 'export const untouched = true\n' > src/untouched.ts
+git add src/rules.ts src/untouched.ts
 git commit -qm "test: scope path fixtureを追加"
-if bash "$CS" billing -- src/rules.ts > quality-begin.out 2>&1; then ok "polish-scope: 基準commitと対象pathを固定"; else ng "polish-scope: 変更前scopeを記録できない"; cat quality-begin.out; fi
+if bash "$CS" billing -- src/rules.ts src/untouched.ts src/planned.ts > quality-begin.out 2>&1; then ok "polish-scope: 基準commitと候補pathを固定"; else ng "polish-scope: 変更前scopeを記録できない"; cat quality-begin.out; fi
 if bash "$CS" directory-scope -- src > quality-directory.out 2>&1; then ng "polish-scope: directory指定を通した"; else ok "polish-scope: 個別file以外を拒否"; fi
 if bash "$CS" glob-scope -- 'src/*.ts' > quality-glob.out 2>&1; then ng "polish-scope: pathspec globを通した"; else ok "polish-scope: pathspec globを拒否"; fi
 if bash "$CS" untracked -- src/untracked.ts > quality-untracked-begin.out 2>&1; then
   printf 'export const untracked = true\n' > src/untracked.ts
-  if bash "$CP" untracked -- src/untracked.ts > quality-untracked.out 2>&1; then ng "polish-paths: 未追跡の新規fileを通した"; else ok "polish-paths: 未追跡の新規fileを拒否"; fi
+  if bash "$QG" check untracked -- src/untracked.ts > quality-untracked.out 2>&1; then ng "polish-paths: 未追跡の新規fileを通した"; else ok "polish-paths: 未追跡の新規fileを拒否"; fi
   rm -f src/untracked.ts
 else
   ng "polish-scope: 新規fileのscopeを固定できない"; cat quality-untracked-begin.out
@@ -381,10 +381,19 @@ fi
 printf 'import legacy from "../../legacy"\nexport function legacyNumber() { return 99 }\nexport function errorCode() { return 404 }\n' > src/rules.ts
 git add src/rules.ts
 git commit -qm "test: エラーコードを含むpath fixtureへ更新"
-if bash "$QG" record billing > quality-before-polish.out 2>&1; then ng "quality-gate: scope path検査なしでrecordした"; else ok "quality-gate: scope path receiptを必須化"; fi
-if bash "$CP" billing -- src/other.ts > quality-mismatch.out 2>&1; then ng "polish-paths: scopeと異なる入力pathを通した"; else ok "polish-paths: 入力pathの完全一致を強制"; fi
-if bash "$CP" billing -- src/rules.ts > quality-final.out 2>&1; then ok "polish-paths: 数値・importを解析せず最終HEADを記録"; else ng "polish-paths: path-only検査に失敗"; cat quality-final.out; fi
-if bash "$QG" record billing > quality-gate.out 2>&1; then ok "quality-gate: scope path確認済みのclean HEADを記録"; else ng "quality-gate: scope path確認済みHEADを記録できない"; cat quality-gate.out; fi
+CHANGED_PATHS=$(bash "$CS" list-changed billing)
+[ "$CHANGED_PATHS" = "src/rules.ts" ] && ok "polish-scope: 未変更・未使用候補を除外して実変更pathだけ列挙" || ng "polish-scope: 実変更path selectorが不正 [$CHANGED_PATHS]"
+if bash "$CS" unchanged -- src/untouched.ts src/planned-empty.ts > quality-empty-begin.out 2>&1 &&
+   [ -z "$(bash "$CS" list-changed unchanged)" ] &&
+   bash "$QG" check unchanged -- > quality-empty.out 2>&1; then
+  ok "polish-scope: 実変更pathが空なら空入力を検証"
+else
+  ng "polish-scope: 空の実変更pathを扱えない"
+fi
+if bash "$QG" record billing > quality-before-polish.out 2>&1; then ng "quality-gate: 実変更path入力なしでrecordした"; else ok "quality-gate: 実変更path入力を必須化"; fi
+if bash "$QG" check billing -- src/rules.ts src/untouched.ts src/planned.ts > quality-broad.out 2>&1; then ng "polish-paths: 開始scope全件を通した"; else ok "polish-paths: 開始scope全件を拒否"; fi
+if bash "$QG" check billing -- src/other.ts > quality-mismatch.out 2>&1; then ng "polish-paths: scopeと異なる入力pathを通した"; else ok "polish-paths: 入力pathの完全一致を強制"; fi
+if bash "$QG" record billing -- src/rules.ts > quality-gate.out 2>&1; then ok "quality-gate: 数値・importを解析せず実変更pathとclean HEADを記録"; else ng "quality-gate: path-only検査とHEAD記録に失敗"; cat quality-gate.out; fi
 bash "$MD" billing > mark.out 2>&1
 grep -qE '^\- \[x\] branch-billing-prompt\.md$' .claude/prompt/.prompt.md && ok "mark-prompt-done: index を [x] に倒す" || { ng "mark-prompt-done: [x] に倒せない"; cat mark.out; }
 grep -q '^remaining: 0$' mark.out && ok "mark-prompt-done: 残件数を報告" || { ng "mark-prompt-done: 残件数の報告が無い"; cat mark.out; }
@@ -855,12 +864,10 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/tdd/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh record user-api 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh record user-api -- src/example.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/capture-scope.sh user-api -- src/example.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: polish scope記録の固定経路を allow" || ng "rules: polish scope記録判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/check-changed-rules.sh user-api 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: polish scope path検査の固定経路を allow" || ng "rules: polish scope path検査判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason scope=spec,difficulty=medium,basis=contract-review task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: delegate-deepseek の固定経路を allow" || ng "rules: delegate-deepseek 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh smoke 2>/dev/null)
@@ -902,6 +909,8 @@ OUT=$(echo "$AP" | bash $H/require-test.sh)
 [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: marker 一致で執行(実機同形ペイロード)" || ng "require-test: marker 一致 out=[$OUT]"
 APMD=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: README.md\n+x\n*** End Patch"}}')
 [ -z "$(echo "$APMD" | bash $H/require-test.sh)" ] && ok "require-test: md のみのパッチは棄権" || ng "require-test: md が棄権されない"
+APCOMPONENT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/view.tsx\n+x\n*** Update File: src/view.jsx\n+y\n*** Update File: src/useDevice.ts\n+z\n*** Update File: src/hooks/use-device.ts\n+w\n*** End Patch"}}')
+[ -z "$(echo "$APCOMPONENT" | bash $H/require-test.sh)" ] && ok "require-test: jsx・tsx・React hookは明示除外" || ng "require-test: componentまたはReact hookを誤拒否"
 APPRISMA=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: front/prisma/schema.prisma\n+x\n*** End Patch"}}')
 [ -z "$(echo "$APPRISMA" | bash $H/require-test.sh)" ] && ok "require-test: schema.prisma は明示除外" || ng "require-test: schema.prisma を誤拒否"
 APPRISMA_TS=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: front/prisma/schema.prisma\n+x\n*** Add File: src/schema-change.ts\n+y\n*** End Patch"}}')
@@ -998,7 +1007,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh polish/check-changed-rules.sh deepseek/delegate.sh e2e/apply-e2e-plan.sh; do
+for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh deepseek/delegate.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }

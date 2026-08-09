@@ -12,7 +12,9 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 判定
 
-対象は親スキルが渡す変更済みの**追跡済み本体コードの相対パス**だけとする。test、生成物、vendor、依存物は対象外にする。機能名または対象パスが渡されない場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
+対象は親スキルが渡す、基準commitから実際に変更され現在も存在する**追跡済み本体コードの相対パス**だけとする。test、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスが渡されない場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
+
+実行前に`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行し、親スキルから受け取ったpathが出力と順序込みで完全一致することを確認する。directory、glob、開始scope全件、repository全体を渡された場合は検出を始めず親スキルへ拒否を返す。出力が空ならDeepSeekを呼ばず、対象なしとして返す。
 
 - `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
 - `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない
@@ -23,7 +25,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`nesting`は必ず`bash [skills_root]/deepseek/delegate.sh nesting`で実行する。
 
-1. 現在のHEADへDeepSeekの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、対象パスを明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
+1. 現在のHEADへDeepSeekの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、検証済みの実変更pathだけを個別引数で明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
 2. DeepSeek が返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
    - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause
