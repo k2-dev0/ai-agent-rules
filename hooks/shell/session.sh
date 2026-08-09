@@ -1,44 +1,28 @@
 #!/bin/bash
-# UserPromptSubmit / SessionEnd hook:
-# - SOURCE_REPOSITORY.md がある配布元だけ、その説明をsessionへ一度注入する
-# - codexではworkflow skillの明示起動をsession markerへ記録する
-# - SessionEndで自sessionのmarkerを掃除する
+# UserPromptSubmit / SessionEnd hook: codex の skill スコープ再現を担う。
+# - UserPromptSubmit: workflow skill の明示起動を検知し、セッション別の
+#   session marker を作成する（各PreToolUse hookが参照）
+# - SessionEnd: 自セッションの marker を削除する（残っても別セッションには無害だが掃除する）
+# claude では skill frontmatter hooks が同じ役割を担うため本 hook は棄権する。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
-
-CWD=$(hook_cwd)
-SESSION_ID=$(hook_session_id)
-AGENT_TMP="$CWD/.$HOOK_AGENT/tmp"
-SOURCE_REPOSITORY_FILE="$CWD/SOURCE_REPOSITORY.md"
-SOURCE_REPOSITORY_RECEIPT="$AGENT_TMP/source-repository.$SESSION_ID"
+[ "$HOOK_AGENT" = "codex" ] || exit 0
 
 case "$(hook_event_name)" in
   UserPromptSubmit)
     PROMPT=$(hook_prompt)
     [ -z "$PROMPT" ] && exit 0
-
-    if [ -f "$SOURCE_REPOSITORY_FILE" ] && [ ! -f "$SOURCE_REPOSITORY_RECEIPT" ]; then
-      mkdir -p "$AGENT_TMP"
-      command cat "$SOURCE_REPOSITORY_FILE"
-      : > "$SOURCE_REPOSITORY_RECEIPT"
-    fi
-
-    if [ "$HOOK_AGENT" = "codex" ]; then
-      for SKILL in tdd meeting cowlick; do
-        if echo "$PROMPT" | grep -q "\$$SKILL"; then
-          F=$(hook_skill_session_file "$SKILL")
-          mkdir -p "$(dirname "$F")"
-          : > "$F"
-        fi
-      done
-    fi
+    for SKILL in tdd meeting cowlick; do
+      if echo "$PROMPT" | grep -q "\$$SKILL"; then
+        F=$(hook_skill_session_file "$SKILL")
+        mkdir -p "$(dirname "$F")"
+        : > "$F"
+      fi
+    done
     ;;
   SessionEnd)
-    rm -f "$SOURCE_REPOSITORY_RECEIPT"
-    if [ "$HOOK_AGENT" = "codex" ]; then
-      rm -f "$CWD/.codex/tmp/session."*".$SESSION_ID"
-      rm -f "$CWD/.codex/tmp/required-reading."*".$SESSION_ID"
-    fi
+    rm -f "$(hook_cwd)/.codex/tmp/session."*".$(hook_session_id)"
+    rm -f "$(hook_cwd)/.codex/tmp/required-reading."*".$(hook_session_id)"
     ;;
 esac
 exit 0

@@ -794,20 +794,6 @@ fi
 
 echo "== 5.5 session marker と発火スコープ（codex） =="
 H=.codex/hooks/shell
-printf '# 設定配布元リポジトリ\n\nsource-only context\n' > SOURCE_REPOSITORY.md
-SOURCE_UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SOURCE1",cwd:$cwd,prompt:"変更して"}')
-SOURCE_FIRST=$(echo "$SOURCE_UP" | bash $H/session.sh)
-if echo "$SOURCE_FIRST" | grep -Fq 'source-only context' && [ -f .codex/tmp/source-repository.SOURCE1 ]; then
-  ok "session: Codexへ配布元説明を初回注入"
-else
-  ng "session: Codexへ配布元説明を注入できない"
-fi
-[ -z "$(echo "$SOURCE_UP" | bash $H/session.sh)" ] && ok "session: Codexの同一sessionへ再注入しない" || ng "session: Codexの配布元説明が重複"
-SOURCE_END=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SOURCE1",cwd:$cwd}')
-echo "$SOURCE_END" | bash $H/session.sh
-[ ! -f .codex/tmp/source-repository.SOURCE1 ] && ok "session: Codexの配布元receiptを終了時に掃除" || ng "session: Codexの配布元receipt掃除漏れ"
-rm -f SOURCE_REPOSITORY.md
-[ -z "$(echo "$SOURCE_UP" | bash $H/session.sh)" ] && ok "session: Codex配布先では配布元説明を注入しない" || ng "session: Codex配布先で配布元説明が誤発火"
 UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP" | bash $H/session.sh
 [ -f .codex/tmp/session.tdd.SESS1 ] && ok "session: \$tdd 起動で marker 記録" || ng "session: marker 記録失敗"
@@ -892,7 +878,6 @@ for JSON_CONFIG in "$SJ" "$SL" "$CM"; do
   jq -e . "$JSON_CONFIG" >/dev/null 2>&1 || append_group_failure "$JSON_CONFIG"
 done
 report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
-jq -e '.hooks.UserPromptSubmit[0].hooks[0].command | contains("session.sh")' "$SJ" >/dev/null 2>&1 && jq -e '.hooks.SessionEnd[0].hooks[0].command | contains("session.sh")' "$SJ" >/dev/null 2>&1 && ok "Claudeは配布元contextの注入・掃除hookを配線" || ng "Claudeの配布元context hook配線が不足"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 jq -e '.permissions.ask | index("Bash(bash .claude/skills/deepseek/delegate.sh smoke)")' "$SL" >/dev/null 2>&1 && ok "Claude: 課金smokeだけをask" || ng "Claude: DeepSeek smokeのask漏れ"
