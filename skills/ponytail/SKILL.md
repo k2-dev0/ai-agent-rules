@@ -51,23 +51,7 @@ bug修正を含むドラフトでは、報告された症状とroot causeを分�
 
 ## 調査の委任
 
-既存実装、実行方式、標準機能、native機能、導入済み依存の調査は DeepSeek へ委任する。汎用の Agent / subagent tool ではなく、次の固定実行器を最優先で使う。
-
-```bash
-bash [skills_root]/deepseek/delegate.sh survey \
-  --hard-timeout-minutes <総待機分> \
-  --idle-timeout-seconds <無通信秒> \
-  --poll-seconds <確認間隔秒> \
-  <task-id> <調査指示>
-```
-
-各実行前に、横断する設計書数、探索範囲、難易度から総待機時間、無通信timeout、確認間隔を決め、3値とその理由を明示する。固定値を無条件に使い回さない。再試行でも新しいtask-idと、その試行に選んだ3値を改めて明示する。
-
-固定実行器が返る前に、同じ調査を Agent / subagent へ並行委任してはならない。接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗として数える。最初の失敗後は新しいtask-idで固定実行器を1回だけ再試行する。2回続けて失敗した場合は、上位モデルが調査を引き継ぐ。上位モデル相当の Agent / subagent を利用できるなら読み取り専用で優先し、利用できなければ[agent_name]自身が調査する。
-
-`OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed` など、認証情報の欠落または拒否を出力で明示的に確認した場合は再試行せず、直ちに同じ上位モデルの代替経路へ切り替える。単なる非zero status、`cannot read OpenRouter key usage`、403、接続失敗、timeoutから認証失敗を推測してはならない。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず `blocked` とする。
-
-DeepSeekと代替subagentは、既存実装の探索と根拠収集だけを担当する。設計判断、横断比較、採否判断、ドラフト修正は必ずオーケストレーターである上位モデルが行う。
+既存実装、実行方式、標準・native機能、導入済み依存の調査はDeepSeekの`survey`へ委任する。実行前に`../deepseek/DELEGATION.md`を全文読み、CLI、時間選択、再試行、上位モデルへの引き継ぎに従う。DeepSeekと代替subagentは探索と根拠収集だけを担当し、設計判断、横断比較、採否、ドラフト修正は[agent_name]が行う。
 
 1. 個別設計書より先にドラフト一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索させる
 2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探させる

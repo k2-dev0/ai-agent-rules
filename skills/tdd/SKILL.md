@@ -60,19 +60,7 @@ hooks:
 
 ### 4. DeepSeekへ初回実装を委任する
 
-共通のDeepSeek委任実行器を使い、設計書と変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。テスト結果の要約は[agent_name]が指示へ含める。
-
-```bash
-bash [skills_root]/deepseek/delegate.sh implement \
-  --hard-timeout-minutes <総待機分> \
-  --idle-timeout-seconds <無通信秒> \
-  --poll-seconds <確認間隔秒> \
-  <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
-```
-
-委任前に、変更範囲、実装量、難易度から総待機時間、無通信timeout、確認間隔を決め、3値と理由を明示する。DeepSeekは隔離worktreeで初回実装の候補パッチを作る。シェル、Git、外部通信、テスト・設計・設定の編集は許可しない。
-
-[agent_name]は候補反映前にstub、雛形、部分実装を作らない。接続失敗、timeout、最終応答欠落などで候補を取得できない場合は、新しいtask-idと明示的に選び直したtimeout / pollで1回だけ再委任する。2回続けて応答に失敗した場合は上位モデルが初回実装を引き継ぎ、上位モデル相当のAgent / subagentを利用できるなら許可パス限定で優先し、使えなければ[agent_name]自身が実装する。API key欠落、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ上位モデルの代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落は応答失敗に数えず停止する。
+実行前に`../deepseek/DELEGATION.md`を全文読み、`implement` modeへ設計書、テスト結果の要約、変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。DeepSeekにはシェル、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]はDeepSeekの最初の応答前にstub、雛形、部分実装を作らず、共通契約の条件を満たした場合だけ初回実装を引き継ぐ。
 
 ### 5. 相談を処理する
 
@@ -103,9 +91,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 次の場合は正常な自動区間を停止する。
 
-- OpenRouterの対象期間使用量が38 USD以上、またはAPI keyの上限が40 USD超
-- ZDR対応エンドポイントが利用できない
-- OpenCode、API key、依存コマンドがない
+- 共通委任契約が停止対象とする予算、ZDR、依存commandの問題がある
 - DeepSeekが許可外パスを変更した
 - ユーザーの未コミット変更と対象パスが衝突する
 - 2回の応答失敗後も上位モデルの実装経路を利用できない

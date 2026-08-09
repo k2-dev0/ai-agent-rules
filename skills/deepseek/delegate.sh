@@ -15,6 +15,15 @@ readonly TIMEOUT_TERM_GRACE_SECONDS="10"
 readonly SMOKE_HARD_TIMEOUT_MINUTES="1"
 readonly SMOKE_IDLE_TIMEOUT_SECONDS="30"
 readonly SMOKE_POLL_SECONDS="5"
+readonly MIN_HARD_TIMEOUT_MINUTES="2"
+readonly MAX_HARD_TIMEOUT_MINUTES="60"
+readonly MIN_IDLE_TIMEOUT_SECONDS="30"
+readonly MAX_IDLE_TIMEOUT_SECONDS="900"
+readonly MIN_POLL_SECONDS="2"
+readonly MAX_POLL_SECONDS="60"
+readonly MIN_POLLS_PER_IDLE_WINDOW="3"
+readonly MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"
+readonly MIN_TIMEOUT_REASON_CHARACTERS="24"
 readonly SMOKE_PROMPT="hello"
 readonly SMOKE_ERROR_LINE_LIMIT="20"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
@@ -30,6 +39,7 @@ HARD_TIMEOUT_SECONDS=""
 IDLE_TIMEOUT_SECONDS=""
 TIMEOUT_POLL_SECONDS=""
 TIMEOUT_POLICY_SOURCE=""
+TIMEOUT_REASON=""
 OPENCODE_PID=""
 TIMEOUT_MONITOR_PID=""
 TASK_RUNTIME=""
@@ -62,13 +72,24 @@ extract_report() {
   ' "$1"
 }
 
-validate_positive_integer() {
+validate_bounded_integer() {
   local option_name="$1"
   local option_value="$2"
+  local minimum_value="$3"
+  local maximum_value="$4"
 
   case "$option_value" in
-    ''|*[!0-9]*|0) fail "$option_name must be a positive integer" ;;
+    ''|*[!0-9]*|0|0*) fail "$option_name must be a positive integer without leading zeros" ;;
   esac
+  [ "${#option_value}" -le "${#maximum_value}" ] || fail "$option_name must be between $minimum_value and $maximum_value"
+  [ "$option_value" -ge "$minimum_value" ] && [ "$option_value" -le "$maximum_value" ] || fail "$option_name must be between $minimum_value and $maximum_value"
+}
+
+validate_timeout_reason() {
+  [ "${#TIMEOUT_REASON}" -ge "$MIN_TIMEOUT_REASON_CHARACTERS" ] || fail "--timeout-reason must contain at least $MIN_TIMEOUT_REASON_CHARACTERS characters"
+  case "$TIMEOUT_REASON" in *"scope="*) ;; *) fail "--timeout-reason must include scope=" ;; esac
+  case "$TIMEOUT_REASON" in *"difficulty="*) ;; *) fail "--timeout-reason must include difficulty=" ;; esac
+  case "$TIMEOUT_REASON" in *"basis="*) ;; *) fail "--timeout-reason must include basis=" ;; esac
 }
 
 configure_timeouts() {
@@ -78,15 +99,17 @@ configure_timeouts() {
     IDLE_TIMEOUT_SECONDS="$SMOKE_IDLE_TIMEOUT_SECONDS"
     TIMEOUT_POLL_SECONDS="$SMOKE_POLL_SECONDS"
     TIMEOUT_POLICY_SOURCE="fixed-smoke"
+    TIMEOUT_REASON="scope=smoke,difficulty=fixed,basis=fixed-connectivity-check"
     return
   fi
 
-  validate_positive_integer "--hard-timeout-minutes" "$HARD_TIMEOUT_MINUTES"
-  validate_positive_integer "--idle-timeout-seconds" "$IDLE_TIMEOUT_SECONDS"
-  validate_positive_integer "--poll-seconds" "$TIMEOUT_POLL_SECONDS"
+  validate_bounded_integer "--hard-timeout-minutes" "$HARD_TIMEOUT_MINUTES" "$MIN_HARD_TIMEOUT_MINUTES" "$MAX_HARD_TIMEOUT_MINUTES"
+  validate_bounded_integer "--idle-timeout-seconds" "$IDLE_TIMEOUT_SECONDS" "$MIN_IDLE_TIMEOUT_SECONDS" "$MAX_IDLE_TIMEOUT_SECONDS"
+  validate_bounded_integer "--poll-seconds" "$TIMEOUT_POLL_SECONDS" "$MIN_POLL_SECONDS" "$MAX_POLL_SECONDS"
+  validate_timeout_reason
   HARD_TIMEOUT_SECONDS="$((HARD_TIMEOUT_MINUTES * TIMEOUT_MINUTE_SECONDS))"
-  [ "$IDLE_TIMEOUT_SECONDS" -lt "$HARD_TIMEOUT_SECONDS" ] || fail "idle timeout must be shorter than hard timeout"
-  [ "$TIMEOUT_POLL_SECONDS" -le "$IDLE_TIMEOUT_SECONDS" ] || fail "poll interval must not exceed idle timeout"
+  [ "$IDLE_TIMEOUT_SECONDS" -ge "$((TIMEOUT_POLL_SECONDS * MIN_POLLS_PER_IDLE_WINDOW))" ] || fail "idle timeout must contain at least $MIN_POLLS_PER_IDLE_WINDOW poll intervals"
+  [ "$HARD_TIMEOUT_SECONDS" -ge "$((IDLE_TIMEOUT_SECONDS * MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT))" ] || fail "hard timeout must contain at least $MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT idle windows"
   TIMEOUT_POLICY_SOURCE="explicit"
 }
 
@@ -163,7 +186,8 @@ write_task_state() {
     --argjson idle_timeout_seconds "$IDLE_TIMEOUT_SECONDS" \
     --argjson hard_timeout_seconds "$HARD_TIMEOUT_SECONDS" \
     --argjson poll_seconds "$TIMEOUT_POLL_SECONDS" \
-    '{mode:$mode,task_id:$task_id,lifecycle_status:$lifecycle_status,exit_status:(if $exit_status == "" then null else ($exit_status | tonumber) end),runner_pid:$runner_pid,opencode_pid:(if $opencode_pid == "" then null else ($opencode_pid | tonumber) end),started_at:$started_at,updated_at:$updated_at,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,timeout_policy_source:$timeout_policy_source,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds}' \
+    --arg timeout_reason "$TIMEOUT_REASON" \
+    '{mode:$mode,task_id:$task_id,lifecycle_status:$lifecycle_status,exit_status:(if $exit_status == "" then null else ($exit_status | tonumber) end),runner_pid:$runner_pid,opencode_pid:(if $opencode_pid == "" then null else ($opencode_pid | tonumber) end),started_at:$started_at,updated_at:$updated_at,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds}' \
     > "$state_temp" || return 1
   mv "$state_temp" "$TASK_STATE"
 }
@@ -204,14 +228,16 @@ fi
 
 case "$MODE" in
   research|survey|implement|errand|nesting)
-    [ "$#" -ge 6 ] || fail "$MODE mode requires explicit --hard-timeout-minutes, --idle-timeout-seconds, and --poll-seconds"
+    [ "$#" -ge 8 ] || fail "$MODE mode requires explicit --hard-timeout-minutes, --idle-timeout-seconds, --poll-seconds, and --timeout-reason"
     [ "$1" = "--hard-timeout-minutes" ] || fail "$MODE mode requires --hard-timeout-minutes first"
     HARD_TIMEOUT_MINUTES="$2"
     [ "$3" = "--idle-timeout-seconds" ] || fail "$MODE mode requires --idle-timeout-seconds second"
     IDLE_TIMEOUT_SECONDS="$4"
     [ "$5" = "--poll-seconds" ] || fail "$MODE mode requires --poll-seconds third"
     TIMEOUT_POLL_SECONDS="$6"
-    shift 6
+    [ "$7" = "--timeout-reason" ] || fail "$MODE mode requires --timeout-reason fourth"
+    TIMEOUT_REASON="$8"
+    shift 8
     configure_timeouts
     ;;
   smoke) configure_timeouts ;;
@@ -626,12 +652,13 @@ jq -n \
   --argjson poll_seconds "$TIMEOUT_POLL_SECONDS" \
   --argjson termination_grace_seconds "$TIMEOUT_TERM_GRACE_SECONDS" \
   --arg timeout_policy_source "$TIMEOUT_POLICY_SOURCE" \
+  --arg timeout_reason "$TIMEOUT_REASON" \
   --arg source_head "$SOURCE_HEAD" \
   --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,source_snapshot:"HEAD",source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"

@@ -21,19 +21,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 実行
 
-1. 現在の HEAD に対して、固定実行器で DeepSeek へ検出だけを委任する。task-id は `nesting-<HEAD先頭12桁>` とし、対象パスを明示する。
-
-   対象ファイル数、サイズ、制御フローの複雑さから、総待機時間、無通信timeout、確認間隔を選び、3値と理由を実行前に明示する。
-
-   ```bash
-   bash [skills_root]/deepseek/delegate.sh nesting \
-     --hard-timeout-minutes <総待機分> \
-     --idle-timeout-seconds <無通信秒> \
-     --poll-seconds <確認間隔秒> \
-     nesting-<HEAD先頭12桁> <本体コードの相対パス>...
-   ```
-
-   `result: ...` で返る `.[agent_name]/tmp/deepseek/<task-id>/opencode.jsonl` と `result.json` を読む。これは設計調査や実装ではなく機械的検出なので、下位モデルの検出が失敗・中断・対象外変更を起こした場合、上位モデルは自力検出へ切り替えず品質ゲートを失敗にする。
+1. `../deepseek/DELEGATION.md`を全文読み、現在のHEADへ`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、対象パスを明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
 2. DeepSeek が返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
    - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause

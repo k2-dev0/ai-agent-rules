@@ -33,34 +33,10 @@ disable-model-invocation: true
 ## 実行手順
 
 1. ユーザーの依頼だけから、変更後の公開挙動、完了条件、候補となる変更パスを短く固定する。依頼に含まれる識別子、パス、番号、固有名詞を完全な文字列のまま保持し、省略、翻訳、一般化してはならない。上の停止条件に当たるなら停止する。
-2. 既存の実装挙動を調査する必要がある場合は、DeepSeekのsurvey modeを同期実行し、上位モデルによる同範囲の重複調査を最初から行わない。
-
-   ~~~bash
-   bash [skills_root]/deepseek/delegate.sh survey \
-     --hard-timeout-minutes <総待機分> \
-     --idle-timeout-seconds <無通信秒> \
-     --poll-seconds <確認間隔秒> \
-     <task-id> <調査指示>
-   ~~~
-
-   調査指示の先頭に保持した完全な識別子を列挙し、完全一致、構成要素の一致、最寄りの同型実装の順に探索させる。同型実装は最も近い1件だけを選び、本体コードの正確なパス、置換要素、既存の検証コマンドが揃った時点で終了させる。設定、DB、schema、migration、テストの網羅監査、リポジトリ全体の反証探索、未調査範囲の列挙を依頼してはならない。これらは選んだ同型実装が直接参照する場合だけ報告させる。
-
-   survey commandが返る前に`show`を呼ばず、同じ調査を別task-idで並行起動しない。会話中断後に状態を確認する場合だけ`show`を一度使い、`running`または`orphaned-running`なら再試行しない。接続失敗、timeout、最終応答欠落では新しいtask-idで1回だけ再試行する。2回続けて失敗したら上位モデル相当のAgent / subagentを読み取り専用で優先し、使えなければ上位モデル自身が調査する。明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。
-
-   実行器が標準出力へ返すreportから、最寄りの同型実装と不足情報を受け取る。通常はreportを採用して同じ範囲を重複調査しない。surveyの隔離worktreeはmetadataの`source_snapshot: HEAD`だけを調査し、metadataの`source_worktree_status`に列挙されたメイン作業ツリーのdirty差分を反映しない。reportが不足とした依存先とdirty pathが関係する場合は、上位モデルがその差分を読み取り専用で確認する。dirty pathを許可対象へ追加したり変更したりしてはならない。DeepSeekと代替subagentは探索と根拠収集だけを担当し、errand適用可否と実装指示の確定は上位モデルが行う。
+2. DeepSeekを呼ぶ前に`../deepseek/DELEGATION.md`を全文読む。既存挙動の確認が必要なら`survey`を同期実行し、完全な識別子、構成要素、最寄りの同型実装の順に探索させる。最も近い1件の正確なパス、置換要素、検証commandが揃ったら終了し、網羅監査は依頼しない。reportが示す依存先とdirty pathが関係する場合だけ上位モデルがその差分を読み、dirty pathは変更しない。errand適用可否と実装指示は上位モデルが決める。
 3. 依頼とsurvey結果だけから、変更内容、守る既存パターン、完了条件を含む短い実装指示を作る。対象はcleanな追跡済み本体コードと`schema.prisma`、または既存の親ディレクトリ内でまだ存在せず、同型実装から配置・名前・内容を一意に決められる新規本体ファイルだけにする。テスト、Markdown、設定、migration、lockfile、環境変数、Git管理ファイルを許可対象にしてはならない。
-4. 固定実行器へ実装を委任する。
-
-   ~~~bash
-   bash [skills_root]/deepseek/delegate.sh errand \
-     --hard-timeout-minutes <総待機分> \
-     --idle-timeout-seconds <無通信秒> \
-     --poll-seconds <確認間隔秒> \
-     <task-id> <短い実装指示> -- <許可する本体コードまたはschema.prisma>
-   ~~~
-
-   surveyとerrandの各実行前に、調査範囲または実装範囲と難易度から3つの時間値を選び、値と理由を明示する。DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。task-idはlowercase kebab-caseとし、同じtask-idを再利用しない。応答失敗時は新しいtask-idと選び直した3値で1回だけ再委任する。2回続けて失敗した場合、または明示的な認証失敗があった場合は、上位モデル相当のAgent / subagentを許可パス限定で優先し、使えなければ上位モデル自身が実装する。予算超過、ZDR非対応、依存command欠落は応答失敗に数えず停止する。
-5. command完了後に`bash [skills_root]/deepseek/delegate.sh show <task-id>`でresult metadata、report、candidate.patchを取得し、候補パッチを確認する。`status != 0`または`timed_out: true`ならcandidate.patchは診断専用として拒否し、応答失敗として上の再試行規則を適用する。候補が正常に返った後は、許可パス外の変更、曖昧さの握り潰し、ハードコード、既存契約との不一致を上位モデルがレビューし、必要な修正を直接行う。
+4. 共通契約に従って`errand` modeへ短い実装指示と`--`以降の許可パスを渡す。DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。
+5. `result.json`、report、candidate.patchを確認する。候補返却後は、許可外変更、曖昧さの握り潰し、ハードコード、既存契約との不一致を上位モデルが判断して直接修正する。
 6. 採用したDeepSeek候補を反映して初回実装とする。その後は上位モデルが、対象の既存テスト、Prisma format / validate / generate、型検査、lint、回帰確認から関係するものだけを実行し、失敗やレビュー指摘を本体コードへ直接修正する。migration commandを実行してはならない。`polish`や`unwind`など別のworkflow skillを自動追加しない。必要なテストシナリオが増えた場合は変更を進めず停止する。
 
 ユーザーが停止後に設定やmigration fileなどerrand禁止対象の変更を明示した場合は、`errand`を終了して通常実装へ移ることを一文で宣言する。明示された範囲だけを通常実装として扱い、errandを続行したことにして禁止対象を委任してはならない。

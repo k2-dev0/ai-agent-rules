@@ -109,7 +109,7 @@ grep -q 'SOFT_BUDGET_USD="38"' "$DS" && grep -q 'HARD_BUDGET_USD="40"' "$DS" && 
 grep -q 'MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"' "$DS" && ok "DeepSeekモデル: V4 Flash latestを追従" || ng "DeepSeekモデルがlatest追従ではない"
 grep -q 'MODEL_VARIANT="high"' "$DS" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$DS" && grep -q '"reasoningEffort":$model_variant' "$DS" && grep -q -- '--variant "$MODEL_VARIANT"' "$DS" && ok "DeepSeek effort: highを明示" || ng "DeepSeek effortがhigh固定ではない"
 grep -q 'SURVEY_SCOPE_COUNT="4"' "$DS" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$DS" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$DS" && grep -q '"steps":$survey_max_steps' "$DS" && grep -q -- '--agent delegate' "$DS" && ok "DeepSeek survey: 4段階ごとのagent step上限を固定" || ng "DeepSeek surveyのstep上限が不正"
-grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$DS" && grep -q 'requires explicit --hard-timeout-minutes' "$DS" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$DS" && grep -q '^monitor_opencode()' "$DS" && grep -q '^terminate_process_group()' "$DS" && grep -q 'FINAL_STATUS=124' "$DS" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$DS" && grep -q -- '--argjson poll_seconds "$TIMEOUT_POLL_SECONDS"' "$DS" && ok "DeepSeek timeout: 呼び出し単位の明示値と固定smokeを記録" || ng "DeepSeek timeout設定または記録処理が不正"
+grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$DS" && grep -q 'requires explicit --hard-timeout-minutes' "$DS" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$DS" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$DS" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$DS" && grep -q '^validate_timeout_reason()' "$DS" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$DS" && grep -q '^monitor_opencode()' "$DS" && grep -q '^terminate_process_group()' "$DS" && grep -q 'FINAL_STATUS=124' "$DS" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$DS" && ok "DeepSeek timeout: 明示値・理由・安全比率・固定smokeを検証して記録" || ng "DeepSeek timeout設定または理由の記録処理が不正"
 grep -q '^write_task_state()' "$DS" && grep -q '^stop_running_children()' "$DS" && grep -q 'task is already active or has unfinished state' "$DS" && grep -q 'effective_status' "$DS" && grep -q 'source_snapshot:"HEAD"' "$DS" && ok "DeepSeek lifecycle: task状態・重複拒否・source snapshotを記録" || ng "DeepSeek lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$DS" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$DS" && ok "DeepSeek config: readonly定数をjq引数で受け渡す" || ng "DeepSeek config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$DS" && grep -q '"data_collection":"deny"' "$DS" && ok "DeepSeek routing: ZDRとdata collection拒否" || ng "DeepSeek routingのprivacy強制漏れ"
@@ -133,6 +133,8 @@ MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
 PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
 COWLICK_SKILL="$REPO/skills/cowlick/SKILL.md"
 PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
+DEEPSEEK_CONTRACT="$REPO/skills/deepseek/DELEGATION.md"
+COWLICK_FORMAT="$REPO/skills/cowlick/DESIGN_FORMAT.md"
 for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
@@ -156,17 +158,17 @@ if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit
 else
   ok "ponytailは調査toolだけを事前許可"
 fi
-grep -Fq 'deepseek/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'deepseek/delegate.sh survey' "$PONYTAIL_SKILL" && ok "調査をDeepSeek固定実行器へ委任" || ng "DeepSeek固定実行器の記述漏れ"
-grep -Fq '固定実行器を最優先' "$PREFLIGHT_SKILL" && grep -Fq '固定実行器を最優先' "$PONYTAIL_SKILL" && grep -Fq '認証情報の欠落または拒否を出力で明示的に確認した場合は再試行せず' "$PREFLIGHT_SKILL" && grep -Fq '認証情報の欠落または拒否を出力で明示的に確認した場合は再試行せず' "$PONYTAIL_SKILL" && ok "明示的な認証失敗では上位モデルへ即時fallback" || ng "認証失敗時のfallback境界が不足"
-grep -Fq '2回続けて失敗した場合は、上位モデルが調査を引き継ぐ' "$PREFLIGHT_SKILL" && grep -Fq '2回続けて失敗した場合は、上位モデルが調査を引き継ぐ' "$PONYTAIL_SKILL" && grep -Fq '3値とその理由を明示' "$PREFLIGHT_SKILL" && grep -Fq '3値とその理由を明示' "$PONYTAIL_SKILL" && ok "DeepSeek調査は2回失敗後に上位へ引き継ぎ時間方針を明示" || ng "DeepSeek調査のfallbackまたは時間方針が不足"
+grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$PREFLIGHT_SKILL" && grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$PONYTAIL_SKILL" && grep -Fq 'DeepSeekの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'DeepSeekの`survey`へ委任' "$PONYTAIL_SKILL" && ok "設計調査を共通契約経由でDeepSeekへ委任" || ng "DeepSeek共通契約の参照漏れ"
+grep -Fq '明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ' "$DEEPSEEK_CONTRACT" && grep -Fq '合計2回失敗したら上位モデルが引き継ぐ' "$DEEPSEEK_CONTRACT" && grep -Fq -- '--timeout-reason' "$DEEPSEEK_CONTRACT" && ok "DeepSeek共通契約がfallbackと時間理由を一元管理" || ng "DeepSeek共通契約のfallbackまたは時間理由が不足"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
+grep -Fq '`DESIGN_FORMAT.md`を全文読' "$COWLICK_SKILL" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時参照へ分離" || ng "cowlickの設計書形式参照が不正"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '**横断 topology**' "$PONYTAIL_SKILL" && grep -Fq '**最小代替案**' "$PONYTAIL_SKILL" && grep -Fq '**原因・緩和対**' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '次をすべて満たすまで.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
 grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_SKILL" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_SKILL" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_SKILL" && grep -Fq '測定可能な条件' "$PONYTAIL_SKILL" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_SKILL" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_SKILL" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -q '最小代替案との比較' "$MEETING_SKILL" && grep -q '原因・緩和対の削除確認' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
 grep -Fq 'caller・consumer・共有責務・副作用までの実経路' "$MEETING_SKILL" && grep -Fq '症状とroot causeの分離' "$MEETING_SKILL" && grep -Fq '測定可能な再検討条件' "$MEETING_SKILL" && grep -Fq '最小の実行可能なテスト' "$MEETING_SKILL" && ok "meetingがponytailの追加ready gateを検証" || ng "meetingのponytail追加成果物検証が不足"
-grep -Fq '`ponytail`の最後の設計レビューを下位モデルへ渡してはならない' "$MEETING_SKILL" && grep -Fq '設計判断、横断比較、採否判断、ドラフト修正は必ずオーケストレーター' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
-grep -q 'draft_ready.*停止' "$COWLICK_SKILL" && grep -q 'Step 4: apply mode' "$COWLICK_SKILL" && grep -q '`draft_conflict`' "$COWLICK_SKILL" && ok "cowlickのdraft/applyと既存draft境界" || ng "cowlickのmode・draft境界が不正"
+grep -Fq '`ponytail`の最後の設計レビューを下位モデルへ渡してはならない' "$MEETING_SKILL" && grep -Fq '設計判断、横断比較、採否、ドラフト修正は[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
+grep -q 'draft_ready.*停止' "$COWLICK_SKILL" && grep -q '^## apply' "$COWLICK_SKILL" && grep -q '`draft_conflict`' "$COWLICK_SKILL" && ok "cowlickのdraft/applyと既存draft境界" || ng "cowlickのmode・draft境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
   [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
@@ -176,11 +178,25 @@ for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
 done
 report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
+echo "== skill context圧縮と参照整合性 =="
+SKILL_LINE_CEILING=1300
+SKILL_LINE_COUNT=$(wc -l "$REPO"/skills/*/SKILL.md | awk 'END {print $1}')
+[ "$SKILL_LINE_COUNT" -le "$SKILL_LINE_CEILING" ] && ok "SKILL.md総量を${SKILL_LINE_CEILING}行以下へ制限: $SKILL_LINE_COUNT" || ng "SKILL.md総量が肥大化: $SKILL_LINE_COUNT"
+CONTEXT_API="$REPO/skills/context-api/API.md"
+GROUP_FAILURES=
+for CONTEXT_SKILL in "$REPO/skills/context-save/SKILL.md" "$REPO/skills/context-search/SKILL.md" "$REPO/skills/context-update/SKILL.md"; do
+  grep -Fq '`../context-api/API.md`を全文読' "$CONTEXT_SKILL" || append_group_failure "context API参照なし: $CONTEXT_SKILL"
+done
+[ -f "$DEEPSEEK_CONTRACT" ] || append_group_failure "DeepSeek共通契約なし"
+[ -f "$COWLICK_FORMAT" ] || append_group_failure "cowlick設計形式なし"
+[ -f "$CONTEXT_API" ] || append_group_failure "context API契約なし"
+report_group "progressive disclosure参照が全件存在" "$GROUP_FAILURES"
+
 echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、パス、番号、固有名詞を完全な文字列のまま保持' "$ERRAND_SKILL" && grep -Fq '最も近い1件だけを選び' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
-grep -Fq 'deepseek/delegate.sh errand' "$ERRAND_SKILL" && grep -Fq -- '--hard-timeout-minutes <総待機分>' "$ERRAND_SKILL" && grep -Fq '<task-id> <短い実装指示> -- <許可する本体コードまたはschema.prisma>' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はDeepSeekの実装境界を固定" || ng "errand の実装境界が不正"
+grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、パス、番号、固有名詞を完全な文字列のまま保持' "$ERRAND_SKILL" && grep -Fq '最も近い1件の正確なパス' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
+grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ短い実装指示と`--`以降の許可パス' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand は共通契約とDeepSeek実装境界を固定" || ng "errand の実装境界が不正"
 grep -Fq '同型実装から配置・名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$DS" && grep -q 'new allowed path must not be ignored' "$DS" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装が前提である' "$ERRAND_SKILL" && grep -Fq '許可パスが複数あることだけを理由に停止してはならない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration commandを実行してはならない' "$ERRAND_SKILL" && grep -Fq '別のworkflow skillを自動追加しない' "$ERRAND_SKILL" && ok "errand は複数pathとPrisma schemaを許可しmigrationを禁止" || ng "errand の複数path・Prisma境界が不正"
 grep -Fq '初回実装はDeepSeekの`candidate.patch`から始める' "$ERRAND_SKILL" && grep -Fq '2回続けて応答に失敗した場合' "$ERRAND_SKILL" && grep -Fq '修正をDeepSeekへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && grep -Fq '初回実装候補を作成してください' "$DS" && ok "errand はDeepSeek初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
@@ -208,10 +224,10 @@ MARK_PROMPT_DONE_SCRIPT="$REPO/skills/conductor/mark-prompt-done.sh"
 [ -f "$UNWIND_SKILL" ] && python3 /Users/kaikojima/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq 'deepseek/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind は機械的検出をDeepSeek、修正判断を上位へ固定" || ng "unwind の検出・判断責務分離が無い"
+grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$UNWIND_SKILL" && grep -Fq '`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'DeepSeek が検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind は機械的検出をDeepSeek、修正判断を上位へ固定" || ng "unwind の検出・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$POLISH_SKILL" && ok "polish の品質receipt記録器が有効" || ng "polish の品質receipt記録器が無い"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality-gate.sh record <機能名>' "$CONDUCTOR_SKILL" && ok "conductor の完了更新は品質receiptを検証" || ng "conductor の品質receipt検証が無い"
-grep -Fq '旧`run-agent`の責務は現在の`conductor`が引き継いでいる' "$CONDUCTOR_SKILL" && grep -Fq '2回続けて応答に失敗した場合' "$CONDUCTOR_SKILL" && grep -Fq 'DeepSeekへ再委任しない' "$CONDUCTOR_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "旧run-agentはDeepSeek優先・上位fallback・上位修正へ固定" || ng "旧run-agentの初回実装・修正責務が不正"
+grep -Fq '旧`run-agent`の責務は現在の`conductor`が引き継いでいる' "$CONDUCTOR_SKILL" && grep -Fq '`../deepseek/DELEGATION.md`を全文読' "$CONDUCTOR_SKILL" && grep -Fq '候補返却後のレビュー、採否、修正をDeepSeekへ戻さない' "$CONDUCTOR_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "旧run-agentはDeepSeek優先・上位fallback・上位修正へ固定" || ng "旧run-agentの初回実装・修正責務が不正"
 if grep -Fq 'Skill(polish)' "$CONDUCTOR_SKILL" && \
    grep -q 'index更新と最終報告の前に `polish` を自動で実行する' "$CONDUCTOR_SKILL" && \
    ! grep -q 'unwind' "$CONDUCTOR_SKILL" && \
@@ -305,7 +321,8 @@ echo "== 2.75 DeepSeek research の Bash 3.2 回帰（外部通信なし） =="
 DELEGATE_REPO="$S/delegate-research"
 DELEGATE_BIN="$DELEGATE_REPO/bin"
 DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/deepseek/delegate.sh"
-DELEGATE_TIMEOUT_ARGS=(--hard-timeout-minutes 4 --idle-timeout-seconds 120 --poll-seconds 5)
+DELEGATE_TIMEOUT_REASON='scope=fixture,difficulty=low,basis=offline-runner-regression'
+DELEGATE_TIMEOUT_ARGS=(--hard-timeout-minutes 4 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason "$DELEGATE_TIMEOUT_REASON")
 mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
 cp .claude/skills/deepseek/delegate.sh "$DELEGATE_SCRIPT"
 printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
@@ -324,11 +341,22 @@ else
   ng "delegate-deepseek: smokeの状態更新no-opが不正"; cat delegate-smoke.out
 fi
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research missing-timeout-policy spec.md > delegate-missing-timeout.out 2>&1; then
-  ng "delegate-deepseek: timeoutと確認間隔の省略を許可"
+  ng "delegate-deepseek: timeoutと理由の省略を許可"
 elif grep -Fq 'requires explicit --hard-timeout-minutes' delegate-missing-timeout.out; then
-  ok "delegate-deepseek: 非smoke modeはtimeoutと確認間隔を必須化"
+  ok "delegate-deepseek: 非smoke modeはtimeoutと理由を必須化"
 else
   ng "delegate-deepseek: timeout省略時の拒否理由が不正"; cat delegate-missing-timeout.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research --hard-timeout-minutes 1 --idle-timeout-seconds 30 --poll-seconds 5 --timeout-reason "$DELEGATE_TIMEOUT_REASON" invalid-hard spec.md > delegate-invalid-hard.out 2>&1; then
+  ng "delegate-deepseek: hard timeoutの安全範囲外を許可"
+elif PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research --hard-timeout-minutes 4 --idle-timeout-seconds 120 --poll-seconds 60 --timeout-reason "$DELEGATE_TIMEOUT_REASON" invalid-poll-ratio spec.md > delegate-invalid-poll.out 2>&1; then
+  ng "delegate-deepseek: idle内のpoll不足を許可"
+elif PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research --hard-timeout-minutes 2 --idle-timeout-seconds 90 --poll-seconds 5 --timeout-reason "$DELEGATE_TIMEOUT_REASON" invalid-hard-ratio spec.md > delegate-invalid-ratio.out 2>&1; then
+  ng "delegate-deepseek: hard内のidle区間不足を許可"
+elif PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research --hard-timeout-minutes 4 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason short invalid-reason spec.md > delegate-invalid-reason.out 2>&1; then
+  ng "delegate-deepseek: 監査不能なtimeout理由を許可"
+else
+  ok "delegate-deepseek: timeout範囲・比率・理由schemaを強制"
 fi
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research "${DELEGATE_TIMEOUT_ARGS[@]}" empty-research spec.md > delegate-empty.out 2>&1; then
   ok "delegate-deepseek: Bash 3.2で変更ゼロのresearchを完了"
@@ -352,7 +380,7 @@ else
 fi
 SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/deepseek/empty-survey"
 SURVEY_RESULT="$SURVEY_ROOT/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/.empty-survey.task" ]; then
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/deepseek/.empty-survey.task" ]; then
   ok "delegate-deepseek: surveyは調査指示をspecへ永続化しない"
 else
   ng "delegate-deepseek: surveyの一時指示またはresult.jsonが不正"
@@ -734,7 +762,7 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh record user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason scope=spec,difficulty=medium,basis=contract-review task-id .codex/prompt/branch-task-prompt.md 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: delegate-deepseek の固定経路を allow" || ng "rules: delegate-deepseek 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/deepseek/delegate.sh smoke 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: 課金smokeだけを prompt" || ng "rules: DeepSeek smoke判定失敗 out=[$OUT]"

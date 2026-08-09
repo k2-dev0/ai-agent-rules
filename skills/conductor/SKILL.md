@@ -47,16 +47,9 @@ DeepSeekへ渡す許可パスに未コミット変更があれば、ユーザー
 
 ### 3. tddをフル実行する
 
-コード変更を伴う場合は`tdd`へ従う。
+コード変更では`tdd`を省略せず、シナリオ一括承認、test作成とRed、DeepSeek候補、上位モデルのレビュー・修正とGreenまで完了する。追跡対象は1ファイルずつ即コミットし、無視されたテスト資産は強制stageせず作業ツリーで検証する。
 
-1. [agent_name]がテストシナリオを提案し、ユーザーの一括承認を得る
-2. [agent_name]がテストを書き、追跡対象ならファイル単位で即コミットする。無視されたテスト資産は強制stageせず、作業ツリー上で検証して継続する
-3. [agent_name]がRedを確認する
-4. 固定実行器でDeepSeekへ本体コードと`schema.prisma`の初回実装を委任する
-5. [agent_name]が候補パッチを検証し、追跡対象を1ファイルずつ反映・即コミットする。無視されたファイルは作業ツリー上で検証する
-6. 候補反映後に[agent_name]がGreen、レビュー、必要な本体コード修正を直接完了する
-
-[agent_name]はDeepSeekの最初の応答前に、本体コードや`schema.prisma`のstub、雛形、部分実装を作ってはならない。接続失敗、timeout、最終応答欠落などで候補を取得できなければ、新しいtask-idと明示的に選び直したtimeout / pollで1回だけ再委任する。2回続けて応答に失敗した場合、または明示的な認証失敗があった場合だけ、上位モデルが初回実装を引き継ぐ。上位モデル相当のAgent / subagentを利用できるなら許可パス限定で優先し、使えなければ[agent_name]自身が実装する。候補が返った後のレビュー、採否、修正は[agent_name]の責務であり、DeepSeekへ再委任しない。
+DeepSeekを呼ぶ前に`../deepseek/DELEGATION.md`を全文読む。[agent_name]は最初の応答前に本体コードや`schema.prisma`のstub、雛形、部分実装を作らず、候補返却後のレビュー、採否、修正をDeepSeekへ戻さない。
 
 調査・ドキュメントだけの設計書は[agent_name]が通常どおり実行し、DeepSeek実装を呼ばない。
 
@@ -105,30 +98,3 @@ Codexでは`.codex/rules/default.rules`、Claude Codeでは`settings.json`がこ
 - indexの残件数
 
 設計書1枚を1ブランチ・1PRの単位とし、続きはユーザーが改めて`/conductor`を呼ぶ。
-
-## DeepSeek固定実行器
-
-```bash
-# 読み取り専用調査
-bash [skills_root]/deepseek/delegate.sh research \
-  --hard-timeout-minutes <総待機分> \
-  --idle-timeout-seconds <無通信秒> \
-  --poll-seconds <確認間隔秒> \
-  <task-id> <設計書>
-
-# 隔離worktreeで本体コードとschema.prismaの初回実装候補を作成
-bash [skills_root]/deepseek/delegate.sh implement \
-  --hard-timeout-minutes <総待機分> \
-  --idle-timeout-seconds <無通信秒> \
-  --poll-seconds <確認間隔秒> \
-  <task-id> <設計書> <許可する本体コードまたはschema.prisma>...
-
-# OpenCode・OpenRouter・対象モデルへの疎通だけ確認
-bash [skills_root]/deepseek/delegate.sh smoke
-```
-
-各委任の直前に、調査範囲、実装範囲、難易度から3つの時間値を選び、値と理由を明示する。再試行でも改めて選択を明示し、固定値を惰性で使い回さない。
-
-実行器はOpenRouterの対象期間使用量38 USDで停止し、API keyに40 USD以下の月次またはリセットなしhard limitがあることを検証する。ZDRと`data_collection: deny`をリクエストでも強制し、OpenCodeの外部プラグインを無効化する。
-
-`smoke`は従量課金のリクエストなので、通常の回帰テストでは実行せずデフォルトでスキップする。疎通確認が必要な場合も、実行するかスキップするかをユーザーへ一度だけ質問し、明示的に実行を選んだ後だけ呼ぶ。固定promptの`hello`だけを送り、下位モデルのtool権限をすべて拒否し、応答は一時領域から外へ残さない。CodexのrulesとClaude Codeのpermissionも、このmodeだけを毎回確認へ倒す。

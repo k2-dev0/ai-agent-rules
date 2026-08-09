@@ -129,10 +129,13 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
   --hard-timeout-minutes <総待機分> \
   --idle-timeout-seconds <無通信秒> \
   --poll-seconds <確認間隔秒> \
+  --timeout-reason "scope=<対象範囲>,difficulty=<low|medium|high>,basis=<選択根拠>" \
   <mode固有の引数>
 ```
 
-実行器は無通信timeoutと総実行時間timeoutを併用し、指定値と確認間隔をtask stateと`result.json`へ記録する。timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
+時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約し、DeepSeekを呼ぶ各スキルが実行前に全文を読む。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加える。
+
+timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
 task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
 
