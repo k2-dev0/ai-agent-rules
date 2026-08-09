@@ -162,7 +162,9 @@ grep -Fq '接続失敗、DNS・TLS error' "$PREFLIGHT_SKILL" && grep -Fq '接続
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '**横断 topology**' "$PONYTAIL_SKILL" && grep -Fq '**最小代替案**' "$PONYTAIL_SKILL" && grep -Fq '**原因・緩和対**' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '次をすべて満たすまで.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
+grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_SKILL" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_SKILL" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_SKILL" && grep -Fq '測定可能な条件' "$PONYTAIL_SKILL" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_SKILL" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_SKILL" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -q '最小代替案との比較' "$MEETING_SKILL" && grep -q '原因・緩和対の削除確認' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
+grep -Fq 'caller・consumer・共有責務・副作用までの実経路' "$MEETING_SKILL" && grep -Fq '症状とroot causeの分離' "$MEETING_SKILL" && grep -Fq '測定可能な再検討条件' "$MEETING_SKILL" && grep -Fq '最小の実行可能なテスト' "$MEETING_SKILL" && ok "meetingがponytailの追加ready gateを検証" || ng "meetingのponytail追加成果物検証が不足"
 grep -q 'draft_ready.*停止' "$COWLICK_SKILL" && grep -q 'Step 4: apply mode' "$COWLICK_SKILL" && grep -q '`draft_conflict`' "$COWLICK_SKILL" && ok "cowlickのdraft/applyと既存draft境界" || ng "cowlickのmode・draft境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
@@ -486,7 +488,7 @@ else
   ng "delegate-deepseek: 無出力timeoutの終了・記録が不正"; cat delegate-timeout-idle.out
 fi
 printf '0\n' > "$TIMEOUT_CLOCK"
-printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"partial"}\\n'\''\nexec /bin/sleep 30\n' "$TIMEOUT_PID_FILE" > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nprintf '\''%%s\\n'\'' "$$" > "%s"\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"partial"}\\n'\''\nwhile :; do\n  /bin/sleep 0.05\n  printf '\''{"type":"step_start","timestamp":3}\\n'\''\ndone\n' "$TIMEOUT_PID_FILE" > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey timeout-hard-survey "$SURVEY_EXACT_IDENTIFIER の同型実装を調査する" > delegate-timeout-hard.out 2>&1
 HARD_TIMEOUT_STATUS=$?
