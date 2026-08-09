@@ -9,6 +9,12 @@ set -u
 
 AGENT="${1:?usage: init-agent.sh <claude|codex>}"
 
+# 配布元には削除対象の原本がある。配置先だけで実行する契約を機械的に守る。
+[ ! -e SOURCE_REPOSITORY.md ] || {
+  echo "ERROR: bootstrap cannot run in the source repository" >&2
+  exit 1
+}
+
 # 種別ごとに: 設定ディレクトリ / 置換値 / skills 配置先 / [NOTE] 確定条件 を決める。
 # codex の skills 配置先が .agents/skills なのは codex 側の探索仕様
 # （リポジトリ内は .agents/skills しか読まない）による
@@ -35,7 +41,15 @@ esac
 FAILED=0
 
 # 1) placeholder 置換: bootstrap スキル自身（placeholder の説明文と処理本体）は除外する
+PLACEHOLDER_FILES=$(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS)
+SEARCH_STATUS=$?
+if [ "$SEARCH_STATUS" -gt 1 ]; then
+  echo "ERROR: cannot inspect placeholders" >&2
+  exit 1
+fi
 while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in */bootstrap/*) continue ;; esac
   if sed -i.bak "s|\[skills_root\]|$SKILLS_ROOT|g; s/\[agent_name\]/$NAME/g" "$f"; then
     rm -f "$f.bak"
     echo "replaced placeholders -> $NAME : $f"
@@ -44,10 +58,18 @@ while IFS= read -r f; do
     echo "ERROR: replace failed (sed): $f" >&2
     FAILED=1
   fi
-done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/bootstrap/')
+done <<< "$PLACEHOLDER_FILES"
 
 # 2) [NOTE] 解決: [NOTE] 行から直後の bare if 行までを確定条件へ畳む（bootstrap 自身は除外）
+NOTE_FILES=$(grep -rl '\[NOTE\]: bootstrap' $TARGETS)
+SEARCH_STATUS=$?
+if [ "$SEARCH_STATUS" -gt 1 ]; then
+  echo "ERROR: cannot inspect bootstrap notes" >&2
+  exit 1
+fi
 while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in */bootstrap/*) continue ;; esac
   WAS_EXECUTABLE=false
   [ -x "$f" ] && WAS_EXECUTABLE=true
   if ! awk -v cond="$COND" '
@@ -82,12 +104,49 @@ while IFS= read -r f; do
     echo "ERROR: cannot overwrite (mv failed): $f" >&2
     FAILED=1
   fi
-done < <(grep -rl '\[NOTE\]: bootstrap' $TARGETS | grep -v '/bootstrap/')
+done <<< "$NOTE_FILES"
 
 # 3) 置換後検証: 承認済みの固定スクリプト内で完結させ、別の shell 承認を発生させない
+UNRESOLVED_FILES=$(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS)
+SEARCH_STATUS=$?
+if [ "$SEARCH_STATUS" -gt 1 ]; then
+  echo "ERROR: cannot verify placeholders" >&2
+  FAILED=1
+fi
 while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in */bootstrap/*) continue ;; esac
   echo "ERROR: unresolved placeholder: $f" >&2
   FAILED=1
-done < <(grep -rlE '\[agent_name\]|\[skills_root\]' $TARGETS | grep -v '/bootstrap/')
+done <<< "$UNRESOLVED_FILES"
 
-exit "$FAILED"
+[ "$FAILED" -eq 0 ] || exit "$FAILED"
+
+# 成功後は次回セッションで不要なskillを探索させない。削除先はagent種別から決まる
+# 2パスだけに限定し、配置異常時は削除せず失敗する。
+BOOTSTRAP_DIR="$SKILLS_ROOT/bootstrap"
+case "$BOOTSTRAP_DIR" in
+  .claude/skills/bootstrap) BOOTSTRAP_TRASH=".claude/.bootstrap-removing.$$" ;;
+  .agents/skills/bootstrap) BOOTSTRAP_TRASH=".agents/.bootstrap-removing.$$" ;;
+  *) echo "ERROR: unsafe bootstrap directory: $BOOTSTRAP_DIR" >&2; exit 1 ;;
+esac
+[ -d "$BOOTSTRAP_DIR" ] || {
+  echo "ERROR: bootstrap directory not found: $BOOTSTRAP_DIR" >&2
+  exit 1
+}
+[ ! -e "$BOOTSTRAP_TRASH" ] || {
+  echo "ERROR: bootstrap quarantine already exists: $BOOTSTRAP_TRASH" >&2
+  exit 1
+}
+if ! mv "$BOOTSTRAP_DIR" "$BOOTSTRAP_TRASH"; then
+  echo "ERROR: cannot remove bootstrap skill from discovery: $BOOTSTRAP_DIR" >&2
+  exit 1
+fi
+[ ! -e "$BOOTSTRAP_DIR" ] || {
+  echo "ERROR: bootstrap skill remains: $BOOTSTRAP_DIR" >&2
+  exit 1
+}
+if ! rm -rf -- "$BOOTSTRAP_TRASH"; then
+  echo "WARNING: bootstrap quarantine could not be cleaned: $BOOTSTRAP_TRASH" >&2
+fi
+echo "removed bootstrap skill: $BOOTSTRAP_DIR"

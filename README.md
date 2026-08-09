@@ -19,7 +19,7 @@ ai-agent-rules/
 ├── rules/              # AGENTS.md から分離したパターン別の規約
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
-│   ├── bootstrap/          # placeholder（[agent_name] / [skills_root]）と [NOTE] の解決
+│   ├── bootstrap/          # placeholder と [NOTE] を解決し、成功後に配置先から自己削除
 │   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
@@ -65,7 +65,7 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 配置後は次の順序で有効化する。
 
 1. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
-2. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
+2. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
 3. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
 4. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。
 
@@ -205,19 +205,21 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 挙動を決めている実体（想定外の動きをしたらここを見る）:
 
-- 許可 / 確認 / 禁止の名簿（コマンドと書き込みパスのリスク分類） → `claude/settings.local.json`
-- Codex のpermission profile / network / MCP承認 / hook有効化 → `codex/config.toml`
-- Codex のコマンド単位の許可 / 確認 / 禁止 → `codex/rules/default.rules`
-- Codex のhookイベントと実行timeout → `codex/hooks.json`
-- 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 → `hooks/shell/readonly-search.sh`
-- テストの有無でコード書き込みを判定（`tdd` 稼働中のみ deny） → `hooks/shell/require-test.sh`（claude: tdd の frontmatter hooks で起動 / codex: 常時配線 + `session.sh` の marker で tdd 稼働中のみ執行）
-- 復元できない全上書きだけ確認に通す（Claude Code） → `hooks/shell/overwrite.sh`
-- `.claude` / `.codex` / `.agents` の自己改変防止 → `hooks/shell/protect-config.sh`
-- 機密ファイル（`.env` / `.env.*`）の書き込み・削除の封じ込め → `hooks/shell/protect-env.sh`（sandbox / permission profile との二重層）
-- lockfile の編集ツール・Bash直接変更を拒否 → `hooks/shell/protect-locks.sh`（permission設定との二重層）
-- Prisma migrationとDB直接反映commandを拒否 → `hooks/shell/deny-migration.sh`
-- レビュー対象ファイルの未承認変更を拒否し、Codexではpath単位の1回限り承認を消費 → `hooks/shell/protect-review.sh`
-- コミット契約（stage厳密1件・対象ファイル名一致・日本語・AI署名禁止）の執行 → `hooks/shell/commit-gate.sh`
+| 責務 | 実体 |
+|---|---|
+| Claude Codeの許可 / 確認 / 禁止 | `claude/settings.local.json` |
+| Codexのpermission profile / network / MCP承認 / hook有効化 | `codex/config.toml` |
+| Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
+| Codexのhook eventと実行timeout | `codex/hooks.json` |
+| 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
+| testの有無によるコード書き込み判定 | `hooks/shell/require-test.sh`。Claude Codeはtddのfrontmatter、Codexは常時配線と`session.sh`のmarkerでtdd中だけ執行 |
+| 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
+| `.claude` / `.codex` / `.agents`の自己改変防止 | `hooks/shell/protect-config.sh` |
+| `.env` / `.env.*`の書き込み・削除防止 | `hooks/shell/protect-env.sh`。sandbox / permission profileとの二重層 |
+| lockfileの編集tool・Bash直接変更の拒否 | `hooks/shell/protect-locks.sh`。permission設定との二重層 |
+| Prisma migrationとDB直接反映commandの拒否 | `hooks/shell/deny-migration.sh` |
+| review対象fileの未承認変更拒否と、Codexのpath単位1回限り承認 | `hooks/shell/protect-review.sh` |
+| commit契約（stage厳密1件・対象file名一致・日本語・AI署名禁止） | `hooks/shell/commit-gate.sh` |
 
 ## テスト
 

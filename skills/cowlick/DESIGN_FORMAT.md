@@ -39,7 +39,15 @@
 - <この1枚だけで判定できる条件>
 ````
 
-Changesの疑似コードでは、言語の予約語・演算子・構文、組み込み型と組み込みobject、標準library・外部library・frameworkのAPI、instance method・property名を英語で書く。既存symbol、schema field、file pathも参照を壊さないよう実名を保持する。新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語で書く。分岐とloopは文章へ畳まず構文で示し、error処理とDB書き込み、メール、外部APIなどの副作用を一つずつ書き、行数削減のために省略しない。実装時の新しい英語識別子は固定しない。
+Changesの疑似コードは次の言語規則に従う。複数行へ該当する場合は表の上を優先する。
+
+| 書き方 | 対象 | 例 |
+|---|---|---|
+| 実名を保持 | 既存symbol、schema field、file pathも参照を壊さないよう実名を保持する | 既存コードにある関数名、`customer_no`、`src/service.ts` |
+| 英語 | 予約語・演算子・構文、組み込み型と組み込みobject。標準library・外部library・frameworkのAPI、instance method・property名を英語で書く | `export`、`async`、`function`、`if`、`for`、`const`、`Promise`、`.map()`、`.length` |
+| 日本語 | 新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語で書く | `利用内容を確定する関数`、`使用件数`、`保有件数超過` |
+
+分岐とloopは文章へ畳まず構文で示す。error処理とDB書き込み、メール、外部APIなどの副作用は一つずつ書き、行数削減のために省略しない。実装時の新しい英語識別子は固定しない。
 
 Changesは、実装者が挙動を再設計せずコードへ変換できる密度で書く。対象に応じて次を疑似コードへ含める。
 
@@ -74,6 +82,7 @@ export async function 利用内容を確定する関数(使用方法, 入力件�
 
   const 使用候補一覧 = 候補一覧.slice(0, 使用件数)
   for (const 使用候補 of 使用候補一覧) {
+    // 送信失敗は握りつぶさず、呼び出し元へそのままthrowする
     await 既存の送信関数(使用候補)
   }
 

@@ -19,8 +19,10 @@ hooks:
 
 先頭引数を次のどちらかに限定する。引数なし、追加引数、存在しないpathでは変更せず`invalid_scope`を返す。
 
-- `from-prompt`: `@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけを選ぶ。他の設計書を読まず、完了後だけ同じ行を`[x]`へ変更する
-- `<承認済み設計書path>`: 指定された既存Markdown 1枚だけを使う。indexを探索・変更しない
+| mode | 対象 | 完了時のindex更新 |
+|---|---|---|
+| `from-prompt` | `@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけ。他の設計書は読まない | 同じ行だけを`[x]`へ変更する |
+| `<承認済み設計書path>` | 指定された既存Markdown 1枚だけ | indexを探索・変更しない |
 
 `from-prompt`でindexがない、空、参照先がない場合は変更せず停止する。未完了項目がなければ全設計書が完了済みと報告する。どちらのmodeも設計書1枚を1 branch・1 PRの単位として扱い、次の設計書へ自動で進まない。
 

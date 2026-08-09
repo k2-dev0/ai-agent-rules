@@ -4,10 +4,14 @@ DeepSeekを呼ぶスキルは、この文書を全文読んでから実行する
 
 ## 責務
 
-- 設計に必要な探索・根拠収集と、ネストなどの機械的検出はDeepSeekへ委任する
-- 設計・要件・候補の採否と、実装を修正する／しないの判断は上位モデルが行う
-- 承認済み範囲の初回実装はDeepSeekへ委任し、候補返却後のレビュー・修正・テスト・Gitは上位モデルが行う。レビューや修正をDeepSeekへ戻さない
-- 固定実行器より先、または実行中に、同じ仕事をAgent / subagentへ並行委任しない
+| 工程 | 担当 |
+|---|---|
+| 設計に必要な探索・根拠収集、ネストなどの機械的検出 | DeepSeek |
+| 設計・要件・候補の採否、実装を修正する／しないの判断 | 上位モデル |
+| 承認済み範囲の初回実装 | DeepSeek |
+| 候補返却後のレビュー・修正・テスト・Git | 上位モデル。レビューや修正をDeepSeekへ戻さない |
+
+固定実行器より先、または実行中に、同じ仕事をAgent / subagentへ並行委任しない。
 
 ## CLIと時間選択
 
@@ -34,10 +38,13 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
 
 ## 失敗処理
 
-- 接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とする。新しいtask-idで1回だけ再試行し、合計2回失敗したら上位モデルが引き継ぐ
-- `OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed`など、明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ。403や単なる非zero statusから認証失敗を推測しない
-- 上位モデル相当のAgent / subagentを利用できる場合、調査は読み取り専用、実装は許可パス限定で優先する。利用できなければオーケストレーター自身が担当する
-- 予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する
-- 機械的検出modeは上位モデルへ検出を切り替えず、品質ゲートを失敗にする
+| 状況 | 処理 |
+|---|---|
+| 接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、最終応答欠落 | 1回の応答失敗とする。新しいtask-idで1回だけ再試行し、合計2回失敗したら上位モデルが引き継ぐ |
+| `OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed`など | 明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ。403や単なる非zero statusから認証失敗を推測しない |
+| 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 応答失敗に数えず停止する |
+| 機械的検出modeの失敗 | 上位モデルへ検出を切り替えず、品質ゲートを失敗にする |
+
+上位モデル相当のAgent / subagentを利用できる場合、調査は読み取り専用、実装は許可パス限定で優先する。利用できなければオーケストレーター自身が担当する。
 
 成功時も自己申告ではなく`result.json`、`report.md`、必要なら`candidate.patch`を確認する。`status != 0`または`timed_out: true`の候補patchは診断専用とする。

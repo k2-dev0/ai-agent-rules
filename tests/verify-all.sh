@@ -172,7 +172,7 @@ else
   ok "共通契約は必要時までSKILL.mdへ載せない"
 fi
 grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'clientで検証する範囲とserverの最新dataで再検証する範囲' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && grep -Fq '重要な分岐・式・順序・契約を保持' "$COWLICK_SKILL" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
-grep -Fq '予約語・演算子・構文、組み込み型と組み込みobject' "$COWLICK_FORMAT" && grep -Fq '標準library・外部library・frameworkのAPI、instance method・property名を英語' "$COWLICK_FORMAT" && grep -Fq '新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語' "$COWLICK_FORMAT" && grep -Fq '既存symbol、schema field、file pathも参照を壊さないよう実名' "$COWLICK_FORMAT" && grep -Fq '予約語・構文を英語、新しく設計する識別子と処理内容を日本語' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
+grep -Fq '| 書き方 | 対象 | 例 |' "$COWLICK_FORMAT" && grep -Fq '予約語・演算子・構文、組み込み型と組み込みobject' "$COWLICK_FORMAT" && grep -Fq '標準library・外部library・frameworkのAPI、instance method・property名を英語' "$COWLICK_FORMAT" && grep -Fq '新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語' "$COWLICK_FORMAT" && grep -Fq '既存symbol、schema field、file pathも参照を壊さないよう実名' "$COWLICK_FORMAT" && grep -Fq '予約語・構文を英語、新しく設計する識別子と処理内容を日本語' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
 grep -Fq '次は書式と密度の例であり、この処理自体を要件として流用しない' "$COWLICK_FORMAT" && grep -Fq 'export async function 利用内容を確定する関数' "$COWLICK_FORMAT" && grep -Fq 'for (const 使用候補 of 使用候補一覧)' "$COWLICK_FORMAT" && grep -Fq 'return { 成功: true, 使用件数, 使用候補一覧 }' "$COWLICK_FORMAT" && ok "cowlick疑似コードの正例" || ng "cowlick疑似コードの正例が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '`ponytail_audit`' "$PONYTAIL_SKILL" && grep -Fq '`minimalAlternative`' "$PONYTAIL_SKILL" && grep -Fq '`counterexamples`' "$PONYTAIL_SKILL" && grep -Fq '`unresolved`' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '全fieldが埋まり.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
 grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_SKILL" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_SKILL" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_SKILL" && grep -Fq '測定可能な条件' "$PONYTAIL_SKILL" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_SKILL" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_SKILL" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
@@ -205,7 +205,7 @@ done
 [ -f "$COWLICK_FORMAT" ] || append_group_failure "cowlick設計形式なし"
 [ -f "$CONTEXT_API" ] || append_group_failure "context API契約なし"
 report_group "progressive disclosure参照が全件存在" "$GROUP_FAILURES"
-grep -Fq '別々に再利用できる結論は分ける' "$REPO/skills/context-save/SKILL.md" && grep -Fq '条件・原因・修正・検証は一つの`solution`' "$REPO/skills/context-save/SKILL.md" && grep -Fq 'tagsは検索に使う安定した名詞を1〜5個' "$REPO/skills/context-save/SKILL.md" && ok "context-saveは保存単位とfieldを固定" || ng "context-saveの保存単位またはfieldが曖昧"
+grep -Fq '別々に再利用できる結論は分ける' "$REPO/skills/context-save/SKILL.md" && grep -Fq '条件・原因・修正・検証は一つの`solution`' "$REPO/skills/context-save/SKILL.md" && grep -Fq '| `tags` | 検索に使う安定した名詞を1〜5個 |' "$REPO/skills/context-save/SKILL.md" && ok "context-saveは保存単位とfieldを固定" || ng "context-saveの保存単位またはfieldが曖昧"
 grep -Fq '次の順で最大3回検索' "$REPO/skills/context-search/SKILL.md" && grep -Fq '3件未満ならtypeを外し' "$REPO/skills/context-search/SKILL.md" && grep -Fq 'IDで重複を除く' "$REPO/skills/context-search/SKILL.md" && grep -Fq '上位5件を返す' "$REPO/skills/context-search/SKILL.md" && ok "context-searchは段階拡張と順位を固定" || ng "context-searchの検索順序または順位が曖昧"
 
 echo "== 軽微な実装委任と全体調査委任 =="
@@ -247,7 +247,7 @@ grep -Fq 'DeepSeekの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && 
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && ok "tdd はpolishの差分scopeだけを変更前に記録" || ng "tdd のpolish差分scope記録器が不正"
 [ -x "$CHANGED_RULES_SCRIPT" ] && bash -n "$CHANGED_RULES_SCRIPT" && grep -Fq '固定した開始commitから対象pathへ追加・置換された現在行だけを、既存ESLintのAST診断で検査' "$POLISH_SKILL" && grep -Fq '`no-magic-numbers`診断のうち変更行に一致するものだけ' "$POLISH_SKILL" && ok "polish は共通規約を変更行だけへ適用" || ng "polish の変更行規約checkerが不正"
 grep -Fq '"$QUALITY_GATE" verify "$NAME"' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'quality receiptを記録した後だけ' "$TDD_SKILL" && ok "tdd from-prompt の完了更新は品質receiptを検証" || ng "tdd from-prompt の品質receipt検証が無い"
-grep -Fq '`from-prompt`:' "$TDD_SKILL" && grep -Fq '`<承認済み設計書path>`:' "$TDD_SKILL" && grep -Fq '設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
+grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書path>` |' "$TDD_SKILL" && grep -Fq '設計書path modeでは完了receiptと`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
 grep -Fq 'DeepSeekの`survey`へ委任' "$TDD_SKILL" && grep -Fq '候補が返った後の採否は上位モデルのレビュー責務' "$TDD_SKILL" && grep -Fq 'DeepSeekの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'DeepSeek候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はDeepSeek初回実装・上位fallback・上位修正へ固定" || ng "tdd の初回実装・修正責務が不正"
 grep -Fq 'survey前に関連コードをGrep / Glob / git logで探索しない' "$TDD_SKILL" && grep -Fq '不足があれば調査項目を絞った新しいsurveyへ戻す' "$TDD_SKILL" && ! grep -Fq '設計書と関連コードを読み' "$TDD_SKILL" && ok "tdd はコード調査をDeepSeek surveyへ先行委任" || ng "tdd が上位モデルの先行探索を許可"
 grep -Fq 'テストシナリオ設計 | 可 | 禁止' "$TDD_SKILL" && grep -Fq 'テストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$TDD_SKILL" && grep -Fq '[agent_name]が正常系、境界値、異常系、副作用、回帰リスクとテスト構造を設計' "$TDD_SKILL" && ok "tddのテスト設計と実装を上位モデルへ固定" || ng "tddがテスト設計をDeepSeekへ委任可能"
@@ -269,7 +269,34 @@ git init -q
 git config user.email tester@example.com
 git config user.name tester
 git commit --allow-empty -qm "test: 品質ゲートfixtureを初期化"
+touch SOURCE_REPOSITORY.md
+if bash .claude/skills/bootstrap/init-agent.sh claude > init-source.log 2>&1; then
+  ng "bootstrap は配布元での実行を拒否"
+else
+  ok "bootstrap は配布元での実行を拒否"
+fi
+[ -d .claude/skills/bootstrap ] && ok "bootstrap は失敗時に残る" || ng "bootstrap が失敗時に消えた"
+rm SOURCE_REPOSITORY.md
+mkdir -p "$S/bootstrap-failing-bin"
+printf '%s\n' '#!/bin/bash' 'exit 2' > "$S/bootstrap-failing-bin/grep"
+chmod +x "$S/bootstrap-failing-bin/grep"
+if PATH="$S/bootstrap-failing-bin:$PATH" bash .claude/skills/bootstrap/init-agent.sh claude > init-search-failure.log 2>&1; then
+  ng "bootstrap は探索失敗を拒否"
+else
+  ok "bootstrap は探索失敗を拒否"
+fi
+[ -d .claude/skills/bootstrap ] && ok "bootstrap は探索失敗後も再試行可能" || ng "bootstrap が探索失敗後に消えた"
+printf '%s\n' '[NOTE]: bootstrap 対象' 'broken' > .claude/broken-bootstrap.sh
+if bash .claude/skills/bootstrap/init-agent.sh claude > init-failure.log 2>&1; then
+  ng "bootstrap は未解決NOTEを拒否"
+else
+  ok "bootstrap は未解決NOTEを拒否"
+fi
+[ -d .claude/skills/bootstrap ] && ok "bootstrap は処理失敗後も再試行可能" || ng "bootstrap が処理失敗後に消えた"
+rm .claude/broken-bootstrap.sh
 if bash .claude/skills/bootstrap/init-agent.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
+[ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
+[ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
 bash -n .claude/hooks/shell/require-test.sh 2>/dev/null && ok "解決後 require-test 構文" || ng "解決後 require-test 構文"
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
 if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
@@ -688,6 +715,8 @@ cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
 if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
+[ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
+[ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
 if [ "$(bash .codex/hooks/shell/commit-subject.sh --prefix foo.ts)" = "foo.ts: " ] && \
    bash .codex/hooks/shell/commit-subject.sh --validate 'feature: 日本語の説明' && \
    ! bash .codex/hooks/shell/commit-subject.sh --validate 'feature: english only'; then

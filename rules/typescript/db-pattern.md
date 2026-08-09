@@ -6,23 +6,24 @@
 
 ## 命名ルール
 
-1. モデル名は PascalCase の英語名で定義すること（例: `Contract`, `CustomerInvoice`）
-2. 既に作成済みのテーブル名と異なる場合は `@@map()` で明示すること
-3. アプリ管理テーブルのフィールド名は camelCase を使用し、`@map()` は付けないこと
-4. 外部DB同期テーブルのフィールド名は camelCase で定義し、元カラム名を `@map()` でマッピングすること
-  - 例: `shotNo String @map("shot_no")`, `customerNumber String @map("顧客No")`
-5. リレーション名は関連モデルの意味を表す camelCase の英語名にすること
-  - 同一モデルへの複数リレーションは `@relation(name: "...")` で意味を区別する
+| 対象 | 命名・mapping |
+|---|---|
+| model名 | PascalCaseの英語名。例: `Contract`、`CustomerInvoice` |
+| 既存table名とmodel名が異なる場合 | `@@map()`で明示 |
+| application管理tableのfield名 | camelCase。`@map()`は付けない |
+| 外部DB同期tableのfield名 | camelCaseで定義し、元column名を`@map()`でmapping。例: `shotNo String @map("shot_no")` |
+| relation名 | 関連modelの意味を表すcamelCaseの英語名。同一modelへの複数relationは`@relation(name: "...")`で区別 |
 
 ## 型定義
 
-1. `String` 型には必ず `@db.VarChar(n)` で最大長を明示すること
-  - 上限が大きい可変長テキストのみ `@db.Text` を使用する
-2. 日付のみは `@db.Date`、日時は `@db.DateTime(0)` または `@db.Timestamp(0)` を指定すること
-3. 金額は `Int`（整数）で管理し、税込・税抜・消費税を分けて保持すること
-  - Why: `Float` / `Decimal` は丸め誤差のリスクがあるため
-4. 構造化データの柔軟な格納には `Json @db.Json` を使用すること
-  - ただし、検索・フィルタ対象のフィールドは正規カラムとして定義する
+| data | 型・制約 |
+|---|---|
+| 通常の文字列 | `String @db.VarChar(n)`で最大長を明示 |
+| 上限が大きい可変長text | `String @db.Text` |
+| 日付 | `DateTime @db.Date` |
+| 日時 | `DateTime @db.DateTime(0)`または`DateTime @db.Timestamp(0)` |
+| 金額 | `Int`で税込・税抜・消費税を分けて保持。`Float` / `Decimal`は丸め誤差のriskがあるため使わない |
+| 構造化data | `Json @db.Json`。検索・filter対象は正規columnとして定義 |
 
 ## 主キー・一意制約
 

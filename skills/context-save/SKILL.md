@@ -21,6 +21,12 @@ disable-model-invocation: true
 | `issue` | 未解決で追跡が必要な問題 |
 | `caveat` | 誤用しやすい制約・例外・副作用 |
 
-`content`は条件と結論が分かる一文、`detail`は根拠・手順・検証、tagsは検索に使う安定した名詞を1〜5個、followUpsは未完了の具体的行動だけにする。git repository内なら現在のrepo・branchを付ける。
+| field | 内容 |
+|---|---|
+| `content` | 条件と結論が分かる一文 |
+| `detail` | 根拠、手順、検証 |
+| `tags` | 検索に使う安定した名詞を1〜5個 |
+| `followUps` | 未完了の具体的行動だけ |
+| `repo`、`branch` | git repository内なら現在値を付ける |
 
 送信前に件数と各Insightの`type`、`content`、tags、decisionのrationaleを提示し、一度だけ承認を得る。承認後に`../context-api/API.md`を全文読み、1件は単件、複数件はbulk endpointへ送る。serverへ到達できなければ成功扱いせず通知する。

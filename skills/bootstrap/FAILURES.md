@@ -8,6 +8,12 @@
 - `./`、絶対パス、`sh`、`cd ... &&`、pipe、separator、redirect を足さない。許可はコマンド文字列へ限定されている。
 - placeholder 残存で終了した場合は、報告されたファイルを確認する。別の検索コマンドで終了条件を作り直さない。
 
+| message | 対応 |
+|---|---|
+| `bootstrap cannot run in the source repository` | 配布元では実行せず、設定を配置したapplication repositoryで実行する |
+| `cannot inspect ...` | 配置済み設定treeの読み取り権限を直して再実行する |
+| `cannot remove bootstrap skill from discovery` | `bootstrap/`が残っていることを確認し、親directoryの権限を直して再実行する |
+
 ## Claude Code
 
 `Operation not permitted` なら、まずコマンド文字列を直す。正しい文字列でも失敗する場合だけ、古い配置で `settings.json` の `sandbox.excludedCommands` が欠けている可能性をユーザーへ報告し、sandbox 外の再実行と設定更新を依頼する。

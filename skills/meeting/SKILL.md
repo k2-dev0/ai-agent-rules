@@ -28,10 +28,12 @@ disable-model-invocation: true
 preflight → cowlick draft → ponytail → ユーザー承認 → cowlick apply
 ```
 
-- **preflight**: 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す
-- **cowlick draft**: 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する
-- **ponytail**: ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る
-- **cowlick apply**: 最終承認済みのドラフトだけを正式反映する
+| phase | 責務 |
+|---|---|
+| **preflight** | 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す |
+| **cowlick draft** | 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する |
+| **ponytail** | ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る |
+| **cowlick apply** | 最終承認済みのドラフトだけを正式反映する |
 
 DeepSeekと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、ドラフトの採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
 
@@ -50,12 +52,14 @@ DeepSeekと調査subagentはコードベースの探索と根拠収集だけを�
 
 ## 会話内の状態
 
-ファイルへ進行状態を書かず、現在の会話で次を管理する:
+ファイルへ進行状態を書かず、現在の会話で次を管理する。
 
-- 要件 revision: 目的、対象範囲、要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用
-- draft revision: cowlick が最後に作成・更新したドラフト
-- ponytail revision: ponytail が監査成果物とready gateで最小と確認した draft revision
-- 最終承認: ユーザーが承認した ponytail revision
+| 状態 | 内容 |
+|---|---|
+| 要件 revision | 目的、対象範囲、要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用 |
+| draft revision | cowlick が最後に作成・更新したドラフト |
+| ponytail revision | ponytail が監査成果物とready gateで最小と確認した draft revision |
+| 最終承認 | ユーザーが承認した ponytail revision |
 
 古い revision の調査結果、単純化結果、承認を新しい revision に流用しない。
 

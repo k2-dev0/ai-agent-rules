@@ -19,9 +19,11 @@ hooks:
 
 meetingから渡された先頭引数だけを使う。
 
-- `draft`: 同じ要件revisionの`preflight_ready`からドラフトを作る
-- `apply`: 同じdraft revisionの`ponytail_ready`とユーザー承認を確認して正式反映する
-- それ以外: 変更せず`invalid_mode`を返す
+| mode | 処理 |
+|---|---|
+| `draft` | 同じ要件revisionの`preflight_ready`からドラフトを作る |
+| `apply` | 同じdraft revisionの`ponytail_ready`とユーザー承認を確認して正式反映する |
+| それ以外 | 変更せず`invalid_mode`を返す |
 
 ## draft
 

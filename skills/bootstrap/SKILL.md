@@ -32,16 +32,18 @@ bash [skills_root]/bootstrap/init-agent.sh <agent>
 
 - `[skills_root]` は表の実パスへ、`<agent>` は引数へ置き換える。文字列、相対パス、単独実行を変えない。
 - sed / heredoc / 一時スクリプトで代用しない。
-- スクリプトは placeholder 置換、`[NOTE]: bootstrap 対象` の解決、置換漏れ検査を行う。`bootstrap/` 自身は検査対象外である。
+- スクリプトは placeholder 置換、`[NOTE]: bootstrap 対象` の解決、置換漏れ検査を行う。全検査の成功後、配置先の `bootstrap/` を自己削除する。
 - 未知のエージェントを追加する場合は `init-agent.sh` の `case` を先に実装する。
 - 失敗した場合だけ [FAILURES.md](FAILURES.md) を読み、原因別の復旧手順に従う。成功時は読まない。
 
 ### Step 3: 結果を報告する
 
-置換した `[agent_name]` / `[skills_root]` の値と、解決した `[NOTE]` 箇所をユーザーに報告する。
+置換した `[agent_name]` / `[skills_root]` の値、解決した `[NOTE]` 箇所、`bootstrap/` の削除をユーザーに報告する。
 
 ## 注意事項
 
 - 本リポジトリ（テンプレート元）のファイルは一切変更しない。スクリプトは配置済みツリー（`.claude` / `.codex` / `.agents` / `AGENTS.md`）のみを対象とする
 - placeholder の置換漏れ確認は `init-agent.sh` の終了条件に含まれる。処理後に別の `grep` を実行しない
-- `bootstrap/` 配下は説明・処理本体として placeholder を意図的に残す
+- `SOURCE_REPOSITORY.md` がある配布元では実行を拒否する
+- 初期化または自己削除の開始に失敗した場合は `bootstrap/` を残し、復旧後に再実行できるようにする
+- quarantine cleanupのwarningだけが出た場合、skill探索からの除外は完了済みとして残存pathを報告する

@@ -140,10 +140,12 @@ Summary / Changes / 対象ファイル / 参照ルール / 完了条件の必須
 
 `ponytail_audit`の全fieldが埋まり、`unresolved`が空で、`revision`が現在のdraftと一致し、ドラフトが`elements`と`changesContract`の判断を反映するまで`ponytail_ready`を返さない。残した要素は対応要件、外部consumer、単純な代替では満たせない根拠を持たなければならない。
 
-結果を次の status とともに meeting へ返す:
+結果を次の status とともに meeting へ返す。
 
-- `ponytail_ready`: ready gateをすべて満たし、現在のdraft revisionが確認済みの最小案と一致する
-- `consultation_required`: 挙動を変える候補があり、ユーザー判断が必要
-- `blocked`: ドラフトの不整合、要件由来の欠落、委任失敗、根拠不足により監査を完了できない
+| status | 意味 |
+|---|---|
+| `ponytail_ready` | ready gateをすべて満たし、現在のdraft revisionが確認済みの最小案と一致する |
+| `consultation_required` | 挙動を変える候補があり、ユーザー判断が必要 |
+| `blocked` | ドラフトの不整合、要件由来の欠落、委任失敗、根拠不足により監査を完了できない |
 
 ponytail は正式反映を行わない。meeting がユーザーの最終承認を得た後だけ、cowlick の `apply` mode へ進む。
