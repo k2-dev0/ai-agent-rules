@@ -115,7 +115,7 @@ $bootstrap codex
 
 `preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idでDeepSeekを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
 
-`errand`と`tdd`では、初回実装をDeepSeekへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
+`errand`と`tdd`では、初回実装をDeepSeekへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。設計書選択後から初回実装候補の受領までは、本体コード・schema・rules・既存テスト基盤・同型実装の通常調査もDeepSeekへ固定する。surveyはテスト執筆に必要なsymbol、型、fixture、DB、実行commandまでreportへ返し、不足は上位モデルの直接検索で埋めず限定surveyへ戻す。上位モデルの直接調査はDeepSeekのfailure fallback、または上位モデル・ユーザーが特定claimへ具体的な疑義を示した場合の最小範囲に限る。テストシナリオの設計と採否は引き続き上位モデルが行う。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
 
 固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
 

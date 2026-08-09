@@ -33,11 +33,32 @@ hooks:
 | テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 |
 | テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
 | 設計資産の変更 | cowlickの承認後だけ可 | 禁止 |
+| 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 可 |
 | 許可された本体コードと`schema.prisma`の初回実装 | DeepSeekの2回連続応答失敗または認証失敗後だけ可 | 可 |
 | DeepSeek候補反映後の本体コード修正 | 可 | 禁止 |
 | テスト実行・レビュー・Git | 可 | 禁止 |
 
 テスト資産には、test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。
+
+### 探索禁止区間
+
+Step 1で設計書を選んでからStep 5のDeepSeek初回実装候補を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
+
+- 対象設計書1枚と`from-prompt`で必要なindex 1枚
+- 今回変更するテスト資産そのもの
+- DeepSeekが返した`result.json`、`report.md`、`candidate.patch`、`opencode.jsonl`
+- [agent_name]自身がこの実行で作成したファイル
+
+この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。DeepSeekの`file:line`はreportの監査根拠であって、[agent_name]が全件を再読する許可ではない。import、型、列名、fixture形式、実行commandの情報が1点でも足りなければ、推測や直接確認をせず、未解決項目だけを新しい`survey`へ戻す。テストシナリオの設計と採否判断は[agent_name]の責務であり、この探索禁止に含めない。
+
+テスト実行のdiagnosticと、[agent_name]が変更するテスト資産の読み直しは探索に含めない。diagnosticだけでテストコードを一意に直せずリポジトリ側の事実確認が必要なら、同じく`survey`へ戻す。
+
+[agent_name]が直接調査へ切り替えてよいのは次だけとする。
+
+1. 共通契約の応答失敗・認証失敗によるfallback条件が成立した
+2. [agent_name]またはユーザーが、reportの特定claimへ具体的な疑義を示した
+
+疑義には、report内の矛盾、根拠行の欠落、設計書との不一致、test diagnosticとclaimの衝突を含む。単なる情報不足や「念のため」は疑義に含めず、限定surveyへ戻す。疑義を検証するときは、疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示し、その確認に必要な最小範囲だけを直接読む。通常のsurveyを上位モデルが全件再実施してはならない。
 
 `schema.prisma`自体はテスト対象外とし、対応するtest/specとRed/Greenを要求しない。変更対象が`schema.prisma`だけならシナリオ承認とStep 3・4を省略し、Step 5以降で実装する。Prisma CLIが導入済みなら既存scriptまたは`node_modules/.bin/prisma`からformat、validate、generateを実行して検証する。同じ設計に本体コードの公開挙動変更が含まれる場合、その挙動は通常どおりシナリオ、Red、Greenの対象とする。
 
@@ -69,22 +90,32 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 
 ### 2. 調査を委任してシナリオを承認する
 
-関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
+関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。reportだけで[agent_name]がシナリオ設計とテスト資産の作成を完了できるよう、次の調査パケットを返させる。
+
+- 重要な根拠の`file:line`と、判断に必要な最小限の抜粋
+- import元、export名、関数signature、型、enum・定数の実値
+- 最寄りの既存test・helper・fixture・seedの接続方法と、模倣に必要な構造
+- DB model・table・列型、日付と時刻の扱い、外部境界の観測方法
+- 実在する検証command、cwd、必要な環境・guard・初期化順
+- 読めなかったpath、未確認事項、推測を分けた残件一覧
+
+各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
 DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/deepseek/delegate.sh <mode>`で実行する。
 
-[agent_name]はsurvey前に関連コードをGrep / Glob / git logで探索しない。report受領後も直接読むのは重要な`file:line`の確認だけとし、不足があれば調査項目を絞った新しいsurveyへ戻す。共通契約の失敗条件を満たすまで自力の横断探索へ切り替えない。
+[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。`result.json`で正常終了を確認し、`report.md`の残件一覧が空で、承認シナリオとテスト資産の作成に必要な調査パケットが揃った場合だけ次へ進む。不足があれば調査項目を絞った新しいsurveyへ戻す。正常終了したが不完全なreportを、[agent_name]のRead / Grep / Glob / shell検索で補完してはならない。直接調査は探索禁止区間で定めたfallbackまたは具体的疑義の限定検証に限る。
 
 設計書とsurveyが集めた事実を根拠に、[agent_name]が正常系、境界値、異常系、副作用、回帰リスクとテスト構造を設計して提示する。既存テストを正解として模倣せず、承認されるまでファイルを変更しない。`schema.prisma`だけの変更ではsurvey結果から既存schema patternと検証commandを確定するが、シナリオ承認は要求しない。
 
 ### 3. [agent_name]がテストを書く
 
-承認済みシナリオだけをテストへ変換する。追跡対象のファイルは1ファイルずつ即コミットする。無視されたテスト資産は `git add -f` / `git add --force` を使わず、作業ツリーに残して検証と後続工程を継続する。テストの意味を変えるために既存assertionを弱めてはならない。
+承認済みシナリオと受領済みの調査パケットだけをテストへ変換する。変更対象のテスト資産と自分が書いた内容は読んでよいが、importやfixtureを確かめるために本体コード、既存基盤、同型testを検索・再読してはならない。足りない事実は限定surveyで補う。追跡対象のファイルは1ファイルずつ即コミットする。無視されたテスト資産は `git add -f` / `git add --force` を使わず、作業ツリーに残して検証と後続工程を継続する。テストの意味を変えるために既存assertionを弱めてはならない。
 
 ### 4. Redを確認する
 
 対象テストをプロジェクトのtest script経由で実行し、実装不足または期待値との差で失敗することを確認する。
 
 - syntax/import/typeの失敗は、シナリオを変えず[agent_name]が修正する
+- syntax/import/typeの修正に未調査のリポジトリ事実が必要なら、直接探索せず限定surveyへ戻す
 - 最初からGreenなら、テストが要求を検出できるか検証する
 - テスト自体またはシナリオの変更が必要なら再承認へ戻る
 
