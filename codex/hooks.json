@@ -34,11 +34,6 @@
           },
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/prototype.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git.sh\"",
             "timeout": 5
           },

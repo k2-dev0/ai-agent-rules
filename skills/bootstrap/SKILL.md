@@ -11,64 +11,32 @@ disable-model-invocation: true
 
 ## 実行フロー
 
-### 最初のツール呼び出し
+### Step 1: エージェント種別を決める
 
-`claude` / `codex` の引数がある場合、最初のツール呼び出しで Step 3 の対応するコマンドを実行する。実行前に Read / Grep / Glob、`pwd`、`git status`、placeholder 検索、設定確認を行ってはならない。
-
-Why: 初期化前の hook は `HOOK_AGENT` が placeholder のため、初期化コマンド以外のツール呼び出しを拒否する。必要な種別・パス・処理は本スキル内で既に確定しており、事前調査には情報上の価値がない。
-
-### Step 1: スキルを呼び出す
-
-スキルは引数付きで呼び出せる:
-
-```
-/bootstrap claude
-/bootstrap codex
-```
-
-- **引数あり**: 引数をエージェント種別として使用する（後述の対応表を参照）
-- **引数なし**: ユーザーにエージェント種別を確認する
-
-### Step 2: エージェント種別を特定する
-
-引数またはユーザーの回答から、以下の対応表で置換値と配置先を決定する:
+`/bootstrap claude` または `/bootstrap codex` の引数を使う。引数がなければユーザーへ確認し、未知の値なら置換値と配置先を確認する。
 
 | 引数 | 置換値（`[agent_name]`） | 設定ディレクトリ | skills 配置先（`[skills_root]`） |
 |------|--------------------------|------------------|----------------------------------|
 | `claude` | `claude` | `.claude` | `.claude/skills` |
 | `codex` | `codex` | `.codex` | `.agents/skills` |
 
-- codex の skills 配置先が `.agents/skills` なのは codex 側の探索仕様（リポジトリ内は `.agents/skills` しか読まない）による。hooks / rules / prompt は `.codex/` 配下に置く
-- 上記以外の引数が渡された場合は、ユーザーに置換値と配置先を確認する
+- Codex の skills は `.agents/skills`、hooks / rules / prompt は `.codex` に置く。
 
-### Step 3: 置換スクリプトを実行する
+### Step 2: 固定スクリプトを実行する
 
-`[agent_name]` / `[skills_root]` の置換と `[NOTE]: bootstrap 対象` の解決は、配置済みの決定的スクリプトに委ねる。Bash の sed / heredoc / インタプリタで手作業でファイルを書き換えてはならない。
+`claude` / `codex` が確定している場合、次のコマンドを**最初のツール呼び出し**としてプロジェクトルートから単独で実行する。事前の Read / Grep / Glob、`pwd`、`git status`、設定確認は禁止する。
 
 ```
 bash [skills_root]/bootstrap/init-agent.sh <agent>
 ```
 
-- `<agent>` は Step 2 で特定した種別（`claude` / `codex`）。呼び出し時は `[skills_root]` を上表の実際の配置先（例: `.claude/skills`）に読み替える
-- スクリプトが自動で行うこと:
-  - 設定ディレクトリ・`AGENTS.md`・skills ツリー（codex は `.agents/`）配下で `[agent_name]` / `[skills_root]` を含む全ファイルを検出して置換する（`.[agent_name]/...` の dot は placeholder の外なので保持される。`bootstrap/` 配下は説明・処理本体のため除外）
-  - `require-test.sh` の `[NOTE]` ブロックを、種別ごとの確定条件へ畳む（claude/codex の条件はスクリプトの `case` を唯一の真実とする）
-  - 置換後に同じ対象を再検査し、placeholder が残っていれば対象ファイルを報告して失敗終了する
-- 上記3種以外を扱う場合は、スクリプトの `case` に分岐を追加してから実行する
-- Claude Code では本スクリプトは `settings.json` の `sandbox.excludedCommands` に登録済みのため、そのまま実行すれば最初から sandbox 外で走る（permission は `settings.local.json` の事前 allow が担保するため承認プロンプトは出ない）
-  - Why: 対象ツリー（`.claude/` 等）は sandbox の denyWrite で保護されており、sandbox 内での実行は必ず「Operation not permitted」で失敗する。失敗→sandbox 外で再実行という二度手間を踏まないための除外設定である
-  - `excludedCommands` と事前 allow はコマンド文字列の照合で決まるため、必ずプロジェクトルートから**上記の 1 行をそのまま単独で**実行すること。以下はいずれも照合を外し、sandbox 内実行の失敗と承認プロンプトを復活させる
-    - 絶対パスにする / `./` の有無を変える / `bash` を `sh` に変える — パスは正規化されず、文字列が違えば別のコマンドとして扱われる
-    - `cd ... &&` を前置する、`&&` `;` `|` で他のコマンドと繋ぐ — 複合コマンドは区切り文字で分割され、**各サブコマンドが個別に**照合される。繋いだ相手が許可されていなければプロンプトが出る
-    - `> log 2>&1` などのリダイレクトを付ける — リダイレクト先の解決可否によってはプロンプトに倒れる
-  - 「Operation not permitted」で失敗した場合は、まず呼び出しが上記の相対パス形式かを確認し、違っていれば形式を直して再実行する。相対パス形式でも失敗する場合のみ `excludedCommands` 未設定の古い配置と判断し、sandbox を無効化して再実行のうえ `settings.json` の更新をユーザーに案内すること
-- Codex では `distributed` permission profile が `.codex` / `.agents` を read-only にするため、配布済みの `.codex/rules/default.rules` が上記の正確なコマンドだけを sandbox 外で allow する
-  - project が trusted でないと project-local rules 自体が読み込まれない。未信頼または rules 未配置で失敗した場合は迂回せず、project の信頼と配布ファイルを確認する
-  - 引数やスクリプトパスを変えると限定 allow に一致しない。`bash .agents/skills/bootstrap/init-agent.sh codex` の形を維持する
+- `[skills_root]` は表の実パスへ、`<agent>` は引数へ置き換える。文字列、相対パス、単独実行を変えない。
+- sed / heredoc / 一時スクリプトで代用しない。
+- スクリプトは placeholder 置換、`[NOTE]: bootstrap 対象` の解決、置換漏れ検査を行う。`bootstrap/` 自身は検査対象外である。
+- 未知のエージェントを追加する場合は `init-agent.sh` の `case` を先に実装する。
+- 失敗した場合だけ [FAILURES.md](FAILURES.md) を読み、原因別の復旧手順に従う。成功時は読まない。
 
-Why: 置換は完全に決定的な処理であり、その都度インタプリタでコードを書き捨てると承認の乱発とツール間の差分の温床になる。レビュー済みの1スクリプトへ固定すれば、一度許可すれば以降は承認なしで再実行できる。
-
-### Step 4: 結果を報告する
+### Step 3: 結果を報告する
 
 置換した `[agent_name]` / `[skills_root]` の値と、解決した `[NOTE]` 箇所をユーザーに報告する。
 
@@ -76,4 +44,4 @@ Why: 置換は完全に決定的な処理であり、その都度インタプリ
 
 - 本リポジトリ（テンプレート元）のファイルは一切変更しない。スクリプトは配置済みツリー（`.claude` / `.codex` / `.agents` / `AGENTS.md`）のみを対象とする
 - placeholder の置換漏れ確認は `init-agent.sh` の終了条件に含まれる。処理後に別の `grep` を実行しない
-- `bootstrap/` 配下はスキル自身の説明・処理本体として placeholder を意図的に残すため、スクリプトの検査対象外とする
+- `bootstrap/` 配下は説明・処理本体として placeholder を意図的に残す

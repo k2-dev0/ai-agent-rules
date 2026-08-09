@@ -26,9 +26,8 @@ ai-agent-rules/
 │   ├── deepseek/           # 調査・候補実装を隔離実行する共通基盤
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
 │   ├── errand/             # 設計書なしの軽微な実装をDeepSeekへ限定委任
-│   ├── prototype/          # 使い捨て前提のプロトタイプを sandbox 防御の上で回す
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
-│   ├── polish/             # フォーマッタ・リンターの一括適用
+│   ├── polish/             # 変更pathの整形・静的検査とネスト品質ゲート
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
 │   ├── context-save/       # 知見の登録（context-dictionary API）
 │   ├── context-search/     # 知見の検索

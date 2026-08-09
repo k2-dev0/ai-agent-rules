@@ -59,7 +59,7 @@ hooks:
 
 ### 2. 調査を委任してシナリオを承認する
 
-関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、test・型検査・lint・schema検証commandをDeepSeekの`survey`へ委任する。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
+関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
 
 [agent_name]はsurvey前に関連コードをGrep / Glob / git logで探索しない。report受領後も直接読むのは重要な`file:line`の確認だけとし、不足があれば調査項目を絞った新しいsurveyへ戻す。共通契約の失敗条件を満たすまで自力の横断探索へ切り替えない。
 
@@ -104,11 +104,21 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 
 ### 8. [agent_name]がGreen・レビュー・修正を完了する
 
-対象テスト、関連回帰テスト、必要な型検査とlintを実行する。`schema.prisma`にはテストを要求せず、format、validate、generateのうち利用可能な検証を実行する。DeepSeek候補を反映した後は、[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
+次を上から実行する。無関係なpackageのtestやproject全体のtestは追加しない。
+
+| 条件 | 実行 |
+|---|---|
+| 承認済みシナリオから作ったtest | 全件 |
+| surveyが`direct-regression`として返した既存test | 全件 |
+| TypeScript / JavaScriptを変更 | 所属packageの既存typecheck。なければ`tsc -p <tsconfig> --noEmit` |
+| `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
+| 設計書の完了条件に追加commandがある | そのcommand |
+
+利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
 
 ### 9. polishと完了処理を行う
 
-設計書の完了条件、テスト、型検査、lint、レビュー、追跡対象のコミットを確認してから`polish`を必ず呼ぶ。機能名と、この実行で変更してコミットした追跡済み本体コードの相対path一覧を渡す。`polish`が変更した場合は対象テスト・型検査・lint・レビューをやり直し、変更をコミットして品質ゲートを再実行する。
+設計書の完了条件、Step 8の検証、レビュー、追跡対象のコミットを確認してから`polish`を必ず呼ぶ。機能名と、この実行で変更してコミットした追跡済み本体コードの相対path一覧を渡す。`polish`が変更した場合はStep 8とレビューをやり直し、変更をコミットして品質ゲートを再実行する。
 
 `from-prompt`では、polishが現在のHEADへquality receiptを記録した後だけ次を単独実行する。失敗時はindexを直接編集しない。
 
@@ -131,7 +141,7 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ## 完了条件
 
 - 承認済みシナリオがすべてGreen
-- 関連回帰テスト、型検査、lintが必要な範囲で成功
+- Step 8とpolishの検証が成功
 - [agent_name]が差分をレビュー済み
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミットである理由を完了報告に含めた

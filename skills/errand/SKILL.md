@@ -32,12 +32,25 @@ disable-model-invocation: true
 
 ## 実行手順
 
-1. ユーザーの依頼だけから、変更後の公開挙動、完了条件、候補となる変更パスを短く固定する。依頼に含まれる識別子、パス、番号、固有名詞を完全な文字列のまま保持し、省略、翻訳、一般化してはならない。上の停止条件に当たるなら停止する。
-2. 既存挙動の確認が必要ならDeepSeekの`survey`を同期実行し、完全な識別子、構成要素、最寄りの同型実装の順に探索させる。最も近い1件の正確なパス、置換要素、検証commandが揃ったら終了し、網羅監査は依頼しない。reportが示す依存先とdirty pathが関係する場合だけ上位モデルがその差分を読み、dirty pathは変更しない。errand適用可否と実装指示は上位モデルが決める。
-3. 依頼とsurvey結果だけから、変更内容、守る既存パターン、完了条件を含む短い実装指示を作る。対象はcleanな追跡済み本体コードと`schema.prisma`、または既存の親ディレクトリ内でまだ存在せず、同型実装から配置・名前・内容を一意に決められる新規本体ファイルだけにする。テスト、Markdown、設定、migration、lockfile、環境変数、Git管理ファイルを許可対象にしてはならない。
-4. 共通契約に従って`errand` modeへ短い実装指示と`--`以降の許可パスを渡す。DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。
-5. `result.json`、report、candidate.patchを確認する。候補返却後は、許可外変更、曖昧さの握り潰し、ハードコード、既存契約との不一致を上位モデルが判断して直接修正する。
-6. 採用したDeepSeek候補を反映して初回実装とする。その後は上位モデルが、対象の既存テスト、Prisma format / validate / generate、型検査、lint、回帰確認から関係するものだけを実行し、失敗やレビュー指摘を本体コードへ直接修正する。migration commandを実行してはならない。`polish`や`unwind`など別のworkflow skillを自動追加しない。必要なテストシナリオが増えた場合は変更を進めず停止する。
+1. 依頼から公開挙動、完了条件、候補pathを固定する。識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
+2. DeepSeekの`survey`を必ず1回実行し、最寄りの同型実装1件、置換する要素、対象path、既存テストと検証commandを返させる。網羅監査は依頼しない。
+3. 次がすべて一意ならerrandを続け、一つでも欠ければ変更せず停止する。
+   - 依頼後の公開挙動と完了条件
+   - 最寄りの同型実装1件の正確なpath
+   - 同型実装から置き換える識別子・値の対応
+   - cleanな許可path一覧
+   - 下の検証表で実行するcommand
+4. 依頼とsurvey結果だけから短い実装指示を作る。対象はcleanな追跡済み本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルに限定する。テスト、Markdown、設定、migration、lockfile、環境変数、Git管理ファイルを許可しない。
+5. `errand` modeへ実装指示と`--`以降の許可pathを渡す。DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。
+6. `result.json`、report、candidate.patchを確認する。採用部分を許可pathへ反映して初回実装とし、許可外変更、曖昧さの握り潰し、ハードコード、既存契約との不一致は上位モデルが直接修正する。
+7. 次の検証を該当順に実行する。失敗は本体コードへ修正し、migration commandと別workflow skillは実行しない。新しいテストシナリオが必要なら停止する。
+
+| 変更 | 検証 |
+|---|---|
+| surveyが既存testと実行commandを返した | そのtestを実行 |
+| TypeScript / JavaScript | 所属packageの既存typecheckと、path指定可能なlint |
+| `schema.prisma` | 所属packageのPrisma `format`、`validate`、`generate` |
+| 上記commandが存在しない | commandを発明せず、未実行として報告 |
 
 ユーザーが停止後に設定やmigration fileなどerrand禁止対象の変更を明示した場合は、`errand`を終了して通常実装へ移ることを一文で宣言する。明示された範囲だけを通常実装として扱い、errandを続行したことにして禁止対象を委任してはならない。
 

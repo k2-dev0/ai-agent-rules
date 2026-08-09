@@ -231,10 +231,6 @@ echo x > untracked.txt
 check "overwrite: git 管理外の上書きは ask" ask overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/untracked.txt"}}'
 check "overwrite: 新規作成は棄権"       empty overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/nonexistent.txt"}}'
 
-# --- prototype ---
-check "prototype: テストファイルは deny" deny prototype.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.test.ts"}}'
-check "prototype: 通常ファイルは棄権"   empty prototype.sh '{"tool_name":"Write","tool_input":{"file_path":"src/foo.ts"}}'
-
 # --- protect-env ---
 check "protect-env: Edit .env は deny"        deny  protect-env.sh '{"tool_name":"Edit","tool_input":{"file_path":".env"}}'
 check "protect-env: Edit .env.local は deny"  deny  protect-env.sh '{"tool_name":"Edit","tool_input":{"file_path":"config/.env.local"}}'

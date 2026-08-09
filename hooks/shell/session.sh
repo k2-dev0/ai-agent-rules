@@ -12,7 +12,7 @@ case "$(hook_event_name)" in
   UserPromptSubmit)
     PROMPT=$(hook_prompt)
     [ -z "$PROMPT" ] && exit 0
-    for SKILL in tdd prototype meeting cowlick; do
+    for SKILL in tdd meeting cowlick; do
       if echo "$PROMPT" | grep -q "\$$SKILL"; then
         F=$(hook_skill_session_file "$SKILL")
         mkdir -p "$(dirname "$F")"
