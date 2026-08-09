@@ -36,7 +36,15 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
 - hard timeoutにidle timeoutが2区間以上入る
 - reasonは24文字以上で、`scope=`、`difficulty=`、`basis=`を含む
 
-固定値を惰性で再利用しない。再試行では新しいtask-idを使い、reasonへ`previous=<失敗種別>; adjustment=<変更理由>`を加え、値を維持または変更する根拠を明示する。理由へ機密情報を含めない。選択値とreasonはtask stateと`result.json`へ保存される。
+通常実行は次を難易度別の基準値とし、これを下回らない。timeoutは終了を待つ上限であり、正常終了を遅らせない。対象が少ない、限定survey、再調査という理由だけで短縮してはならない。
+
+| difficulty | hard timeout | idle timeout | poll |
+|---|---:|---:|---:|
+| `low` | 30分 | 600秒 | 30秒 |
+| `medium` | 45分 | 900秒 | 30秒 |
+| `high` | 60分 | 900秒 | 30秒 |
+
+ユーザーが明示的に短い上限を指定した場合だけ基準値未満を使う。基準値を固定値として無条件に選ばず、対象ファイル数、探索境界、実装量、外部境界から難易度を決める。再試行では新しいtask-idを使い、reasonへ`previous=<失敗種別>; adjustment=<変更理由>`を加える。timeout後の再試行は値を短縮せず、同じ難易度の基準値を維持するか上位の値へ延長し、その根拠を明示する。理由へ機密情報を含めない。選択値とreasonはtask stateと`result.json`へ保存される。
 
 `smoke`は固定疎通確認なので時間引数を取らない。従量課金のため、ユーザーが明示的に許可した場合だけ実行する。完了済み結果の再表示は`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使う。同期実行中に`show`や別task-idを並行起動せず、会話中断後の状態確認にだけ`show`を一度使う。
 
