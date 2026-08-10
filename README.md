@@ -26,7 +26,7 @@ ai-agent-rules/
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── worker/             # 下位モデルを隔離実行するprovider非依存の共通基盤
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
-│   ├── errand/             # 設計書なしの軽微な実装を外部ワーカーへ限定委任
+│   ├── errand/             # 設計書なしでシナリオ承認・Red・委任実装・Greenを実行
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
 │   ├── polish/             # 開始scope内の実変更pathだけを整形・静的検査・ネスト確認
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
@@ -114,7 +114,7 @@ $bootstrap codex
 
 `preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idで外部ワーカーを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
 
-`errand`と`tdd`では、初回実装を外部ワーカーへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。設計書選択後から初回実装候補の受領までは、本体コード・schema・rules・既存テスト基盤・同型実装の通常調査も外部ワーカーへ固定する。surveyはテスト執筆に必要なsymbol、型、fixture、DB、実行commandまでreportへ返し、不足は上位モデルの直接検索で埋めず限定surveyへ戻す。上位モデルの直接調査は外部ワーカーのfailure fallback、または上位モデル・ユーザーが特定claimへ具体的な疑義を示した場合の最小範囲に限る。テストシナリオの設計と採否は引き続き上位モデルが行う。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否を外部ワーカーへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有し、初回実装をworkerへ委任する。上位モデルがシナリオ設計・一括承認、テスト作成、候補レビュー、修正を担当する。`errand`はユーザー依頼を要求根拠とする設計書なし版であり、新しいテストが必要でも停止しない。`tdd`は承認済み設計書を要求根拠とし、scope固定、polish、必要なら実装順index更新を追加する。surveyはテスト作成に必要なsymbol、型、fixture、DB、実行commandまでreportへ返し、不足は限定surveyへ戻す。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補返却後のレビューや修正をworkerへ戻さない。
 
 workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
@@ -139,7 +139,7 @@ timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKI
 
 task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
 
-`errand`は対象ファイルが未実装または複数であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
+`errand`は対象ファイルが未実装、複数、または対応テストが未作成であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。公開挙動を一意に決められるならシナリオ承認後に必要なテストを作り、Redから実装へ進む。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
