@@ -1,12 +1,13 @@
 #!/bin/bash
-# OpenCode + OpenRouter + DeepSeek を、読み取り専用調査または隔離実装として共通実行する。
+# OpenCode + OpenRouter の外部モデルを、読み取り専用調査または隔離実装として共通実行する。
 set -u
 
 readonly SOFT_BUDGET_USD="38"
 readonly HARD_BUDGET_USD="40"
-readonly MODEL="openrouter/~deepseek/deepseek-v4-flash-latest"
-readonly MODEL_ID="~deepseek/deepseek-v4-flash-latest"
-readonly MODEL_VARIANT="high"
+readonly DEFAULT_MODEL="openrouter/minimax/minimax-m3"
+readonly MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"
+readonly MODEL_ID="${MODEL#openrouter/}"
+readonly MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"
 readonly SURVEY_SCOPE_COUNT="4"
 readonly SURVEY_STEPS_PER_SCOPE="3"
 readonly SURVEY_MAX_STEPS="$((SURVEY_SCOPE_COUNT * SURVEY_STEPS_PER_SCOPE))"
@@ -52,9 +53,17 @@ CONTEXT_SNAPSHOT_PATHS=()
 CONTEXT_SNAPSHOT_HASHES=()
 
 fail() {
-  printf 'deepseek: %s\n' "$1" >&2
+  printf 'delegate: %s\n' "$1" >&2
   exit 1
 }
+
+case "$MODEL" in
+  openrouter/*/*) ;;
+  *) fail "DELEGATE_MODEL must use the openrouter/<provider>/<model> format" ;;
+esac
+if [ -n "$MODEL_VARIANT" ] && [[ ! "$MODEL_VARIANT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  fail "DELEGATE_MODEL_VARIANT contains unsupported characters"
+fi
 
 extract_report() {
   jq -rs '
@@ -65,11 +74,11 @@ extract_report() {
     ([.[] | select(.type == "step_start" or .type == "step_finish")] | length) as $step_events
     | ([.[] | select(.type == "step_finish" and .part.reason == "stop") | .timestamp] | last) as $stop_at
     | if $step_events == 0 then
-        ([.[] | nonempty_text] | last // "DeepSeek did not return a final textual report.")
+        ([.[] | nonempty_text] | last // "Delegated model did not return a final textual report.")
       elif $stop_at == null then
-        "DeepSeek did not return a final textual report."
+        "Delegated model did not return a final textual report."
       else
-        ([.[] | select((.timestamp // 0) <= $stop_at) | nonempty_text] | last // "DeepSeek did not return a final textual report.")
+        ([.[] | select((.timestamp // 0) <= $stop_at) | nonempty_text] | last // "Delegated model did not return a final textual report.")
       end
   ' "$1"
 }
@@ -332,12 +341,12 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git
 cd "$REPO_ROOT" || fail "cannot enter repository root"
 
 if [ "$MODE" = "prepare" ]; then
-  printf '%s\n' 'deepseek: delegation contract ready'
+  printf '%s\n' 'delegate: delegation contract ready'
   exit 0
 fi
 
 if [ "$MODE" = "show" ]; then
-  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
+  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/worker/$TASK_ID"
   TASK_RUNTIME="${RESULT_ROOT%/*}/.${TASK_ID}.task"
   TASK_STATE="$TASK_RUNTIME/state.json"
   if [ ! -f "$RESULT_ROOT/result.json" ] && [ -f "$TASK_STATE" ]; then
@@ -397,7 +406,7 @@ if [ "$MODE" = "nesting" ]; then
   done
 fi
 
-TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-deepseek.XXXXXX") || fail "cannot create temporary directory"
+TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-openrouter.XXXXXX") || fail "cannot create temporary directory"
 WORKTREE="$TEMP_ROOT/worktree"
 CURL_CONFIG="$TEMP_ROOT/curl.conf"
 WORKTREE_ADDED=0
@@ -429,7 +438,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [ "$MODE" != "smoke" ]; then
-  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/deepseek/$TASK_ID"
+  RESULT_ROOT="$REPO_ROOT/.[agent_name]/tmp/worker/$TASK_ID"
   [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
   RESULT_PARENT=${RESULT_ROOT%/*}
   mkdir -p "$RESULT_PARENT" || fail "cannot create result parent directory"
@@ -464,8 +473,8 @@ if [ "$MODE" != "smoke" ]; then
 fi
 
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
-  mkdir -p "$WORKTREE/.deepseek-request" || fail "cannot create delegated request directory"
-  cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.deepseek-request/spec.md" || fail "cannot copy spec into isolated worktree"
+  mkdir -p "$WORKTREE/.delegate-request" || fail "cannot create delegated request directory"
+  cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.delegate-request/spec.md" || fail "cannot copy spec into isolated worktree"
 fi
 
 ALLOWED_PATHS=()
@@ -500,7 +509,6 @@ fi
 jq -cn \
   --argjson permission_edit "$EDIT_RULES" \
   --arg model_id "$MODEL_ID" \
-  --arg model_variant "$MODEL_VARIANT" \
   --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --arg mode "$MODE" '
   {
@@ -541,15 +549,9 @@ jq -cn \
         "models":{
           ($model_id):{
             "options":{
-              "reasoningEffort":$model_variant,
               "provider":{
                 "zdr":true,
                 "data_collection":"deny"
-              }
-            },
-            "variants":{
-              ($model_variant):{
-                "reasoningEffort":$model_variant
               }
             }
           }
@@ -565,7 +567,7 @@ if [ "$MODE" = "smoke" ]; then
   OPENCODE_OUTPUT="$TEMP_ROOT/opencode.jsonl"
   OPENCODE_ERROR="$TEMP_ROOT/opencode.stderr"
 elif [ "$MODE" = "research" ]; then
-  PROMPT="設計案 .deepseek-request/spec.md のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
+  PROMPT="設計案 .delegate-request/spec.md のためにコードベースを調査してください。変更は禁止です。根拠を file:line で示し、不明点と設計上のリスクを報告してください。"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
@@ -582,7 +584,7 @@ elif [ "$MODE" = "nesting" ]; then
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 elif [ "$MODE" = "implement" ]; then
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="承認済み設計 .deepseek-request/spec.md に従い、次の許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="承認済み設計 .delegate-request/spec.md に従い、次の許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。テストに穴・矛盾・曖昧さを見つけた場合は変更せず consultation_required として根拠を報告してください。許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
@@ -597,6 +599,11 @@ fi
 cd "$EXECUTION_ROOT" || fail "cannot enter execution root"
 set +e
 OPENCODE_STARTED_AT=$(date +%s)
+OPENCODE_COMMAND=(opencode --pure run --agent delegate --format json --model "$MODEL")
+if [ -n "$MODEL_VARIANT" ]; then
+  OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")
+fi
+OPENCODE_COMMAND+=("$PROMPT")
 set -m
 env -i \
   HOME="$HOME" \
@@ -606,7 +613,7 @@ env -i \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
   OPENCODE_DISABLE_AUTOUPDATE=true \
-  opencode --pure run --agent delegate --format json --model "$MODEL" --variant "$MODEL_VARIANT" "$PROMPT" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
+  "${OPENCODE_COMMAND[@]}" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
 OPENCODE_PID=$!
 set +m
 write_task_state "running" || fail "cannot update task state"
@@ -636,15 +643,15 @@ set -e
 if [ "$MODE" = "smoke" ]; then
   [ "$FINAL_STATUS" -eq 0 ] || { sed -n "1,${SMOKE_ERROR_LINE_LIMIT}p" "$OPENCODE_ERROR" >&2; fail "smoke request failed with status $FINAL_STATUS timeout=${TIMEOUT_KIND:-none}"; }
   [ -s "$OPENCODE_OUTPUT" ] || fail "smoke request returned no events"
-  printf 'smoke: ok model=%s variant=%s\n' "$MODEL" "$MODEL_VARIANT"
+  printf 'smoke: ok model=%s variant=%s\n' "$MODEL" "${MODEL_VARIANT:-default}"
   exit 0
 fi
 
 if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
-  rm -rf "$WORKTREE/.deepseek-request"
+  rm -rf "$WORKTREE/.delegate-request"
 fi
 
-extract_report "$OPENCODE_OUTPUT" > "$RESULT_STAGING/report.md" || fail "cannot extract DeepSeek report"
+extract_report "$OPENCODE_OUTPUT" > "$RESULT_STAGING/report.md" || fail "cannot extract delegated report"
 
 if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
@@ -653,8 +660,8 @@ fi
 CHANGED_PATHS=()
 for ((context_index = 0; context_index < ${#CONTEXT_SNAPSHOT_PATHS[@]}; context_index++)); do
   context_path=${CONTEXT_SNAPSHOT_PATHS[$context_index]}
-  [ -f "$WORKTREE/$context_path" ] || fail "DeepSeek removed an ignored context file: $context_path"
-  [ "$(git hash-object "$WORKTREE/$context_path")" = "${CONTEXT_SNAPSHOT_HASHES[$context_index]}" ] || fail "DeepSeek changed an ignored context file: $context_path"
+  [ -f "$WORKTREE/$context_path" ] || fail "delegated model removed an ignored context file: $context_path"
+  [ "$(git hash-object "$WORKTREE/$context_path")" = "${CONTEXT_SNAPSHOT_HASHES[$context_index]}" ] || fail "delegated model changed an ignored context file: $context_path"
 done
 while IFS= read -r -d '' changed; do
   CHANGED_PATHS+=("$changed")
@@ -676,7 +683,7 @@ if [ "${#CHANGED_PATHS[@]}" -gt 0 ]; then
         [ "$changed" = "$path" ] && allowed=true
       done
     fi
-    [ "$allowed" = true ] || fail "DeepSeek changed a protected path: $changed"
+    [ "$allowed" = true ] || fail "delegated model changed a protected path: $changed"
   done
   CHANGED_PATHS_JSON=$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot serialize changed paths"
 else
@@ -718,7 +725,7 @@ jq -n \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:$model_variant,opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,source_snapshot:(if $context_snapshot_paths | length > 0 then "HEAD+ignored-agent-context" else "HEAD" end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,source_snapshot:(if $context_snapshot_paths | length > 0 then "HEAD+ignored-agent-context" else "HEAD" end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"

@@ -1,6 +1,6 @@
 ---
 name: polish
-description: 実装完了後に変更済みコードへフォーマッタ・リンター・型検査を適用し、固定scopeのpath整合性を検証して、DeepSeek が検出した三段階以上の制御フローネストだけを unwind で見直す。
+description: 実装完了後に変更済みコードへフォーマッタ・リンター・型検査を適用し、固定scopeのpath整合性を検証して、workerが検出した三段階以上の制御フローネストだけを unwind で見直す。
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
 disable-model-invocation: true
 ---
@@ -43,7 +43,7 @@ packageごとに上から実行する。既存scriptを第一選択にし、scri
 
 実行表が成功した後に、実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
 
-`unwind` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、DeepSeek へ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
+`unwind` がコードを変更した場合は、対象テスト・型検査・lintを再実行し、通常の変更と同じ単位でコミットした後、外部ワーカーへ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返すまで完了扱いにしない。
 
 ## scope path検査
 

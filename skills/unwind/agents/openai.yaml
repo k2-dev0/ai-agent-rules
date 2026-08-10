@@ -1,4 +1,4 @@
 interface:
   display_name: "ネスト見直し"
-  short_description: "DeepSeekが検出した深い制御ネストを安全に見直す"
-  default_prompt: "$unwind を使い、DeepSeekの検出結果だけを基に深いネストを見直してください。"
+  short_description: "外部ワーカーが検出した深い制御ネストを安全に見直す"
+  default_prompt: "$unwind を使い、workerの検出結果だけを基に深いネストを見直してください。"

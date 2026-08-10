@@ -1,7 +1,7 @@
 interface:
   display_name: "小さな実装委任"
-  short_description: "初回実装をDeepSeekへ委任し、修正を上位モデルで完了"
-  default_prompt: "$errand を使い、初回実装をDeepSeekへ委任し、候補反映後の修正を担当してください。"
+  short_description: "初回実装を外部ワーカーへ委任し、修正を上位モデルで完了"
+  default_prompt: "$errand を使い、初回実装をworkerへ委任し、候補反映後の修正を担当してください。"
 
 policy:
   allow_implicit_invocation: false

@@ -1,21 +1,21 @@
 ---
 name: errand
-description: "ユーザーが $errand を明示して、既存パターンの反復で一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加の初回実装を、設計書なしでDeepSeekへ委任したいときだけ使う。DeepSeek候補の反映後はCodexまたはClaudeが修正する。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
+description: "ユーザーが $errand を明示して、既存パターンの反復で一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加の初回実装を、設計書なしでworkerへ委任したいときだけ使う。外部ワーカー候補の反映後はCodexまたはClaudeが修正する。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, Agent
 disable-model-invocation: true
 ---
 
 ## 目的
 
-設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象パス・完了条件を一意に確定できる実装だけを委任する。既存パターンから配置・内容が一意な定型ファイルとPrisma modelの追加を含める。DeepSeekが依頼された変更の初回実装候補を作り、上位モデルは要件の縮約、許可パスの決定、候補パッチの採否、反映後の修正、検証、Gitを担当する。
+設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象パス・完了条件を一意に確定できる実装だけを委任する。既存パターンから配置・内容が一意な定型ファイルとPrisma modelの追加を含める。外部ワーカーが依頼された変更の初回実装候補を作り、上位モデルは要件の縮約、許可パスの決定、候補パッチの採否、反映後の修正、検証、Gitを担当する。
 
 ## 初回実装と修正の境界
 
 - 初回実装とは、このerrandで依頼された挙動について許可パスへ最初に加えるコード変更を指す。新規ファイルだけでなく既存ファイルへの機能追加も含む
-- 初回実装はDeepSeekの`candidate.patch`から始める。上位モデルが最初の応答前にstub、雛形、部分実装、手作業の代替実装を作ってはならない
-- DeepSeek候補を許可パスへ反映した後は、上位モデルがレビュー、テスト、型検査、lintの結果に基づいて本体コードを直接修正する。修正をDeepSeekへ再委任しない
+- 初回実装は外部ワーカーの`candidate.patch`から始める。上位モデルが最初の応答前にstub、雛形、部分実装、手作業の代替実装を作ってはならない
+- 外部ワーカー候補を許可パスへ反映した後は、上位モデルがレビュー、テスト、型検査、lintの結果に基づいて本体コードを直接修正する。修正を外部ワーカーへ再委任しない
 - 候補が未生成、timeout、最終応答欠落なら新しいtask-idで1回だけ再委任する。2回続けて応答に失敗した場合、または明示的な認証失敗があった場合だけ、上位モデルが初回実装を引き継ぐ
-- 候補が返った後の修正する／しない、部分採用、全体拒否の判断は上位モデルが行う。パッチ全体を拒否してもレビュー・修正をDeepSeekへ戻さず、承認済み範囲を上位モデルが完成させる
+- 候補が返った後の修正する／しない、部分採用、全体拒否の判断は上位モデルが行う。パッチ全体を拒否してもレビュー・修正を外部ワーカーへ戻さず、承認済み範囲を上位モデルが完成させる
 
 ## 起動境界
 
@@ -32,10 +32,10 @@ disable-model-invocation: true
 
 ## 実行手順
 
-DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`errand`は必ず`bash [skills_root]/deepseek/delegate.sh <mode>`で実行する。
+外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`errand`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
 
 1. 依頼から公開挙動、完了条件、候補pathを固定する。識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
-2. DeepSeekの`survey`を必ず1回実行し、最寄りの同型実装1件、置換する要素、対象path、既存テストと検証commandを返させる。網羅監査は依頼しない。
+2. 外部ワーカーの`survey`を必ず1回実行し、最寄りの同型実装1件、置換する要素、対象path、既存テストと検証commandを返させる。網羅監査は依頼しない。
 3. 次がすべて一意ならerrandを続け、一つでも欠ければ変更せず停止する。
    - 依頼後の公開挙動と完了条件
    - 最寄りの同型実装1件の正確なpath
@@ -43,7 +43,7 @@ DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`�
    - cleanな許可path一覧
    - 下の検証表で実行するcommand
 4. 依頼とsurvey結果だけから短い実装指示を作る。対象はcleanな追跡済み本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルに限定する。テスト、Markdown、設定、migration、lockfile、環境変数、Git管理ファイルを許可しない。
-5. `errand` modeへ実装指示と`--`以降の許可pathを渡す。DeepSeekにテスト、設定、migration、Git、設計資産を変更させない。
+5. `errand` modeへ実装指示と`--`以降の許可pathを渡す。外部ワーカーにテスト、設定、migration、Git、設計資産を変更させない。
 6. `result.json`、report、candidate.patchを確認する。採用部分を許可pathへ反映して初回実装とし、許可外変更、曖昧さの握り潰し、ハードコード、既存契約との不一致は上位モデルが直接修正する。
 7. 次の検証を該当順に実行する。失敗は本体コードへ修正し、migration commandと別workflow skillは実行しない。新しいテストシナリオが必要なら停止する。
 
@@ -58,4 +58,4 @@ DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`�
 
 ## 完了報告
 
-依頼、DeepSeek の survey / errand task-id、許可パス、候補パッチの採否、実行した検証、コミットを簡潔に報告して停止する。
+依頼、外部ワーカーのsurvey / errand task-id、許可パス、候補パッチの採否、実行した検証、コミットを簡潔に報告して停止する。

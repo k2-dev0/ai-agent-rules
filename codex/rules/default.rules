@@ -29,9 +29,9 @@ prefix_rule(
     justification = "TDD開始時のHEADと対象pathだけを一時receiptへ記録します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/deepseek/delegate.sh"],
+    pattern = ["bash", ".agents/skills/worker/delegate.sh"],
     decision = "allow",
-    justification = "予算・ZDR・編集先を固定検証してDeepSeekを隔離worktreeで実行します。",
+    justification = "予算・ZDR・編集先を固定検証してOpenRouter外部ワーカーを隔離worktreeで実行します。",
 )
 
 # TDDで承認済みの対象テストを個別実行・再実行する固定runner。引数はtest pathだけを
@@ -47,17 +47,17 @@ prefix_rule(
 prefix_rule(
     pattern = ["ps", "-p"],
     decision = "allow",
-    justification = "DeepSeek委任processの完了状態を読み取り専用で確認します。",
+    justification = "外部ワーカー委任processの完了状態を読み取り専用で確認します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/deepseek/delegate.sh", "smoke"],
+    pattern = ["bash", ".agents/skills/worker/delegate.sh", "smoke"],
     decision = "prompt",
     justification = "従量課金の下位モデルへhelloを送るsmoke testを実行するか確認します。",
     match = [
-        "bash .agents/skills/deepseek/delegate.sh smoke",
+        "bash .agents/skills/worker/delegate.sh smoke",
     ],
     not_match = [
-        "bash .agents/skills/deepseek/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason scope=spec,difficulty=medium,basis=contract-review task-id spec.md",
+        "bash .agents/skills/worker/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason scope=spec,difficulty=medium,basis=contract-review task-id spec.md",
     ],
 )
 prefix_rule(

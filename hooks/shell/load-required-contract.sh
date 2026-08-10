@@ -56,11 +56,11 @@ load_contract_once() {
   exit 0
 }
 
-# DeepSeekの引数を確定する前に共通委任契約を必ずcontextへ入れる。
+# workerの引数を確定する前に共通委任契約を必ずcontextへ入れる。
 if [ "$TOOL" = "Bash" ]; then
   case "$(hook_command)" in
-    bash\ *skills/deepseek/delegate.sh*)
-      load_contract_once "deepseek-delegation" "deepseek/DELEGATION.md"
+    bash\ *skills/worker/delegate.sh*)
+      load_contract_once "worker-delegation" "worker/DELEGATION.md"
       exit 0
       ;;
   esac

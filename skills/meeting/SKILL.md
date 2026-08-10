@@ -36,9 +36,9 @@ preflight → cowlick draft → ponytail → ユーザー承認 → cowlick appl
 | **ponytail** | ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る |
 | **cowlick apply** | 最終承認済みのドラフトだけを正式反映する |
 
-DeepSeekと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、ドラフトの採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
+workerと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、ドラフトの採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
 
-このpipelineで初めてDeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。同一sessionのpreflight、cowlick、ponytailはこの一回の準備を共有し、各内部skillで`prepare`を繰り返さない。
+このpipelineで初めて外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。同一sessionのpreflight、cowlick、ponytailはこの一回の準備を共有し、各内部skillで`prepare`を繰り返さない。
 
 後段で前提が崩れた場合は、影響する phase まで戻す。
 
@@ -121,6 +121,6 @@ preflight の要件由来、既存の実行方式、境界を新設しない基�
 
 ## 失敗時の扱い
 
-- 各内部skillがDeepSeekの再試行と上位モデルへの調査引き継ぎを尽くしても調査できない場合は、失敗した範囲を示し、推測で先へ進まない
+- 各内部skillが外部ワーカーの再試行と上位モデルへの調査引き継ぎを尽くしても調査できない場合は、失敗した範囲を示し、推測で先へ進まない
 - 内部 skill が見つからない、ドラフトが壊れている、固定反映に失敗した場合は、その phase で停止する
 - ユーザーが未確認事項を明示的に受け入れた場合だけ、制約として保持して続行する

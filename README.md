@@ -24,9 +24,9 @@ ai-agent-rules/
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
-│   ├── deepseek/           # 調査・候補実装を隔離実行する共通基盤
+│   ├── worker/             # 下位モデルを隔離実行するprovider非依存の共通基盤
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
-│   ├── errand/             # 設計書なしの軽微な実装をDeepSeekへ限定委任
+│   ├── errand/             # 設計書なしの軽微な実装を外部ワーカーへ限定委任
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
 │   ├── polish/             # 開始scope内の実変更pathだけを整形・静的検査・ネスト確認
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
@@ -98,34 +98,34 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $bootstrap codex
 ```
 
-### DeepSeekへの調査・実装委任
+### workerへの調査・実装委任
 
 役割分担は次で固定する。
 
 | 工程 | 担当 | 境界 |
 |---|---|---|
-| 設計に必要なコードベース探索・根拠収集 | DeepSeek | `delegate.sh`を最優先。設計判断はしない |
-| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行い、DeepSeekや調査subagentへ渡さない |
-| 承認済み範囲の初回実装 | DeepSeek | 本体コードと`schema.prisma`だけを隔離worktreeで変更する |
-| 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後はDeepSeekへ戻さない |
-| ネストなど変更要否を含まない機械的検出 | DeepSeek | 上位モデルは返却候補について修正する／しないを判断する |
+| 設計に必要なコードベース探索・根拠収集 | worker | `delegate.sh`を最優先。設計判断はしない |
+| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行い、外部ワーカーや調査subagentへ渡さない |
+| 承認済み範囲の初回実装 | worker | 本体コードと`schema.prisma`だけを隔離worktreeで変更する |
+| 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後は外部ワーカーへ戻さない |
+| ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認は、まず共通のDeepSeek実行器へ委任する。`survey`は依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。通常は返却されたreportを採用して同じ範囲を重複調査しない。重要な根拠の再確認と、そこから何を設計へ採用するかは上位モデルが担当する。
+コードベースの事実確認は、まず共通の外部ワーカー実行器へ委任する。`survey`は依頼中の識別子と指定パス、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順に範囲を広げ、直接根拠が不足する場合だけ次へ進み、回答可能になった時点で終了する。通常は返却されたreportを採用して同じ範囲を重複調査しない。重要な根拠の再確認と、そこから何を設計へ採用するかは上位モデルが担当する。
 
-`preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idでDeepSeekを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
+`preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。接続失敗、DNS・TLS error、rate limit、5xx、timeout、最終応答欠落は1回の応答失敗とし、新しいtask-idで外部ワーカーを1回だけ再試行する。2回続けて失敗した場合は上位モデルが調査を引き継ぎ、上位モデル相当のsubagentを利用できるなら読み取り専用で優先する。API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗では再試行せず、直ちに同じ代替経路へ切り替える。予算超過、ZDR非対応、依存command欠落、参照先欠落は応答失敗に数えず停止する。
 
-`errand`と`tdd`では、初回実装をDeepSeekへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。設計書選択後から初回実装候補の受領までは、本体コード・schema・rules・既存テスト基盤・同型実装の通常調査もDeepSeekへ固定する。surveyはテスト執筆に必要なsymbol、型、fixture、DB、実行commandまでreportへ返し、不足は上位モデルの直接検索で埋めず限定surveyへ戻す。上位モデルの直接調査はDeepSeekのfailure fallback、または上位モデル・ユーザーが特定claimへ具体的な疑義を示した場合の最小範囲に限る。テストシナリオの設計と採否は引き続き上位モデルが行う。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否をDeepSeekへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
+`errand`と`tdd`では、初回実装を外部ワーカーへ委任する。`tdd from-prompt`は実装順indexの先頭1枚、`tdd <設計書path>`は指定した1枚だけを処理し、どちらも上位モデルがテスト設計・テスト作成・候補レビュー・修正を担当する。設計書選択後から初回実装候補の受領までは、本体コード・schema・rules・既存テスト基盤・同型実装の通常調査も外部ワーカーへ固定する。surveyはテスト執筆に必要なsymbol、型、fixture、DB、実行commandまでreportへ返し、不足は上位モデルの直接検索で埋めず限定surveyへ戻す。上位モデルの直接調査は外部ワーカーのfailure fallback、または上位モデル・ユーザーが特定claimへ具体的な疑義を示した場合の最小範囲に限る。テストシナリオの設計と採否は引き続き上位モデルが行う。候補を取得できない応答失敗は新しいtask-idで1回だけ再試行し、2回続けて失敗した場合、または明示的な認証失敗があった場合は上位モデルが実装を引き継ぐ。候補が返った後の不完全な候補や全体拒否を外部ワーカーへ戻さない。`errand`は設計を下位モデルへ任せる近道ではなく、上位モデルが既存パターンから変更を一意に決められると確認した軽微な仕事だけに使う。
 
-固定実行器はOpenRouterの`~deepseek/deepseek-v4-flash-latest`エイリアスで最新のDeepSeek V4 Flashへ追従し、reasoning effortを`high`に固定する。
+workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
-surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/deepseek/delegate.sh show <task-id>`を使える。
+surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/worker/delegate.sh show <task-id>`を使える。
 
 `survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。通常値はlowがhard 30分・idle 600秒、mediumがhard 45分・idle 900秒、highがhard 60分・idle 900秒で、pollは30秒とする。timeoutは上限なので正常終了を遅らせない。限定調査や再調査でも勝手に短縮せず、ユーザーが明示的に短い上限を指定した場合だけ基準値を下回れる。
 
-各workflow入口はsessionで最初にDeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行する。`prepare`は外部通信せず、初回だけPreToolUse hookが共通契約を注入して操作を止めるための固定入口である。同じworkflow配下のskillは一回の準備を共有する。
+各workflow入口はsessionで最初に外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。`prepare`は外部通信せず、初回だけPreToolUse hookが共通契約を注入して操作を止めるための固定入口である。同じworkflow配下のskillは一回の準備を共有する。
 
 ```bash
-bash [skills_root]/deepseek/delegate.sh <mode> \
+bash [skills_root]/worker/delegate.sh <mode> \
   --hard-timeout-minutes <総待機分> \
   --idle-timeout-seconds <無通信秒> \
   --poll-seconds <確認間隔秒> \
@@ -133,7 +133,7 @@ bash [skills_root]/deepseek/delegate.sh <mode> \
   <mode固有の引数>
 ```
 
-時間値と理由の共通契約は`skills/deepseek/DELEGATION.md`へ集約する。DeepSeek実行器のsession最初の呼び出し直前にhookが契約全文をcontextへ注入して呼び出しを一度止め、同一session・同一内容のreceiptがある再試行だけを通す。receiptはtask-idやmodeに依存しないため、同じsessionの後続委任では全文を再注入しない。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。通常実行は共通契約の難易度別基準値を下回らない。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加え、timeout後は値を維持または延長する。
+時間値と理由の共通契約は`skills/worker/DELEGATION.md`へ集約する。外部ワーカー実行器のsession最初の呼び出し直前にhookが契約全文をcontextへ注入して呼び出しを一度止め、同一session・同一内容のreceiptがある再試行だけを通す。receiptはtask-idやmodeに依存しないため、同じsessionの後続委任では全文を再注入しない。実行器はhard 2〜60分、idle 30〜900秒、poll 2〜60秒に制限し、idle内に3回以上のpoll、hard内に2区間以上のidleを要求する。通常実行は共通契約の難易度別基準値を下回らない。reasonは`scope=`、`difficulty=`、`basis=`を含む24文字以上とし、値とともにtask stateと`result.json`へ記録する。再試行では前回の失敗種別と調整理由もreasonへ加え、timeout後は値を維持または延長する。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
@@ -149,13 +149,13 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
-疎通確認は`bash [skills_root]/deepseek/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
+疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
-通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellをDeepSeekへ許可しない。
+通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellを外部ワーカーへ許可しない。
 
 隔離worktreeは現在のHEADを基準にし、`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`を`HEAD+ignored-agent-context`にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。
 
-テストの穴をDeepSeekが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
+テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
 
 ## 注意
 

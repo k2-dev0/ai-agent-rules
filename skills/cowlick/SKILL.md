@@ -45,8 +45,8 @@ mkdir -p draft-prompt
 
 ### コードベース調査
 
-各設計書をDeepSeekの`research`へ1枚ずつ渡す。コード、テスト、ドラフトは変更させず、次を`file:line`の根拠、不明点、設計リスクとともに探させる。
-`research`は必ず`bash [skills_root]/deepseek/delegate.sh research`で実行する。
+各設計書をworkerの`research`へ1枚ずつ渡す。コード、テスト、ドラフトは変更させず、次を`file:line`の根拠、不明点、設計リスクとともに探させる。
+`research`は必ず`bash [skills_root]/worker/delegate.sh research`で実行する。
 
 - 設計書ごと削除できる既存経路
 - 新しいendpointやruntime resourceを使わない入口

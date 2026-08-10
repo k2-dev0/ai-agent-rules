@@ -1,6 +1,6 @@
 ---
 name: unwind
-description: "polish の最終品質ゲートから呼ばれ、DeepSeek に変更済み本体コードの三段階以上の制御フローネスト検出だけを委任する。上位モデルは検出結果の箇所だけを早期脱出・条件反転・分岐表などで構造的に修正し、ネストを隠す関数抽出は許可しない。"
+description: "polish の最終品質ゲートから呼ばれ、workerに変更済み本体コードの三段階以上の制御フローネスト検出だけを委任する。上位モデルは検出結果の箇所だけを早期脱出・条件反転・分岐表などで構造的に修正し、ネストを隠す関数抽出は許可しない。"
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -8,13 +8,13 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 変更済みの本体コードについて、同じ実行経路に制御構造が3段階以上重なる箇所を、意味を保ったまま2段階以下へ減らす。`polish` の内部品質ゲートとしてだけ実行する。
 
-検出は上位モデルが行わない。DeepSeek の読み取り専用・隔離 worktree に委任し、上位モデルは返却された候補の修正・却下判断と検証だけを担当する。
+検出は上位モデルが行わない。外部ワーカーの読み取り専用・隔離 worktree に委任し、上位モデルは返却された候補の修正・却下判断と検証だけを担当する。
 
 ## 判定
 
 対象は親スキルが渡す、基準commitから実際に変更され現在も存在する**追跡済み本体コードの相対パス**だけとする。test、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスが渡されない場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
 
-親スキルが`list-changed`で確定したpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。pathが空ならDeepSeekを呼ばず、対象なしとして返す。
+親スキルが`list-changed`で確定したpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。pathが空なら外部ワーカーを呼ばず、対象なしとして返す。
 
 - `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
 - `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない
@@ -23,10 +23,10 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 実行
 
-DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`nesting`は必ず`bash [skills_root]/deepseek/delegate.sh nesting`で実行する。
+外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`nesting`は必ず`bash [skills_root]/worker/delegate.sh nesting`で実行する。
 
-1. 現在のHEADへDeepSeekの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、検証済みの実変更pathだけを個別引数で明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
-2. DeepSeek が返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
+1. 現在のHEADへ外部ワーカーの`nesting` modeで検出だけを委任する。task-idは`nesting-<HEAD先頭12桁>`とし、検証済みの実変更pathだけを個別引数で明示する。`result.json`とreportを読み、失敗・中断・対象外変更では自力検出へ切り替えず品質ゲートを失敗にする。
+2. 外部ワーカーが返した3段階以上の候補ごとにだけ、ファイル、行、最大深さ、到達条件を記録する。候補のない返却なら、結果ログに「3段階以上の制御フローネストなし」があることを確認して終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
    - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause
    - 条件を反転し、主経路を左端へ置く
@@ -47,4 +47,4 @@ DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`�
 
 ## 返却内容
 
-`polish` へ DeepSeek の task-id・結果パス・候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行した検証を返す。候補が無ければ、下位モデルの結果ログを根拠に「3段階以上の制御フローネストなし」と明示する。
+`polish`へ外部ワーカーのtask-id・結果パス・候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行した検証を返す。候補が無ければ、下位モデルの結果ログを根拠に「3段階以上の制御フローネストなし」と明示する。

@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: ユーザーが `$tdd from-prompt` または `$tdd <承認済み設計書path>` を明示し、設計書1枚をDeepSeek調査・初回実装、上位モデルのテスト設計・レビュー・修正、polishまで実行するときに使う。from-promptだけ実装順indexを更新する。
+description: ユーザーが `$tdd from-prompt` または `$tdd <承認済み設計書path>` を明示し、設計書1枚をworkerによる調査・初回実装、上位モデルのテスト設計・レビュー・修正、polishまで実行するときに使う。from-promptだけ実装順indexを更新する。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 hooks:
@@ -13,7 +13,7 @@ hooks:
 
 ## 目的
 
-[agent_name]を設計・テスト・レビュー・修正の責任者、DeepSeekを調査と制限された初回実装の担当として、承認済み設計書1枚を`survey → scenario → red → delegated-green → review-green → polish`で完了する。
+[agent_name]を設計・テスト・レビュー・修正の責任者、workerを調査と制限された初回実装の担当として、承認済み設計書1枚を`survey → scenario → red → delegated-green → review-green → polish`で完了する。
 
 ## 入力mode
 
@@ -28,28 +28,28 @@ hooks:
 
 ## 権限境界
 
-| 対象 | [agent_name] | DeepSeek |
+| 対象 | [agent_name] | 外部ワーカー |
 |---|---|---|
 | テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 |
 | テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
 | 設計資産の変更 | cowlickの承認後だけ可 | 禁止 |
 | 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 可 |
-| 許可された本体コードと`schema.prisma`の初回実装 | DeepSeekの2回連続応答失敗または認証失敗後だけ可 | 可 |
-| DeepSeek候補反映後の本体コード修正 | 可 | 禁止 |
+| 許可された本体コードと`schema.prisma`の初回実装 | 外部ワーカーの2回連続応答失敗または認証失敗後だけ可 | 可 |
+| 外部ワーカー候補反映後の本体コード修正 | 可 | 禁止 |
 | テスト実行・レビュー・Git | 可 | 禁止 |
 
 テスト資産には、test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。
 
 ### 探索禁止区間
 
-Step 1で設計書を選んでからStep 5のDeepSeek初回実装候補を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
+Step 1で設計書を選んでからStep 5の外部ワーカー初回実装候補を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
 
 - 対象設計書1枚と`from-prompt`で必要なindex 1枚
 - 今回変更するテスト資産そのもの
-- DeepSeekが返した`result.json`、`report.md`、`candidate.patch`、`opencode.jsonl`
+- 外部ワーカーが返した`result.json`、`report.md`、`candidate.patch`、`opencode.jsonl`
 - [agent_name]自身がこの実行で作成したファイル
 
-この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。DeepSeekの`file:line`はreportの監査根拠であって、[agent_name]が全件を再読する許可ではない。import、型、列名、fixture形式、実行commandの情報が1点でも足りなければ、推測や直接確認をせず、未解決項目だけを新しい`survey`へ戻す。テストシナリオの設計と採否判断は[agent_name]の責務であり、この探索禁止に含めない。
+この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。外部ワーカーの`file:line`はreportの監査根拠であって、[agent_name]が全件を再読する許可ではない。import、型、列名、fixture形式、実行commandの情報が1点でも足りなければ、推測や直接確認をせず、未解決項目だけを新しい`survey`へ戻す。テストシナリオの設計と採否判断は[agent_name]の責務であり、この探索禁止に含めない。
 
 テスト実行のdiagnosticと、[agent_name]が変更するテスト資産の読み直しは探索に含めない。diagnosticだけでテストコードを一意に直せずリポジトリ側の事実確認が必要なら、同じく`survey`へ戻す。
 
@@ -78,7 +78,7 @@ Step 1で設計書を選んでからStep 5のDeepSeek初回実装候補を受領
 
 ### 1. 対象と変更範囲を確定する
 
-選んだ設計書の対象ファイルを、テスト資産、DeepSeekへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。test/spec、fixture、factory、mock、stub、fake、snapshot、Markdown、設定、依存関係、migration、Git管理ファイルはDeepSeekへ渡さない。委任対象pathに未コミット変更があればユーザー変更との衝突として停止する。
+選んだ設計書の対象ファイルを、テスト資産、外部ワーカーへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。test/spec、fixture、factory、mock、stub、fake、snapshot、Markdown、設定、依存関係、migration、Git管理ファイルは外部ワーカーへ渡さない。委任対象pathに未コミット変更があればユーザー変更との衝突として停止する。
 
 機能名と、今回変更する追跡済み本体コードおよび`schema.prisma`の相対pathを確定し、変更前に次を1回実行する。新規pathはまだ存在しなくてよい。設計書path modeの機能名は`branch-<機能名>-prompt.md`から得る。
 
@@ -90,7 +90,7 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 
 ### 2. 調査を委任してシナリオを承認する
 
-関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandをDeepSeekの`survey`へ委任する。reportだけで[agent_name]がシナリオ設計とテスト資産の作成を完了できるよう、次の調査パケットを返させる。
+関連するrules、最寄りの同型実装、既存テストの正確なpathと実行方式、fixture・DB初期化、検証commandを外部ワーカーの`survey`へ委任する。reportだけで[agent_name]がシナリオ設計とテスト資産の作成を完了できるよう、次の調査パケットを返させる。
 
 - 重要な根拠の`file:line`と、判断に必要な最小限の抜粋
 - import元、export名、関数signature、型、enum・定数の実値
@@ -99,8 +99,8 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 - 実在する検証command、cwd、必要な環境・guard・初期化順
 - 読めなかったpath、未確認事項、推測を分けた残件一覧
 
-各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。DeepSeekにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
-DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/deepseek/delegate.sh <mode>`で実行する。
+各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を返させる。外部ワーカーにはテストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。
+外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
 
 [agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。`result.json`で正常終了を確認し、`report.md`の残件一覧が空で、承認シナリオとテスト資産の作成に必要な調査パケットが揃った場合だけ次へ進む。不足があれば調査項目を絞った新しいsurveyへ戻す。正常終了したが不完全なreportを、[agent_name]のRead / Grep / Glob / shell検索で補完してはならない。直接調査は探索禁止区間で定めたfallbackまたは具体的疑義の限定検証に限る。
 
@@ -121,19 +121,19 @@ DeepSeekへ委任する前に`bash [skills_root]/deepseek/delegate.sh prepare`�
 - 最初からGreenなら、テストが要求を検出できるか検証する
 - テスト自体またはシナリオの変更が必要なら再承認へ戻る
 
-### 5. DeepSeekへ初回実装を委任する
+### 5. 外部ワーカーへ初回実装を委任する
 
-`implement` modeへ設計書、テスト結果の要約、変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。DeepSeekにはシェル、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]はDeepSeekの最初の応答前にstub、雛形、部分実装を作らず、共通契約の条件を満たした場合だけ初回実装を引き継ぐ。
+`implement` modeへ設計書、テスト結果の要約、変更可能な本体コードまたは`schema.prisma`の相対パスだけを渡す。外部ワーカーにはシェル、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]は外部ワーカーの最初の応答前にstub、雛形、部分実装を作らず、共通契約の条件を満たした場合だけ初回実装を引き継ぐ。
 
 ### 6. 相談を処理する
 
-DeepSeekがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告したら[agent_name]が根拠を検証する。
+外部ワーカーがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告したら[agent_name]が根拠を検証する。
 
 - 既存の承認内容から一意に解決できる: [agent_name]が回答し、新しいtask-idで再委任する
 - 非ブロッキングな改善案: 記録して実装を継続する
 - 新しい設計判断またはテストシナリオが必要: ユーザー承認へ戻る
 
-DeepSeekには発言権だけを認め、テスト・設計の編集権と決定権は与えない。
+外部ワーカーには発言権だけを認め、テスト・設計の編集権と決定権は与えない。
 
 ### 7. 候補パッチを検証して反映する
 
@@ -144,7 +144,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 - テスト環境検出、値のハードコード、assertion攻略がない
 - 承認済み設計とシナリオに一致する
 
-候補が返った後の採否は上位モデルのレビュー責務である。安全に修正できる問題なら、候補を土台に[agent_name]が直接直す。許可外変更や設計逸脱でパッチ全体を拒否しても、DeepSeekへレビュー・修正を戻さず、[agent_name]が承認済み設計の範囲で実装を完成させる。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
+候補が返った後の採否は上位モデルのレビュー責務である。安全に修正できる問題なら、候補を土台に[agent_name]が直接直す。許可外変更や設計逸脱でパッチ全体を拒否しても、外部ワーカーへレビュー・修正を戻さず、[agent_name]が承認済み設計の範囲で実装を完成させる。問題がなければ追跡対象を1ファイルずつ反映して即コミットする。無視されたファイルは作業ツリー上で検証し、強制stageはしない。
 
 ### 8. [agent_name]がGreen・レビュー・修正を完了する
 
@@ -158,7 +158,7 @@ DeepSeekには発言権だけを認め、テスト・設計の編集権と決定
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 設計書の完了条件に追加commandがある | そのcommand |
 
-利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正をDeepSeekへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
+利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み設計へ合わせる本体コード修正を直接行う。通常の修正を外部ワーカーへ再委任しない。テストまたは設計を変える必要が出た場合だけ承認フローへ戻る。
 
 ### 9. polishと完了処理を行う
 
@@ -177,7 +177,7 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 次の場合は正常な自動区間を停止する。
 
 - 共通委任契約が停止対象とする予算、ZDR、依存commandの問題がある
-- DeepSeekが許可外パスを変更した
+- 外部ワーカーが許可外パスを変更した
 - ユーザーの未コミット変更と対象パスが衝突する
 - 2回の応答失敗後も上位モデルの実装経路を利用できない
 - DB、依存関係、公開APIなど承認範囲外の変更が必要になる
@@ -192,4 +192,4 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - polishの品質ゲートが完了した
 - `from-prompt`ではpolishのscope path検査後にindexを更新した
 
-対象設計書、承認シナリオ、Red、Green、DeepSeekの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミットを完了報告へ含める。`from-prompt`ではindexの残件数も含める。
+対象設計書、承認シナリオ、Red、Green、外部ワーカーの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミットを完了報告へ含める。`from-prompt`ではindexの残件数も含める。
