@@ -3,9 +3,9 @@ exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 TOOL=$(hook_tool_name)
 
-# codex では session marker（$tdd 起動時に session.sh が記録）が
-# 現セッションを指す時だけ執行する。claude は tdd の frontmatter hooks が起動を絞る
-if [ "$HOOK_AGENT" = "codex" ] && ! hook_skill_session_active "tdd"; then
+# codex では session marker（$tdd / $errand 起動時に session.sh が記録）が
+# 現セッションを指す時だけ執行する。claude は各skillのfrontmatter hooksが起動を絞る。
+if [ "$HOOK_AGENT" = "codex" ] && ! { hook_skill_session_active "tdd" || hook_skill_session_active "errand"; }; then
   exit 0
 fi
 
@@ -51,7 +51,7 @@ if
 
     TEST_FILE="$DIR/$BASE.test.$EXT"
     [ -f "$TEST_FILE" ] || \
-      hook_deny "テストファイル($TEST_FILE)が無い状態でのコード実装は禁止です。直接実装せず、tdd スキルの TDD フロー（シナリオ → Red → Green → Refactor）に乗せてください。"
+      hook_deny "テストファイル($TEST_FILE)が無い状態でのコード実装は禁止です。起動中のtddまたはerrandの共通フロー（シナリオ → Red → Green）に乗せてください。"
   done < <(hook_file_paths)
 
   # 対応テストがあるコード本体 = 棄権して settings の permission 層に委ねる。
