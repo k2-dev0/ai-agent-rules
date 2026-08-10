@@ -205,6 +205,7 @@ SKILL_LINE_COUNT=$(wc -l "$REPO"/skills/*/SKILL.md | awk 'END {print $1}')
 GROUP_FAILURES=
 [ -f "$WORKER_CONTRACT" ] || append_group_failure "worker共通契約なし"
 [ -f "$COWLICK_FORMAT" ] || append_group_failure "cowlick設計形式なし"
+[ -f "$REPO/skills/tdd/SCENARIO_FLOW.md" ] || append_group_failure "tdd/errand共通シナリオフローなし"
 report_group "progressive disclosure参照が全件存在" "$GROUP_FAILURES"
 if bash "$SUITE/verify-context-mcp.sh" > "$S/context-mcp.out" 2>&1; then
   ok "dictionary skillとMCP配布設定を統合"
@@ -215,13 +216,14 @@ fi
 
 echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
+SCENARIO_FLOW="$REPO/skills/tdd/SCENARIO_FLOW.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的に errand を呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail は呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
-grep -Fq '外部ワーカーの`survey`を必ず1回実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ実装指示と`--`以降の許可path' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はprepare・固定実行器と外部ワーカー実装境界を固定" || ng "errand のprepare・固定実行器または実装境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && ok "errand は識別子を保持して最寄り同型へ限定" || ng "errand の軽量調査境界が不正"
+grep -q 'AskUserQuestion' "$ERRAND_SKILL" && grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && ok "errand はシナリオ承認とテスト追加を許可" || ng "errand が追加テストで停止または承認なしで変更可能"
+grep -Fq 'workerの`survey`を必ず1回実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ実装指示と`--`以降の許可path' "$ERRAND_SKILL" && grep -Fq 'workerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はprepare・固定実行器とworker実装境界を固定" || ng "errand のprepare・固定実行器または実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$WORKER_RUNNER" && grep -q 'new allowed path must not be ignored' "$WORKER_RUNNER" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
-grep -Fq '未実装が前提である' "$ERRAND_SKILL" && grep -Fq '許可パスが複数あることだけを理由に停止してはならない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration commandと別workflow skillは実行しない' "$ERRAND_SKILL" && ok "errand は複数pathとPrisma schemaを許可しmigrationを禁止" || ng "errand の複数path・Prisma境界が不正"
-grep -Fq '採用部分を許可pathへ反映して初回実装' "$ERRAND_SKILL" && grep -Fq '所属packageの既存typecheck' "$ERRAND_SKILL" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$ERRAND_SKILL" && ok "errand は候補反映と検証範囲を固定" || ng "errand の候補反映または検証範囲が曖昧"
-grep -Fq '初回実装は外部ワーカーの`candidate.patch`から始める' "$ERRAND_SKILL" && grep -Fq '2回続けて応答に失敗した場合' "$ERRAND_SKILL" && grep -Fq '修正を外部ワーカーへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && grep -Fq '初回実装候補を作成してください' "$WORKER_RUNNER" && ok "errand は外部ワーカー初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
+grep -Fq '未実装、複数、または対応テストが未作成であることだけを理由に停止しない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
+grep -Fq '初回実装はworkerの`candidate.patch`から始める' "$ERRAND_SKILL" && grep -Fq '2回続けて応答に失敗した場合' "$ERRAND_SKILL" && grep -Fq '修正をworkerへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && grep -Fq '初回実装候補を作成してください' "$WORKER_RUNNER" && ok "errand はworker初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -252,12 +254,13 @@ grep -Fq '外部ワーカーの`nesting` modeで検出だけを委任' "$UNWIND_
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '入力された実変更pathだけが追跡済みかつclean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq 'polishのscope path検査が成功した後だけ' "$TDD_SKILL" && ok "tdd from-prompt は品質検査を再実行せずindexを更新" || ng "tdd from-prompt に不要な再検証がある"
 grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書path>` |' "$TDD_SKILL" && grep -Fq '設計書path modeでは`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
-grep -Fq '外部ワーカーの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq '候補が返った後の採否は上位モデルのレビュー責務' "$TDD_SKILL" && grep -Fq '外部ワーカーの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq '外部ワーカー候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・外部ワーカー初回実装・上位fallback・上位修正へ固定" || ng "tdd のprepare・固定実行器・外部ワーカー初回実装・上位fallback・上位修正が不正"
-grep -Fq 'Step 1で設計書を選んでからStep 5の外部ワーカー初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq '外部ワーカーの`file:line`はreportの監査根拠' "$TDD_SKILL" && grep -Fq 'reportだけで[agent_name]がシナリオ設計とテスト資産の作成を完了' "$TDD_SKILL" && grep -Fq '単なる情報不足や「念のため」は疑義に含めず' "$TDD_SKILL" && grep -Fq '疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示' "$TDD_SKILL" && grep -Fq '正常終了したが不完全なreportを、[agent_name]のRead / Grep / Glob / shell検索で補完してはならない' "$TDD_SKILL" && grep -Fq '足りない事実は限定surveyで補う' "$TDD_SKILL" && ! grep -Fq 'report受領後も直接読むのは重要な`file:line`の確認だけ' "$TDD_SKILL" && ok "tdd は通常調査を外部ワーカー、上位調査をfallback・具体的疑義へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
-grep -Fq 'テストシナリオ設計 | 可 | 禁止' "$TDD_SKILL" && grep -Fq 'テストシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$TDD_SKILL" && grep -Fq '[agent_name]が正常系、境界値、異常系、副作用、回帰リスクとテスト構造を設計' "$TDD_SKILL" && ok "tddのテスト設計と実装を上位モデルへ固定" || ng "tddがテスト設計をworkerへ委任可能"
-grep -Fq '`schema.prisma`自体はテスト対象外' "$TDD_SKILL" && grep -Fq 'シナリオ承認とStep 3・4を省略' "$TDD_SKILL" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$TDD_SKILL" && ok "tddはschema.prismaの検証境界を固定" || ng "tddのschema.prisma検証境界が不正"
-grep -Fq '`.jsx` / `.tsx` componentとReact hookには隣接unit testを作らず' "$TDD_SKILL" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
-grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$TDD_SKILL" && grep -Fq '無関係なpackageのtestやproject全体のtestは追加しない' "$TDD_SKILL" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$TDD_SKILL" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$TDD_SKILL" && ok "tddは調査commandと最終検証の範囲を固定" || ng "tddの調査commandまたは最終検証が曖昧"
+grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
+grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq 'workerの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'worker候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・worker初回実装・上位fallback・上位修正へ固定" || ng "tdd の委任・fallback・修正境界が不正"
+grep -Fq '設計書を選んでから共通フローでworkerの初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq 'workerの`file:line`はreportの監査根拠' "$TDD_SKILL" && grep -Fq '単なる情報不足や「念のため」は疑義に含めず' "$TDD_SKILL" && grep -Fq '疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示' "$TDD_SKILL" && grep -Fq '正常終了したが不完全なreportを[agent_name]のRead / Grep / Glob / shell検索で補完しない' "$TDD_SKILL" && ok "tdd は通常調査をworker、上位調査をfallback・具体的疑義へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
+grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && ok "共通フローはシナリオ承認とテスト設計を上位モデルへ固定" || ng "共通フローのシナリオ・テスト責務が不正"
+grep -Fq '`schema.prisma`だけの変更では公開挙動のtest/specとRed/Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$SCENARIO_FLOW" && ok "共通フローはschema.prismaの検証境界を固定" || ng "共通フローのschema.prisma検証境界が不正"
+grep -Fq '`.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない' "$SCENARIO_FLOW" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
+grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq '開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない' "$POLISH_SKILL" && grep -Fq 'typecheckとPrisma検証はファイル単位で安全に分割できない' "$POLISH_SKILL" && grep -Fq '実変更pathだけを渡して`unwind`を必ず呼ぶ' "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
 grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq '開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけfrom-promptのindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
 grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq '変更前に次を1回実行' "$TDD_SKILL" && ok "tdd はpolish対象の基準commitとpathを変更前に固定" || ng "tdd のscope path固定が不正"
@@ -904,9 +907,15 @@ H=.codex/hooks/shell
 UP=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS1",cwd:$cwd,prompt:"$tdd src/foo.ts を回して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP" | bash $H/session.sh
 [ -f .codex/tmp/session.tdd.SESS1 ] && ok "session: \$tdd 起動で marker 記録" || ng "session: marker 記録失敗"
+UPE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"ERR1",cwd:$cwd,prompt:"$errand boolean変更を実装して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UPE" | bash $H/session.sh
+[ -f .codex/tmp/session.errand.ERR1 ] && ok "session: \$errand 起動で marker 記録" || ng "session: errand marker 記録失敗"
 UP2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS9",cwd:$cwd,prompt:"tdd について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP2" | bash $H/session.sh
 [ ! -f .codex/tmp/session.tdd.SESS9 ] && ok "session: \$ 無しの言及では発火しない" || ng "session: 誤発火"
+UPE2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"ERR9",cwd:$cwd,prompt:"errand について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
+echo "$UPE2" | bash $H/session.sh
+[ ! -f .codex/tmp/session.errand.ERR9 ] && ok "session: \$ 無しのerrand言及では発火しない" || ng "session: errand誤発火"
 UPM=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"MEET1",cwd:$cwd,prompt:"$meeting 新機能を設計して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPM" | bash $H/session.sh
 COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"MEET1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: draft-prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
@@ -920,6 +929,9 @@ fi
 AP=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",turn_id:"t1",transcript_path:"/tmp/x.jsonl",cwd:$cwd,hook_event_name:"PreToolUse",model:"gpt-5.5",permission_mode:"bypassPermissions",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/foo.ts\n+x\n*** End Patch\n"},tool_use_id:"call_x"}')
 OUT=$(echo "$AP" | bash $H/require-test.sh)
 [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: marker 一致で執行(実機同形ペイロード)" || ng "require-test: marker 一致 out=[$OUT]"
+APERR=$(jq -n --arg cwd "$PWD" '{session_id:"ERR1",turn_id:"t1",transcript_path:"/tmp/x.jsonl",cwd:$cwd,hook_event_name:"PreToolUse",model:"gpt-5.5",permission_mode:"bypassPermissions",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: src/errand.ts\n+x\n*** End Patch\n"},tool_use_id:"call_errand"}')
+OUTERR=$(echo "$APERR" | bash $H/require-test.sh)
+[ "$(echo "$OUTERR" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "require-test: errand markerでもテスト先行を執行" || ng "require-test: errand markerで未テスト実装を許可 out=[$OUTERR]"
 APMD=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: README.md\n+x\n*** End Patch"}}')
 [ -z "$(echo "$APMD" | bash $H/require-test.sh)" ] && ok "require-test: md のみのパッチは棄権" || ng "require-test: md が棄権されない"
 APCOMPONENT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/view.tsx\n+x\n*** Update File: src/view.jsx\n+y\n*** Update File: src/useDevice.ts\n+z\n*** Update File: src/hooks/use-device.ts\n+w\n*** End Patch"}}')
@@ -939,6 +951,9 @@ rm -f .codex/tmp/session.tdd.SESS1
 SE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SESS1",cwd:$cwd}')
 echo "$SE" | bash $H/session.sh
 [ ! -f .codex/tmp/session.tdd.SESS1 ] && ok "session: SessionEnd で自セッションの marker を掃除" || ng "session: 掃除漏れ"
+SEERR=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"ERR1",cwd:$cwd}')
+echo "$SEERR" | bash $H/session.sh
+[ ! -f .codex/tmp/session.errand.ERR1 ] && ok "session: SessionEnd でerrand markerを掃除" || ng "session: errand marker掃除漏れ"
 PG=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .git/config\n+x\n*** End Patch"}}')
 [ "$(echo "$PG" | bash $H/protect-git.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-git: パッチ経由の .git 書き込みを deny" || ng "protect-git: apply_patch 素通し"
 PE=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .env\n+X=1\n*** End Patch"}}')
