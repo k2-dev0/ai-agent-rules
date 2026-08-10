@@ -1,7 +1,7 @@
 ---
 name: rebase
 description: "1 ファイル = 1 コミットで積んだコミット契約準拠の未 push 履歴を、機能単位へ自動で squash する。分類は LLM・履歴操作は決定的スクリプト（temp worktree リプレイ → 二重検証 → swap）に閉じ込め、追加承認を求めない。"
-allowed-tools: Read, Grep, Glob, Bash, Write
+allowed-tools: Read, Grep, Glob, Bash
 disable-model-invocation: true
 ---
 
@@ -18,7 +18,7 @@ disable-model-invocation: true
 **検証前に本体ブランチと作業ツリーには一切触れない**ため、失敗時は temp が消えるだけで
 本体は無傷 — 復元という工程そのものが存在しない。
 
-明示的な `$rebase` 呼び出しを、未push履歴を整理する実行許可として扱う。`--check`、plan作成、決定的スクリプトによる実行のいずれにも追加承認を求めない。前提検査・plan検証・二重検証の失敗時は履歴を動かさず、理由を報告して停止する。
+明示的な `$rebase` 呼び出しを、未push履歴を整理する実行許可として扱う。`--check` と決定的スクリプトによる実行に追加承認を求めない。前提検査・group検証・二重検証の失敗時は履歴を動かさず、理由を報告して停止する。
 
 ## 実行フロー
 
@@ -52,29 +52,23 @@ bash [skills_root]/rebase/rebase.sh --check [--base <ref>]
 
 ### Step 2: 実行（スクリプト）
 
-plan を `${TMPDIR:-/tmp}/codex-rebase-<機能名>-plan.json` の scratch JSON として Write してスクリプトに渡す。この一時ファイルはリポジトリ外であり、レビュー対象ファイルではない。`protect-review.sh approve` を呼んで承認 marker を作ろうとしてはならない。plan の subject に `schema.prisma` 等の文字列が含まれていても、実ファイルを変更するものではない。
-
-```json
-{
-  "base": "<--check が出力した BASE の full sha>",
-  "groups": [
-    { "subject": "<commit-subject.sh の --format に従う subject>",
-      "commits": ["<sha>", "<sha>"] }
-  ]
-}
-```
+`--check` が出力した短縮 SHA をカンマ区切りで `--group` に直接渡す。subject は同じ出力の
+`SUBJECT_FORMAT` に従う。scratch fileの作成、`git rev-parse` によるfull SHA化、
+`commit-subject.sh --format` の再実行は不要。
 
 ```
-bash [skills_root]/rebase/rebase.sh <plan.json> [--base <ref>]
+bash [skills_root]/rebase/rebase.sh [--base <ref>] \
+  --group '<subject 1>' '<sha1>,<sha2>' \
+  --group '<subject 2>' '<sha3>'
 ```
 
-- groups の並び = squash 後のコミット順。グループ内の commits の並びは無視される
+- `--group` の並び = squash 後のコミット順。グループ内の commits の並びは無視される
   （スクリプトが元履歴順に再ソートする）
-- スクリプトは実行前に plan を再検証する（base 一致 / exactly-once / hook と共有する subject 契約 /
+- スクリプトは実行前に group を検証する（対象範囲の exactly-once 消費 / hook と共有する subject 契約 /
   AI 署名不在）。エージェントは git コマンドで履歴に触らない — 触ろうとしても hook が deny する
 - **コンフリクトで死んだら**: 本体は無傷。交差していたグループを併合するか、並べ替えを諦めて
-  「元履歴で連続している run だけを squash する」縮退 plan に組み直して再実行する
-- **空グループで死んだら**: revert とその対象が同一グループで相殺されている。plan を組み直す
+  「元履歴で連続している run だけを squash する」縮退 group に組み直して再実行する
+- **空グループで死んだら**: revert とその対象が同一グループで相殺されている。group を組み直す
 
 ### Step 3: 報告
 
@@ -92,6 +86,6 @@ squash 後の履歴・元 HEAD の sha・検証結果（tree 一致 / exactly-on
   tree 同一性検証が壊れるため
 - author date は失われる（squash とは元々そういう操作）。identity は git config の本人のまま、
   Co-Authored-By 等の AI 署名は入らない — commit-gate.sh と同じ契約をスクリプトが内蔵する
-- commit message は plan の subject 1 行のみで body は付けない。何をまとめたかを元履歴で
+- commit message は group の subject 1 行のみで body は付けない。何をまとめたかを元履歴で
   確認したい場合は reflog の元 HEAD を辿る（squash 直後の報告に元 HEAD の sha を出す）
 - 本スキルは AGENTS.md「Git 運用」の従属物。規約が変わったら本スキルより規約が優先

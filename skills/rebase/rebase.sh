@@ -5,8 +5,9 @@
 # （生の rebase / filter-branch / force push は deny-history.sh が deny する）。
 #
 # 使い方:
-#   rebase.sh --check [--base <ref>]      # 前提検査と対象範囲の報告（履歴を変更しない）
-#   rebase.sh <plan.json> [--base <ref>]  # plan に従いリプレイ実行
+#   rebase.sh --check [--base <ref>]  # 前提検査と対象範囲の報告（履歴を変更しない）
+#   rebase.sh [--base <ref>] --group <subject> <sha[,sha...]> [--group ...]
+#                                      # group 指定に従いリプレイ実行
 #
 # 安全設計（verify-then-swap）:
 #   temp worktree で base から cherry-pick -n によるリプレイを完走させ、
@@ -23,18 +24,36 @@ set -u
 err() { echo "ERROR: $*" >&2; }
 die() { err "$*"; exit 1; }
 
-MODE="" PLAN="" BASE_ARG=""
+MODE="" BASE_ARG="" GROUP_COUNT=0
+GROUP_SUBJECTS=()
+GROUP_COMMITS=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --check) MODE=check ;;
+    --check)
+      [ -z "$MODE" ] || die "--check と --group は同時に指定できない"
+      MODE=check
+      ;;
     --base) shift; BASE_ARG="${1:?--base には ref が必要}" ;;
-    *) [ -n "$PLAN" ] && die "引数が多すぎる: $1"; PLAN="$1"; MODE=run ;;
+    --group)
+      [ "$MODE" != check ] || die "--check と --group は同時に指定できない"
+      MODE=run
+      shift
+      [ $# -gt 0 ] || die "--group には subject が必要"
+      GROUP_SUBJECTS[$GROUP_COUNT]=$1
+      shift
+      [ $# -gt 0 ] || die "--group にはカンマ区切りの commit sha が必要"
+      case "$1" in
+        ""|,*|*,|*,,*) die "--group の commit sha リストが不正: $1" ;;
+      esac
+      GROUP_COMMITS[$GROUP_COUNT]=$1
+      GROUP_COUNT=$((GROUP_COUNT + 1))
+      ;;
+    *) die "不明な引数: $1" ;;
   esac
   shift
 done
-[ -n "$MODE" ] || die "usage: rebase.sh --check [--base <ref>] | rebase.sh <plan.json> [--base <ref>]"
+[ -n "$MODE" ] || die "usage: rebase.sh --check [--base <ref>] | rebase.sh [--base <ref>] --group <subject> <sha[,sha...]> [--group ...]"
 
-command -v jq >/dev/null 2>&1 || die "jq が必要"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
 [ "$(git rev-parse --abbrev-ref HEAD)" != "HEAD" ] || die "detached HEAD では実行しない"
 
@@ -79,6 +98,7 @@ if [ "$MODE" = check ]; then
   echo "BASE $EFFECTIVE_BASE"
   echo "HEAD $ORIG"
   echo "COMMITS $COUNT"
+  echo "SUBJECT_FORMAT $(commit_message_format)"
   if [ "$COUNT" -lt 2 ]; then
     echo "NOTHING-TO-DO: squash 対象が 2 コミット未満"
     exit 0
@@ -93,34 +113,38 @@ fi
 
 # ---- run モード ----
 [ "$COUNT" -ge 2 ] || die "squash 対象が 2 コミット未満。やることがない"
-[ -f "$PLAN" ] || die "plan ファイルが無い: $PLAN"
-jq -e . "$PLAN" >/dev/null 2>&1 || die "plan が JSON として不正: $PLAN"
-
-PLAN_BASE=$(jq -r '.base // empty' "$PLAN")
-[ "$PLAN_BASE" = "$EFFECTIVE_BASE" ] || \
-  die "plan の base($PLAN_BASE) が現在の対象範囲の base($EFFECTIVE_BASE) と一致しない。plan を作り直すこと"
-
-NGROUPS=$(jq '.groups | length' "$PLAN")
-[ "$NGROUPS" -ge 1 ] || die "plan の groups が空"
+NGROUPS=$GROUP_COUNT
+[ "$NGROUPS" -ge 1 ] || die "group が空"
 
 # 契約検証は共有実装で行う。通常コミット hook はスクリプト内部の commit を
 # 見られない(コマンド文字列検査のため)が、subject 規則は同じままにする。
-while IFS= read -r subj; do
+gi=0
+while [ "$gi" -lt "$NGROUPS" ]; do
+  subj=${GROUP_SUBJECTS[$gi]}
   commit_message_subject_is_valid "$subj" || \
     die "subject が契約形式でない: $subj (期待: $(commit_message_format))"
   commit_message_has_forbidden_ai_signature "$subj" && \
     die "subject に AI 署名が含まれる: $subj"
-done < <(jq -r '.groups[].subject' "$PLAN")
+  gi=$((gi + 1))
+done
 
-# exactly-once 検証: plan のコミット集合 = 対象範囲、重複も欠落も許さない
-PLAN_SHAS=""
-while IFS= read -r s; do
-  full=$(git rev-parse --verify "${s}^{commit}" 2>/dev/null) || die "plan に解決できない sha がある: $s"
-  PLAN_SHAS="$PLAN_SHAS$full
+# exactly-once 検証: group のコミット集合 = 対象範囲、重複も欠落も許さない
+GROUP_SHAS=""
+gi=0
+while [ "$gi" -lt "$NGROUPS" ]; do
+  COMMIT_LIST=${GROUP_COMMITS[$gi]}
+  OLD_IFS=$IFS
+  IFS=','
+  for s in $COMMIT_LIST; do
+    full=$(git rev-parse --verify "${s}^{commit}" 2>/dev/null) || die "group に解決できない sha がある: $s"
+    GROUP_SHAS="$GROUP_SHAS$full
 "
-done < <(jq -r '.groups[].commits[]' "$PLAN")
-if [ "$(printf '%s' "$PLAN_SHAS" | sort)" != "$(git rev-list "$EFFECTIVE_BASE..$ORIG" | sort)" ]; then
-  die "plan のコミット集合が対象範囲と exactly-once で一致しない(欠落・重複・範囲外のいずれか)"
+  done
+  IFS=$OLD_IFS
+  gi=$((gi + 1))
+done
+if [ "$(printf '%s' "$GROUP_SHAS" | sort)" != "$(git rev-list "$EFFECTIVE_BASE..$ORIG" | sort)" ]; then
+  die "group のコミット集合が対象範囲と exactly-once で一致しない(欠落・重複・範囲外のいずれか)"
 fi
 
 BACKUP="backup/rebase-$(git rev-parse --short=7 "$ORIG")"
@@ -136,10 +160,19 @@ git worktree add --detach "$WT" "$EFFECTIVE_BASE" >/dev/null 2>&1 || { rm -rf "$
 
 gi=0
 while [ "$gi" -lt "$NGROUPS" ]; do
-  SUBJECT=$(jq -r ".groups[$gi].subject" "$PLAN")
+  SUBJECT=${GROUP_SUBJECTS[$gi]}
 
-  # グループ内の適用順は plan を信用せず、元履歴の順序へ再ソートする
-  GROUP_RESOLVED=$(jq -r ".groups[$gi].commits[]" "$PLAN" | while IFS= read -r s; do git rev-parse "${s}^{commit}"; done)
+  # グループ内の指定順は信用せず、元履歴の順序へ再ソートする
+  GROUP_RESOLVED=""
+  COMMIT_LIST=${GROUP_COMMITS[$gi]}
+  OLD_IFS=$IFS
+  IFS=','
+  for s in $COMMIT_LIST; do
+    full=$(git rev-parse --verify "${s}^{commit}" 2>/dev/null) || { cleanup; die "group に解決できない sha がある: $s"; }
+    GROUP_RESOLVED="$GROUP_RESOLVED$full
+"
+  done
+  IFS=$OLD_IFS
   [ -n "$GROUP_RESOLVED" ] || { cleanup; die "group $((gi + 1)) にコミットが無い: $SUBJECT"; }
   GROUP_ORDERED=$(git rev-list --reverse "$EFFECTIVE_BASE..$ORIG" | grep -Fx -f <(printf '%s\n' "$GROUP_RESOLVED"))
 
@@ -147,17 +180,17 @@ while [ "$gi" -lt "$NGROUPS" ]; do
     if ! git -C "$WT" cherry-pick --no-commit "$sha" >/dev/null 2>&1; then
       short=$(git log -1 --format=%h "$sha")
       cleanup
-      die "コンフリクト: group $((gi + 1))「${SUBJECT}」の $short を並べ替えて適用できない。グループを併合するか、元履歴で連続する run だけを squash する縮退 plan に組み直すこと(本体ブランチは無傷)"
+      die "コンフリクト: group $((gi + 1))「${SUBJECT}」の $short を並べ替えて適用できない。グループを併合するか、元履歴で連続する run だけを squash する縮退 group に組み直すこと(本体ブランチは無傷)"
     fi
   done
 
-  # 相殺で空になったグループは plan の誤り。--allow-empty で誤魔化さない
+  # 相殺で空になったグループは分類の誤り。--allow-empty で誤魔化さない
   if git -C "$WT" diff --cached --quiet; then
     cleanup
     die "group $((gi + 1))「${SUBJECT}」は変更が相殺されて空。revert とその対象は同一グループに入れないこと"
   fi
 
-  # commit message は plan の subject 1 行のみ(body は付けない)。
+  # commit message は group の subject 1 行のみ(body は付けない)。
   # --no-verify: 内容は元コミット時点で hook 通過済みの内容保存変換であり、
   # 配布先の commit hook(フォーマッタ等)が tree を書き換えると検証が壊れるため
   git -C "$WT" commit --quiet --no-verify -m "$SUBJECT" || { cleanup; die "commit に失敗: group $((gi + 1))「${SUBJECT}」"; }
