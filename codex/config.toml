@@ -113,3 +113,16 @@ approval_mode = "approve"
 
 [mcp_servers.serena.tools.initial_instructions]
 approval_mode = "approve"
+
+[mcp_servers.context-dictionary]
+command = "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx"
+args = ["__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
+env = { CONTEXT_AGENT = "codex" }
+startup_timeout_sec = 20
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.context-dictionary.tools.search]
+approval_mode = "approve"
+
+[mcp_servers.context-dictionary.tools.get]
+approval_mode = "approve"

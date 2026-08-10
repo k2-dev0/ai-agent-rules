@@ -30,9 +30,7 @@ ai-agent-rules/
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
 │   ├── polish/             # 開始scope内の実変更pathだけを整形・静的検査・ネスト確認
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
-│   ├── context-save/       # 知見の登録（context-dictionary API）
-│   ├── context-search/     # 知見の検索
-│   ├── context-update/     # 知見の更新
+│   ├── dictionary/         # context-dictionary MCPによる知見の検索・保存・更新policy
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
 ├── hooks/
 │   └── shell/              # PreToolUse hook 本体（必須契約の全文注入を含む）
@@ -64,10 +62,11 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 
 配置後は次の順序で有効化する。
 
-1. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
-2. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
-3. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
-4. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。
+1. `setup-agent`で配置し、`__CONTEXT_DICTIONARY_ROOT__`をlocalの`context-dictionary`実pathへ解決する。手動配置では同じplaceholderを実pathへ置換する。
+2. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
+3. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
+4. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
+5. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。context-dictionaryの`search` / `get`は自動承認、`upsert` / `follow_up`は毎回確認する。
 
 ### Claude Code への配置
 
@@ -87,7 +86,7 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 | `e2e/` | `<repo>/.claude/e2e/` |
 | `skills/` | `<repo>/.claude/skills/` |
 
-配置後に project を trust し、`.mcp.json` の Serena を承認してから `/bootstrap claude` を実行する。
+`setup-agent`は`claude/.mcp.json`をproject rootへ配置し、`context-dictionary`のlocal実pathを反映する。配置後にprojectをtrustし、`.mcp.json`のSerenaとcontext-dictionaryを承認してから`/bootstrap claude`を実行する。contextの読み取りtoolだけを自動許可し、書き込みtoolは毎回確認する。
 
 対象エージェントに応じた呼び出し形式:
 

@@ -12,6 +12,16 @@
         "claude-code",
         "--project-from-cwd"
       ]
+    },
+    "context-dictionary": {
+      "type": "stdio",
+      "command": "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx",
+      "args": [
+        "__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"
+      ],
+      "env": {
+        "CONTEXT_AGENT": "claude"
+      }
     }
   }
 }

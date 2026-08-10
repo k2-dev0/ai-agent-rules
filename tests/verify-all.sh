@@ -202,17 +202,16 @@ echo "== skill context圧縮と参照整合性 =="
 SKILL_LINE_CEILING=1300
 SKILL_LINE_COUNT=$(wc -l "$REPO"/skills/*/SKILL.md | awk 'END {print $1}')
 [ "$SKILL_LINE_COUNT" -le "$SKILL_LINE_CEILING" ] && ok "SKILL.md総量を${SKILL_LINE_CEILING}行以下へ制限: $SKILL_LINE_COUNT" || ng "SKILL.md総量が肥大化: $SKILL_LINE_COUNT"
-CONTEXT_API="$REPO/skills/context-api/API.md"
 GROUP_FAILURES=
-for CONTEXT_SKILL in "$REPO/skills/context-save/SKILL.md" "$REPO/skills/context-search/SKILL.md" "$REPO/skills/context-update/SKILL.md"; do
-  grep -Fq '`../context-api/API.md`を全文読' "$CONTEXT_SKILL" || append_group_failure "context API参照なし: $CONTEXT_SKILL"
-done
 [ -f "$DEEPSEEK_CONTRACT" ] || append_group_failure "DeepSeek共通契約なし"
 [ -f "$COWLICK_FORMAT" ] || append_group_failure "cowlick設計形式なし"
-[ -f "$CONTEXT_API" ] || append_group_failure "context API契約なし"
 report_group "progressive disclosure参照が全件存在" "$GROUP_FAILURES"
-grep -Fq '別々に再利用できる結論は分ける' "$REPO/skills/context-save/SKILL.md" && grep -Fq '条件・原因・修正・検証は一つの`solution`' "$REPO/skills/context-save/SKILL.md" && grep -Fq '| `tags` | 検索に使う安定した名詞を1〜5個 |' "$REPO/skills/context-save/SKILL.md" && ok "context-saveは保存単位とfieldを固定" || ng "context-saveの保存単位またはfieldが曖昧"
-grep -Fq '次の順で最大3回検索' "$REPO/skills/context-search/SKILL.md" && grep -Fq '3件未満ならtypeを外し' "$REPO/skills/context-search/SKILL.md" && grep -Fq 'IDで重複を除く' "$REPO/skills/context-search/SKILL.md" && grep -Fq '上位5件を返す' "$REPO/skills/context-search/SKILL.md" && ok "context-searchは段階拡張と順位を固定" || ng "context-searchの検索順序または順位が曖昧"
+if bash "$SUITE/verify-context-mcp.sh" > "$S/context-mcp.out" 2>&1; then
+  ok "dictionary skillとMCP配布設定を統合"
+else
+  ng "dictionary skillまたはMCP配布設定が不正"
+  cat "$S/context-mcp.out"
+fi
 
 echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"

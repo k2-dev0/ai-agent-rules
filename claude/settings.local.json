@@ -49,6 +49,8 @@
       "mcp__serena__find_symbol",
       "mcp__serena__get_symbols_overview",
       "mcp__serena__initial_instructions",
+      "mcp__context-dictionary__search",
+      "mcp__context-dictionary__get",
       "mcp__chrome-devtools__new_page",
       "mcp__chrome-devtools__take_snapshot",
       "mcp__chrome-devtools__take_screenshot",
@@ -87,6 +89,8 @@
       "Bash(ln:*)",
       "Bash(patch:*)",
       "Bash(bash .claude/skills/deepseek/delegate.sh smoke)",
+      "mcp__context-dictionary__upsert",
+      "mcp__context-dictionary__follow_up",
       "Edit(**/package.json)",
       "Edit(.github/workflows/**)",
       "Edit(**/migrations/**)",
@@ -121,6 +125,7 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "serena",
-    "chrome-devtools"
+    "chrome-devtools",
+    "context-dictionary"
   ]
 }
