@@ -686,19 +686,24 @@ echo 3 > f2.ts && git add f2.ts && git commit -qm "f2.ts: f2を追加した"
 BASE=$(git rev-parse HEAD~3)
 if bash "$RS" --check --base "$BASE" > check.out 2>&1; then ok "--check 成功"; else ng "--check 失敗"; cat check.out; fi
 grep -q "COMMITS 3" check.out && ok "対象3件を認識" || ng "対象件数が不正"
+grep -q '^SUBJECT_FORMAT ' check.out && ok "subject形式をcheck結果へ出力" || ng "subject形式の出力が無い"
 EB=$(grep '^BASE ' check.out | cut -d' ' -f2)
 C1=$(git rev-parse HEAD~2); C2=$(git rev-parse HEAD~1); C3=$(git rev-parse HEAD)
-printf '{"base":"%s","groups":[{"subject":"f1: f1と対応テストを追加した","commits":["%s","%s"]},{"subject":"f2.ts: f2を追加した","commits":["%s"]}]}\n' "$EB" "$C1" "$C2" "$C3" > plan.json
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
-if bash "$RS" plan.json --base "$BASE" > run.out 2>&1; then ok "squash 実行"; else ng "squash 失敗"; cat run.out; fi
+if bash "$RS" --base "$BASE" \
+  --group 'f1: f1と対応テストを追加した' "${C1:0:8},${C2:0:8}" \
+  --group 'f2.ts: f2を追加した' "${C3:0:8}" > run.out 2>&1; then
+  ok "scratch plan無しでsquash実行"
+else
+  ng "squash 失敗"; cat run.out
+fi
 [ "$(git rev-list --count "$EB..HEAD")" = "2" ] && ok "3→2 コミットへ縮約" || ng "コミット数が不正"
 [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ] && ok "tree 同一性" || ng "tree が変わった"
 git branch --list 'backup/rebase-*' | grep -q . && ng "backup ブランチが残っている" || ok "成功時に backup ブランチを残さない"
 git reflog show HEAD --format=%H | grep -qFx "$C3" && ok "元 HEAD を reflog から辿れる" || ng "元 HEAD が reflog から失われた"
 grep -q "$C3" run.out && ok "報告に元 HEAD の sha を含む" || { ng "元 HEAD の sha を報告していない"; cat run.out; }
-if bash "$RS" plan.json --base "$BASE" > again.out 2>&1; then ng "base 不一致 plan が通ってしまった"; else ok "base 不一致 plan を拒否"; fi
-printf '{"base":"%s","groups":[{"subject":"タグ無し不正subject","commits":["%s"]}]}\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" > bad.json
-if bash "$RS" bad.json --base "$(git rev-parse 'HEAD~1')" > bad.out 2>&1; then ng "不正 subject が通ってしまった"; else ok "不正 subject を拒否"; fi
+if bash "$RS" --base "$BASE" --group '再実行: 対象が古い' "${C1:0:8},${C2:0:8},${C3:0:8}" > again.out 2>&1; then ng "古いgroupが通ってしまった"; else ok "古いgroupを拒否"; fi
+if bash "$RS" --base "$(git rev-parse 'HEAD~1')" --group 'タグ無し不正subject' "$(git rev-parse --short=8 HEAD)" > bad.out 2>&1; then ng "不正 subject が通ってしまった"; else ok "不正 subject を拒否"; fi
 echo 4 > f3.ts && git add f3.ts && git commit -qm "manual change"
 echo 5 > f4.ts && git add f4.ts && git commit -qm "f4.ts: f4を追加した"
 bash "$RS" --check --base "$BASE" > b2.out 2>&1
@@ -894,8 +899,8 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: unit test runnerのallowを別起動形式へ拡張しない" || ng "rules: unit test runner許可が過剰 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh --check 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase事前確認をallow" || ng "rules: rebase事前確認判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh node_modules/.cache/rebase-plan.json 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase plan実行をallow" || ng "rules: rebase plan実行判定失敗 out=[$OUT]"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh --group 'feature: 日本語の説明' abc1234,def5678 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: rebase group実行をallow" || ng "rules: rebase group実行判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/protect-review.sh approve apps/api/infra/main.tf 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: review対象の変更承認を prompt" || ng "rules: review対象の承認判定失敗 out=[$OUT]"
 else
