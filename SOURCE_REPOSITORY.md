@@ -8,3 +8,4 @@
 - `SOURCE_REPOSITORY.md`、`tests/`、localの`.claude/`・`.codex/`は配布しない
 - `bootstrap`は配布後のcopyで実行し、このリポジトリ自身へ実行しない
 - 配布物を変えたらClaude Code・Codex両方の配置シミュレーションを通す
+- 配布物を変えたら適切な粒度で `git add` と `git commit` する
