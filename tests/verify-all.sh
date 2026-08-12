@@ -108,10 +108,12 @@ report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$WORKER_RUNNER" && grep -q 'HARD_BUDGET_USD="40"' "$WORKER_RUNNER" && ok "外部ワーカー予算: soft=38 hard=40" || ng "外部ワーカー予算が不正"
 grep -q 'DEFAULT_MODEL="openrouter/minimax/minimax-m3"' "$WORKER_RUNNER" && grep -Fq 'MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"' "$WORKER_RUNNER" && grep -Fq 'MODEL_ID="${MODEL#openrouter/}"' "$WORKER_RUNNER" && ok "外部ワーカーモデル: MiniMax M3を既定値として差し替え可能" || ng "外部ワーカーモデルの既定値または差し替えが不正"
 grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
-grep -q 'MISSING_REPORT_STATUS="65"' "$WORKER_RUNNER" && grep -q 'report_status:\$report_status' "$WORKER_RUNNER" && ok "worker report: 空応答を非zeroへ分類" || ng "worker report: 空応答の失敗分類が無い"
+grep -q 'MISSING_REPORT_STATUS="65"' "$WORKER_RUNNER" && grep -q 'MALFORMED_REPORT_STATUS="66"' "$WORKER_RUNNER" && grep -q 'PARTIAL_REPORT_STATUS="67"' "$WORKER_RUNNER" && grep -q 'report_status:\$report_status' "$WORKER_RUNNER" && ok "worker report: 欠落・破損・部分応答を別statusへ分類" || ng "worker reportのprotocol失敗分類が不足"
+grep -q '^build_evidence_packet()' "$WORKER_RUNNER" && grep -q '^claims_have_evidence()' "$WORKER_RUNNER" && grep -Fq 'code below was not copied by the worker' "$WORKER_RUNNER" && grep -q -- '--argjson evidence "$EVIDENCE_JSON"' "$WORKER_RUNNER" && ok "worker evidence: snapshotからclaim根拠を抽出" || ng "worker evidenceの抽出・記録処理が不足"
+grep -q 'implement mode requires --red-summary after spec path' "$WORKER_RUNNER" && grep -Fq 'Red要約:\n$RED_SUMMARY' "$WORKER_RUNNER" && ok "worker implement: Red要約を必須入力へ固定" || ng "worker implementがRed要約を受け取らない"
 grep -q 'XDG_DATA_HOME="\$OPENCODE_XDG_DATA_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="\$OPENCODE_XDG_STATE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="\$OPENCODE_XDG_CACHE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="\$OPENCODE_XDG_CONFIG_HOME"' "$WORKER_RUNNER" && grep -q 'TMPDIR="\$OPENCODE_TMPDIR"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
-grep -q 'SURVEY_SCOPE_COUNT="4"' "$WORKER_RUNNER" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$WORKER_RUNNER" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 4段階ごとのagent step上限を固定" || ng "worker surveyのstep上限が不正"
-grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 明示値・理由・安全比率・固定smokeを検証して記録" || ng "worker timeout設定または理由の記録処理が不正"
+grep -q 'SURVEY_SCOPE_COUNT="4"' "$WORKER_RUNNER" && grep -q 'SURVEY_STEPS_PER_SCOPE="5"' "$WORKER_RUNNER" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 4段階ごとのagent step上限を固定" || ng "worker surveyのstep上限が不正"
+grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q 'last_event_type' "$WORKER_RUNNER" && grep -q 'valid_event_observed' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
 grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && grep -q 'HEAD+ignored-agent-context' "$WORKER_RUNNER" && grep -q 'context_snapshot_paths' "$WORKER_RUNNER" && ok "worker lifecycle: task状態・重複拒否・入力snapshotを記録" || ng "worker lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$WORKER_RUNNER" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$WORKER_RUNNER" && ok "worker config: readonly定数をjq引数で受け渡す" || ng "worker config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$WORKER_RUNNER" && grep -q '"data_collection":"deny"' "$WORKER_RUNNER" && ok "worker routing: ZDRとdata collection拒否" || ng "worker routingのprivacy強制漏れ"
@@ -170,7 +172,10 @@ else
   ok "ponytailは調査toolだけを事前許可"
 fi
 grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$MEETING_SKILL" && grep -Fq '各内部skillで`prepare`を繰り返さない' "$MEETING_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh research' "$COWLICK_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PONYTAIL_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PONYTAIL_SKILL" && grep -Fq 'worker/DELEGATION.md' "$REQUIRED_READING_HOOK" && ok "meetingが一度prepareして設計調査を固定実行器へ接続" || ng "meetingのprepareまたは設計調査の固定実行器が不正"
-grep -Fq '明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ' "$WORKER_CONTRACT" && grep -Fq '合計2回失敗したら上位モデルが引き継ぐ' "$WORKER_CONTRACT" && grep -Fq -- '--timeout-reason' "$WORKER_CONTRACT" && grep -Fq '| `low` | 30分 | 600秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq '| `medium` | 45分 | 900秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq '| `high` | 60分 | 900秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq 'timeout後の再試行は値を短縮せず' "$WORKER_CONTRACT" && ok "worker共通契約がfallbackと余裕ある時間基準を一元管理" || ng "worker共通契約のfallbackまたは時間基準が不足"
+grep -Fq '再試行せず直ちに上位モデルへ切り替える' "$WORKER_CONTRACT" && grep -Fq '合計2回失敗したら上位モデルが引き継ぐ' "$WORKER_CONTRACT" && grep -Fq -- '--retry-of <前task-id>' "$WORKER_CONTRACT" && grep -Fq '| `low` | 30分 | 600秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq '| `medium` | 45分 | 900秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq '| `high` | 60分 | 900秒 | 30秒 |' "$WORKER_CONTRACT" && grep -Fq 'timeout後は維持または延長' "$WORKER_CONTRACT" && grep -Fq '「念のため」だけで同じfileを再読しない' "$WORKER_CONTRACT" && ok "worker共通契約が証拠・fallback・時間を一元管理" || ng "worker共通契約の証拠・fallback・時間基準が不足"
+grep -Fq '上位モデルのfamily、性能tier、effort、context量を理由に' "$WORKER_CONTRACT" && grep -Fq '高性能・高effortでも独自に広域調査せず' "$WORKER_CONTRACT" && grep -Fq '差が出てよいのは、検証済み証拠からの推論、重要度、採否、ユーザーへの説明だけ' "$WORKER_CONTRACT" && grep -Fq 'モデル名に応じた隠れたprompt追加や工程分岐を作らない' "$WORKER_CONTRACT" && ok "worker workflowは上位model family・tier・effort非依存" || ng "worker workflowが上位model設定で分岐可能"
+grep -Fq 'claims_follow_contract "$report_path"' "$WORKER_RUNNER" && grep -Fq 'MAX_RENDERED_PATCH_LINES="400"' "$WORKER_RUNNER" && grep -Fq 'full artifact:' "$WORKER_RUNNER" && grep -Fq '省略は表示だけに適用し' "$WORKER_CONTRACT" && ok "worker結果はclaim形式を検証し完全artifactを保持" || ng "worker結果の形式検証またはartifact保持が不足"
+grep -Fq '前後8行' "$WORKER_CONTRACT" && grep -Fq 'EVIDENCE_CONTEXT_LINES="8"' "$WORKER_RUNNER" && grep -Fq '初回を1回目として補完は2回まで、合計3回に固定する' "$WORKER_CONTRACT" && grep -Fq '3回目までは直接調査の理由にしない' "$WORKER_CONTRACT" && grep -Fq '調査pathを作るためにproduction fileを読まない' "$WORKER_CONTRACT" && grep -Fq 'file全体をReadへ渡さない' "$WORKER_CONTRACT" && grep -Fq '再surveyより直接確認の方が有利な理由' "$WORKER_CONTRACT" && grep -Fq 'MAX_INFORMATION_ATTEMPTS="3"' "$WORKER_RUNNER" && ok "worker不足は文脈付き再調査を優先し上位の全file Readを抑止" || ng "worker再調査・path取得・上位直接確認の境界が不足"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q '設計書ごと削除' "$COWLICK_SKILL" && grep -q '境界を新設しない基準案' "$COWLICK_SKILL" && grep -q '設計選択同士' "$COWLICK_SKILL" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
@@ -258,7 +263,7 @@ grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && 
 grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書path>` |' "$TDD_SKILL" && grep -Fq '設計書path modeでは`mark-prompt-done.sh`を使わず、indexへ触れない' "$TDD_SKILL" && ok "tdd はfrom-promptと設計書pathを明示的に分離" || ng "tdd の入力mode境界が不正"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
 grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq 'workerの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'worker候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・worker初回実装・上位fallback・上位修正へ固定" || ng "tdd の委任・fallback・修正境界が不正"
-grep -Fq '設計書を選んでから共通フローでworkerの初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq 'workerの`file:line`はreportの監査根拠' "$TDD_SKILL" && grep -Fq '単なる情報不足や「念のため」は疑義に含めず' "$TDD_SKILL" && grep -Fq '疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示' "$TDD_SKILL" && grep -Fq '正常終了したが不完全なreportを[agent_name]のRead / Grep / Glob / shell検索で補完しない' "$TDD_SKILL" && ok "tdd は通常調査をworker、上位調査をfallback・具体的疑義へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
+grep -Fq '設計書を選んでから共通フローでworkerの初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq '`evidence_status: verified`のコードがclaimを直接支え' "$TDD_SKILL" && grep -Fq '`--supplement-of`で初回を含む合計3回まで限定survey' "$TDD_SKILL" && grep -Fq '3回目までは保存範囲の不足自体を直接確認の理由にしない' "$TDD_SKILL" && grep -Fq '全file Read、path発見のためのRead' "$TDD_SKILL" && ok "tdd は検証済みevidenceを標準根拠、直接探索を例外へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
 grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && ok "共通フローはシナリオ承認とテスト設計を上位モデルへ固定" || ng "共通フローのシナリオ・テスト責務が不正"
 grep -Fq '`schema.prisma`だけの変更では公開挙動のtest/specとRed/Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq '本体コードの公開挙動変更が含まれる場合' "$SCENARIO_FLOW" && ok "共通フローはschema.prismaの検証境界を固定" || ng "共通フローのschema.prisma検証境界が不正"
 grep -Fq '`.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない' "$SCENARIO_FLOW" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
@@ -417,13 +422,13 @@ DELEGATE_TIMEOUT_ARGS=(--hard-timeout-minutes 4 --idle-timeout-seconds 120 --pol
 mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")"
 cp .claude/skills/worker/delegate.sh "$DELEGATE_SCRIPT"
 printf '#!/bin/bash\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
-printf '#!/bin/bash\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nif [ "$*" = "hello" ]; then jq -cn --arg text hello '\''{type:"text",text:$text}'\''; exit; fi\nprompt=$(printf '\''%%s'\'' "$*" | tr '\''\\n'\'' '\'' '\'')\ntext=$(printf '\''Outcome: fulfilled\n## Claims\n### C1\nClaim: fixtureを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: %%s\nLimitations: none\n## Remaining\nnone\n'\'' "$prompt")\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
 cd "$DELEGATE_REPO"
 git init -q
 git config user.email tester@example.com
 git config user.name tester
-printf '# research spec\n' > spec.md
+printf '# research spec\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\n' > spec.md
 git add spec.md
 git commit -qm "test: research fixture"
 printf '/.codex/\n/.agents/\n/AGENTS.md\n' > .git/info/exclude
@@ -479,7 +484,7 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
 else
   ng "delegate-worker: 変更ゼロのresult.jsonが不正"
 fi
-printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 12)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\n[ -f AGENTS.md ] && [ -f .codex/prompt/ignored-design.md ] && [ -f .codex/rules/ignored.rules ] && [ -f .agents/skills/sample/SKILL.md ] && [ ! -e .codex/tmp/private.txt ] || exit 42\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 20)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\n[ -f AGENTS.md ] && [ -f .codex/prompt/ignored-design.md ] && [ -f .codex/rules/ignored.rules ] && [ -f .agents/skills/sample/SKILL.md ] && [ ! -e .codex/tmp/private.txt ] || exit 42\nprompt=$(printf '\''%%s'\'' "$*" | tr '\''\\n'\'' '\'' '\'')\ntext=$(printf '\''Outcome: fulfilled\n## Claims\n### C1\nClaim: fixtureを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: %%s\nLimitations: none\n## Remaining\nnone\n'\'' "$prompt")\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
 SURVEY_SOURCE_HEAD=$(git rev-parse HEAD)
@@ -490,17 +495,17 @@ else
 fi
 SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/worker/empty-survey"
 SURVEY_RESULT="$SURVEY_ROOT/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "12" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD+ignored-agent-context" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ "$(jq -c '.context_snapshot_paths' "$SURVEY_RESULT")" = '[".agents/skills/sample/SKILL.md",".codex/prompt/ignored-design.md",".codex/rules/ignored.rules","AGENTS.md"]' ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/.empty-survey.task" ]; then
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.evidence_file' "$SURVEY_RESULT")" = "evidence.md" ] && [ "$(jq -r '.evidence_status' "$SURVEY_RESULT")" = "verified" ] && [ "$(jq -r '.output_contract_status' "$SURVEY_RESULT")" = "valid" ] && [ "$(jq -r '.outcome' "$SURVEY_RESULT")" = "fulfilled" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "20" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD+ignored-agent-context" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ "$(jq -c '.context_snapshot_paths' "$SURVEY_RESULT")" = '[".agents/skills/sample/SKILL.md",".codex/prompt/ignored-design.md",".codex/rules/ignored.rules","AGENTS.md"]' ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/.empty-survey.task" ]; then
   ok "delegate-worker: surveyはignored agent資料を監査可能なsnapshotとして読む"
 else
   ng "delegate-worker: surveyのignored agent資料snapshotまたはresult.jsonが不正"
 fi
-if grep -Fq "$SURVEY_EXACT_IDENTIFIER" "$SURVEY_ROOT/report.md" && grep -Fq '機能語・ドメイン語' "$SURVEY_ROOT/report.md" && grep -Fq '根拠が揃った時点で直ちに終了' "$SURVEY_ROOT/report.md" && grep -Fq 'report:' delegate-survey.out; then
-  ok "delegate-worker: surveyの識別子と段階終了条件をreportへ返却"
+if grep -Fq "$SURVEY_EXACT_IDENTIFIER" "$SURVEY_ROOT/report.md" && grep -Fq '機能語・ドメイン語' "$SURVEY_ROOT/report.md" && grep -Fq '根拠が揃った時点で直ちに終了' "$SURVEY_ROOT/report.md" && grep -Fq '# research spec' "$SURVEY_ROOT/evidence.md" && grep -Fq '     9  line 9' "$SURVEY_ROOT/evidence.md" && [ "$(jq -r '.evidence[0].context_start_line' "$SURVEY_RESULT")" = "1" ] && [ "$(jq -r '.evidence[0].context_end_line' "$SURVEY_RESULT")" = "9" ] && [ "$(jq -r '.evidence[0].blob' "$SURVEY_RESULT")" = "$(git hash-object spec.md)" ] && grep -Fq 'report:' delegate-survey.out; then
+  ok "delegate-worker: surveyのclaimへsnapshot由来コードと前後文脈を添付"
 else
-  ng "delegate-worker: survey reportが識別子または段階調査契約を欠落"
+  ng "delegate-worker: survey reportまたは検証済みevidenceが不正"
 fi
-if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show empty-survey > delegate-show.out 2>&1 && grep -Fq 'metadata:' delegate-show.out && grep -Fq "$SURVEY_EXACT_IDENTIFIER" delegate-show.out; then
+if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show empty-survey > delegate-show.out 2>&1 && grep -Fq 'worker-result:' delegate-show.out && grep -Fq 'evidence: verified' delegate-show.out && grep -Fq "$SURVEY_EXACT_IDENTIFIER" delegate-show.out; then
   ok "delegate-worker: showはAPI keyなしで調査結果を再表示"
 else
   ng "delegate-worker: showで調査結果を再取得できない"; cat delegate-show.out
@@ -524,15 +529,107 @@ if [ "$MISSING_REPORT_STATUS" -eq 65 ] && [ "$SHOW_MISSING_REPORT_STATUS" -eq 65
 else
   ng "delegate-worker: 空応答の失敗分類または再表示statusが不正"; cat delegate-missing-report.out; cat delegate-show-missing-report.out
 fi
-printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"complete report"}\\n'\''\nprintf '\''{"type":"step_finish","timestamp":3,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"format missing"}\\n'\''\nprintf '\''{"type":"step_finish","timestamp":3,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" complete-report-survey '正常応答の判定を調査する' > delegate-complete-report.out 2>&1 && [ "$(jq -r '.status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "0" ] && [ "$(jq -r '.report_status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "complete" ] && grep -Fxq 'complete report' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/report.md"; then
-  ok "delegate-worker: stop後の最終文章をcompleteとして保存"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" invalid-output-survey '出力契約を検証する' > delegate-invalid-output.out 2>&1
+INVALID_OUTPUT_STATUS=$?
+INVALID_OUTPUT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/invalid-output-survey"
+if [ "$INVALID_OUTPUT_STATUS" -eq 69 ] && [ "$(jq -r '.report_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "complete" ] && [ "$(jq -r '.output_contract_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.failure_class' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid_output" ]; then
+  ok "delegate-worker: stop済みでも出力契約欠落を成功にしない"
+else
+  ng "delegate-worker: 出力契約欠落の分類が不正"; cat delegate-invalid-output.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nEvidence:\n- `spec.md:1-1`\nClaim: 順序が不正\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" invalid-claim-order-survey 'claim field順を検証する' > delegate-invalid-claim-order.out 2>&1
+INVALID_CLAIM_ORDER_STATUS=$?
+INVALID_CLAIM_ORDER_ROOT="$DELEGATE_REPO/.claude/tmp/worker/invalid-claim-order-survey"
+if [ "$INVALID_CLAIM_ORDER_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract_status' "$INVALID_CLAIM_ORDER_ROOT/result.json" 2>/dev/null)" = "invalid" ]; then
+  ok "delegate-worker: claim fieldの固定順を強制"
+else
+  ng "delegate-worker: claim field順の検証が不正"; cat delegate-invalid-claim-order.out
+fi
+printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"partial report"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" partial-report-survey '部分応答を分類する' > delegate-partial-report.out 2>&1
+PARTIAL_REPORT_STATUS=$?
+PARTIAL_REPORT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/partial-report-survey"
+if [ "$PARTIAL_REPORT_STATUS" -eq 67 ] && [ "$(jq -r '.report_status' "$PARTIAL_REPORT_ROOT/result.json" 2>/dev/null)" = "partial" ] && [ "$(jq -r '.failure_class' "$PARTIAL_REPORT_ROOT/result.json" 2>/dev/null)" = "partial_report" ] && grep -Fxq 'partial report' "$PARTIAL_REPORT_ROOT/report.md"; then
+  ok "delegate-worker: stopなしの途中reportを非zeroで保持"
+else
+  ng "delegate-worker: 部分reportの分類または保存が不正"; cat delegate-partial-report.out
+fi
+printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: complete report\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",timestamp:2,text:$text}'\''\nprintf '\''{"type":"step_finish","timestamp":3,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" complete-report-survey '正常応答の判定を調査する' > delegate-complete-report.out 2>&1 && [ "$(jq -r '.status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "0" ] && [ "$(jq -r '.report_status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "complete" ] && grep -Fq 'Claim: complete report' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/report.md"; then
+  ok "delegate-worker: stop後の契約準拠reportとevidenceをcompleteとして保存"
 else
   ng "delegate-worker: 正常な最終文章の分類が不正"; cat delegate-complete-report.out
 fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --retry-of complete-report-survey retry-lineage-survey '正常応答の判定を調査する' > delegate-retry-lineage.out 2>&1 && [ "$(jq -r '.retry_of' "$DELEGATE_REPO/.claude/tmp/worker/retry-lineage-survey/result.json" 2>/dev/null)" = "complete-report-survey" ] && [ "$(jq -r '.attempt' "$DELEGATE_REPO/.claude/tmp/worker/retry-lineage-survey/result.json" 2>/dev/null)" = "2" ] && [ "$(jq -r '.information_attempt' "$DELEGATE_REPO/.claude/tmp/worker/retry-lineage-survey/result.json" 2>/dev/null)" = "1" ] && [ "$(jq -r '.retry_request_match' "$DELEGATE_REPO/.claude/tmp/worker/retry-lineage-survey/result.json" 2>/dev/null)" = "true" ] && [ -n "$(jq -r '.request_digest' "$DELEGATE_REPO/.claude/tmp/worker/retry-lineage-survey/result.json" 2>/dev/null)" ]; then
+  ok "delegate-worker: retry親・attempt・実効request digestを記録"
+else
+  ng "delegate-worker: retry lineageの記録が不正"; cat delegate-retry-lineage.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --supplement-of complete-report-survey supplement-one-survey 'O2のcaller境界を追加調査する' > delegate-supplement-one.out 2>&1 && [ "$(jq -r '.supplement_of' "$DELEGATE_REPO/.claude/tmp/worker/supplement-one-survey/result.json" 2>/dev/null)" = "complete-report-survey" ] && [ "$(jq -r '.information_attempt' "$DELEGATE_REPO/.claude/tmp/worker/supplement-one-survey/result.json" 2>/dev/null)" = "2" ] && [ "$(jq -r '.supplement_request_changed' "$DELEGATE_REPO/.claude/tmp/worker/supplement-one-survey/result.json" 2>/dev/null)" = "true" ]; then
+  ok "delegate-worker: 情報補完1回目の系譜とdigest変更を記録"
+else
+  ng "delegate-worker: 情報補完1回目の記録が不正"; cat delegate-supplement-one.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --supplement-of supplement-one-survey supplement-two-survey 'O3のruntime境界を追加調査する' > delegate-supplement-two.out 2>&1 && [ "$(jq -r '.information_attempt' "$DELEGATE_REPO/.claude/tmp/worker/supplement-two-survey/result.json" 2>/dev/null)" = "3" ]; then
+  ok "delegate-worker: 情報調査を初回含む3回まで許可"
+else
+  ng "delegate-worker: 情報調査3回目の記録が不正"; cat delegate-supplement-two.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --supplement-of supplement-two-survey supplement-three-survey 'O4の追加境界を調査する' > delegate-supplement-three.out 2>&1; then
+  ng "delegate-worker: 情報調査の4回目を許可"
+elif grep -Fq 'information survey limit reached after 3 attempts' delegate-supplement-three.out; then
+  ok "delegate-worker: 情報調査を初回含む3回で打ち切る"
+else
+  ng "delegate-worker: 情報調査上限の拒否理由が不正"; cat delegate-supplement-three.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: partial\n## Claims\n### C1\nClaim: 調査途中\nEvidence:\nInterpretation: 上限前に完了できなかった\nLimitations: O2未確認\n## Remaining\nO2'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" incomplete-outcome-survey '未完了outcomeを分類する' > delegate-incomplete-outcome.out 2>&1
+INCOMPLETE_OUTCOME_STATUS=$?
+INCOMPLETE_OUTCOME_ROOT="$DELEGATE_REPO/.claude/tmp/worker/incomplete-outcome-survey"
+if [ "$INCOMPLETE_OUTCOME_STATUS" -eq 70 ] && [ "$(jq -r '.report_status' "$INCOMPLETE_OUTCOME_ROOT/result.json" 2>/dev/null)" = "complete" ] && [ "$(jq -r '.outcome' "$INCOMPLETE_OUTCOME_ROOT/result.json" 2>/dev/null)" = "partial" ] && [ "$(jq -r '.failure_class' "$INCOMPLETE_OUTCOME_ROOT/result.json" 2>/dev/null)" = "incomplete_outcome" ]; then
+  ok "delegate-worker: 完全に受信した未完了outcomeを通信失敗と分離"
+else
+  ng "delegate-worker: 未完了outcomeの分類が不正"; cat delegate-incomplete-outcome.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 根拠範囲が不正\nEvidence:\n- `spec.md:1-999`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" invalid-evidence-survey '不正な根拠を分類する' > delegate-invalid-evidence.out 2>&1
+INVALID_EVIDENCE_STATUS=$?
+INVALID_EVIDENCE_ROOT="$DELEGATE_REPO/.claude/tmp/worker/invalid-evidence-survey"
+if [ "$INVALID_EVIDENCE_STATUS" -eq 68 ] && [ "$(jq -r '.evidence_status' "$INVALID_EVIDENCE_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.failure_class' "$INVALID_EVIDENCE_ROOT/result.json" 2>/dev/null)" = "invalid_evidence" ] && grep -Fq 'Invalid range' "$INVALID_EVIDENCE_ROOT/evidence.md"; then
+  ok "delegate-worker: 範囲外のworker根拠を失敗として保存"
+else
+  ng "delegate-worker: 不正evidenceの検出または保存が不正"; cat delegate-invalid-evidence.out
+fi
+printf '#!/bin/bash\nprintf '\''not-json\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" malformed-report-survey '壊れた応答を分類する' > delegate-malformed-report.out 2>&1
+MALFORMED_REPORT_STATUS=$?
+MALFORMED_REPORT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/malformed-report-survey"
+if [ "$MALFORMED_REPORT_STATUS" -eq 66 ] && [ "$(jq -r '.report_status' "$MALFORMED_REPORT_ROOT/result.json" 2>/dev/null)" = "malformed" ] && [ "$(jq -r '.failure_class' "$MALFORMED_REPORT_ROOT/result.json" 2>/dev/null)" = "malformed_report" ] && grep -Fxq 'not-json' "$MALFORMED_REPORT_ROOT/opencode.jsonl"; then
+  ok "delegate-worker: 壊れたJSONでもraw成果物とfailure classを保存"
+else
+  ng "delegate-worker: malformed reportの保存または分類が不正"; cat delegate-malformed-report.out
+fi
+printf '#!/bin/bash\nprintf '\''"scalar-event"\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" malformed-event-survey 'event schema不正を分類する' > delegate-malformed-event.out 2>&1
+MALFORMED_EVENT_STATUS=$?
+MALFORMED_EVENT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/malformed-event-survey"
+if [ "$MALFORMED_EVENT_STATUS" -eq 66 ] && [ "$(jq -r '.report_status' "$MALFORMED_EVENT_ROOT/result.json" 2>/dev/null)" = "malformed" ] && grep -Fxq '"scalar-event"' "$MALFORMED_EVENT_ROOT/opencode.jsonl"; then
+  ok "delegate-worker: JSON scalar eventもmalformedとしてraw保存"
+else
+  ng "delegate-worker: JSON event schema不正の保存または分類が不正"; cat delegate-malformed-event.out
+fi
 XDG_PATH_LOG="$DELEGATE_REPO/opencode-xdg-paths.log"
-printf '#!/bin/bash\nfor path in "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$TMPDIR"; do [ -d "$path" ] || exit 51; done\nprintf '\''%%s\\n'\'' "$XDG_DATA_HOME" >> "%s"\n/bin/sleep 0.1\nprintf '\''{"type":"text","text":"isolated"}\\n'\''\n' "$XDG_PATH_LOG" > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nfor path in "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$TMPDIR"; do [ -d "$path" ] || exit 51; done\nprintf '\''%%s\\n'\'' "$XDG_DATA_HOME" >> "%s"\n/bin/sleep 0.1\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: isolated\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' "$XDG_PATH_LOG" > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" parallel-xdg-a '並列状態Aを調査する' > delegate-parallel-a.out 2>&1 &
 PARALLEL_A_PID=$!
@@ -547,12 +644,21 @@ else
   ng "delegate-worker: 並列taskのOpenCode状態分離が不正"; cat delegate-parallel-a.out; cat delegate-parallel-b.out; cat "$XDG_PATH_LOG"
 fi
 rm -f "$XDG_PATH_LOG"
-printf '#!/bin/bash\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 3段階以上の制御フローネストなし\nEvidence:\n- `src/subject.ts:1-1`\nInterpretation: 対象file全体\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 mkdir -p src
 printf 'export const subject = true\n' > src/subject.ts
 git add src/subject.ts
 git commit -qm "test: nesting対象"
+printf '#!/bin/bash\ncase "$*" in *red-marker*) ;; *) exit 61 ;; esac\nprintf '\''export const subject = false\\n'\'' > src/subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- S1: Red要約に従いsrc/subject.tsを変更\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" implement "${DELEGATE_TIMEOUT_ARGS[@]}" implement-red-summary spec.md --red-summary 'command=npm-test; failure=red-marker; scenarios=S1' -- src/subject.ts > delegate-implement-red.out 2>&1 && grep -Fq 'subject = false' "$DELEGATE_REPO/.claude/tmp/worker/implement-red-summary/candidate.patch"; then
+  ok "delegate-worker: implementはRed要約を実効promptへ渡して候補を生成"
+else
+  ng "delegate-worker: implementのRed要約入力または候補生成が不正"; cat delegate-implement-red.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 3段階以上の制御フローネストなし\nEvidence:\n- `src/subject.ts:1-1`\nInterpretation: 対象file全体\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" nesting "${DELEGATE_TIMEOUT_ARGS[@]}" nesting-check src/subject.ts > delegate-nesting.out 2>&1; then
   ok "delegate-worker: nestingは追跡済み本体コードを読み取り検出"
 else
@@ -564,7 +670,9 @@ if [ -f "$NESTING_RESULT" ] && [ "$(jq -r '.mode' "$NESTING_RESULT")" = "nesting
 else
   ng "delegate-worker: nestingのresult.jsonが不正"
 fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-check 'subject.tsのboolean定数をfalseに変更する' -- src/subject.ts > delegate-errand.out 2>&1; then
+printf '#!/bin/bash\nprintf '\''export const subject = false\\n'\'' > src/subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: src/subject.tsのboolean定数をfalseへ変更\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-check 'O1: 承認済みS1とRed failure=subjectがtrueに従いsubject.tsをfalseへ変更する' -- src/subject.ts > delegate-errand.out 2>&1; then
   ok "delegate-worker: errandは一時設計書なしで限定実装を完了"
 else
   ng "delegate-worker: errandが失敗"; cat delegate-errand.out
@@ -575,7 +683,7 @@ if [ -f "$ERRAND_RESULT" ] && [ "$(jq -r '.mode' "$ERRAND_RESULT")" = "errand" ]
 else
   ng "delegate-worker: errandの一時指示またはresult.jsonが不正"
 fi
-printf '#!/bin/bash\nprintf '\''export const addedSubject = true\\n'\'' > src/added-subject.ts\nprintf '\''{"type":"text","text":"added"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nprintf '\''export const addedSubject = true\\n'\'' > src/added-subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: src/added-subject.tsを追加\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-new-file '同型に従いadded-subject.tsを追加する' -- src/added-subject.ts > delegate-errand-new.out 2>&1; then
   ok "delegate-worker: errandは既存directoryへの定型ファイル追加を許可"
@@ -602,7 +710,7 @@ mkdir -p prisma
 printf 'generator client {}\n' > prisma/schema.prisma
 git add prisma/schema.prisma
 git commit -qm "test: Prisma schema対象"
-printf '#!/bin/bash\nprintf '\''model AddedSubject {}\\n'\'' >> prisma/schema.prisma\nprintf '\''{"type":"text","text":"schema added"}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nprintf '\''model AddedSubject {}\\n'\'' >> prisma/schema.prisma\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: prisma/schema.prismaへmodelを追加\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-prisma-schema '既存規約に従いPrisma modelを追加する' -- prisma/schema.prisma > delegate-errand-prisma.out 2>&1; then
   ok "delegate-worker: errandはschema.prismaの候補patchを作成"
@@ -686,8 +794,8 @@ printf '#!/bin/bash\nprintf '\''changed ignored rule\\n'\'' > .codex/rules/ignor
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" rejected-context-mutation 'ignored ruleを調査する' > delegate-rejected-context.out 2>&1; then
   ng "delegate-worker: 読み取りsnapshotの変更を許可した"
-elif grep -Fq 'delegated model changed an ignored context file: .codex/rules/ignored.rules' delegate-rejected-context.out && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/rejected-context-mutation" ]; then
-  ok "delegate-worker: 読み取りsnapshotの変更をhash検証で拒否"
+elif grep -Fq 'delegated model changed an ignored context file: .codex/rules/ignored.rules' delegate-rejected-context.out && [ "$(jq -r '.failure_reason' "$DELEGATE_REPO/.claude/tmp/worker/.rejected-context-mutation.task/state.json" 2>/dev/null)" = 'delegated model changed an ignored context file: .codex/rules/ignored.rules' ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/rejected-context-mutation" ]; then
+  ok "delegate-worker: snapshot変更を拒否して復旧可能なfailure reasonを残す"
 else
   ng "delegate-worker: 読み取りsnapshotの変更検出が不正"; cat delegate-rejected-context.out
 fi
