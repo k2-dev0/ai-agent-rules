@@ -108,6 +108,8 @@ report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$WORKER_RUNNER" && grep -q 'HARD_BUDGET_USD="40"' "$WORKER_RUNNER" && ok "外部ワーカー予算: soft=38 hard=40" || ng "外部ワーカー予算が不正"
 grep -q 'DEFAULT_MODEL="openrouter/minimax/minimax-m3"' "$WORKER_RUNNER" && grep -Fq 'MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"' "$WORKER_RUNNER" && grep -Fq 'MODEL_ID="${MODEL#openrouter/}"' "$WORKER_RUNNER" && ok "外部ワーカーモデル: MiniMax M3を既定値として差し替え可能" || ng "外部ワーカーモデルの既定値または差し替えが不正"
 grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
+grep -q 'MISSING_REPORT_STATUS="65"' "$WORKER_RUNNER" && grep -q 'report_status:\$report_status' "$WORKER_RUNNER" && ok "worker report: 空応答を非zeroへ分類" || ng "worker report: 空応答の失敗分類が無い"
+grep -q 'XDG_DATA_HOME="\$OPENCODE_XDG_DATA_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="\$OPENCODE_XDG_STATE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="\$OPENCODE_XDG_CACHE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="\$OPENCODE_XDG_CONFIG_HOME"' "$WORKER_RUNNER" && grep -q 'TMPDIR="\$OPENCODE_TMPDIR"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
 grep -q 'SURVEY_SCOPE_COUNT="4"' "$WORKER_RUNNER" && grep -q 'SURVEY_STEPS_PER_SCOPE="3"' "$WORKER_RUNNER" && grep -q 'SURVEY_MAX_STEPS="\$((SURVEY_SCOPE_COUNT \* SURVEY_STEPS_PER_SCOPE))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 4段階ごとのagent step上限を固定" || ng "worker surveyのstep上限が不正"
 grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 明示値・理由・安全比率・固定smokeを検証して記録" || ng "worker timeout設定または理由の記録処理が不正"
 grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && grep -q 'HEAD+ignored-agent-context' "$WORKER_RUNNER" && grep -q 'context_snapshot_paths' "$WORKER_RUNNER" && ok "worker lifecycle: task状態・重複拒否・入力snapshotを記録" || ng "worker lifecycle管理が不正"
@@ -510,6 +512,41 @@ else
   ng "delegate-worker: showで旧jsonlの最終reportを復元できない"; cat delegate-show-legacy.out
 fi
 mv "$SURVEY_ROOT/report.saved" "$SURVEY_ROOT/report.md"
+printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"step_finish","timestamp":2,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" missing-report-survey '空応答の判定を調査する' > delegate-missing-report.out 2>&1
+MISSING_REPORT_STATUS=$?
+MISSING_REPORT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/missing-report-survey"
+PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show missing-report-survey > delegate-show-missing-report.out 2>&1
+SHOW_MISSING_REPORT_STATUS=$?
+if [ "$MISSING_REPORT_STATUS" -eq 65 ] && [ "$SHOW_MISSING_REPORT_STATUS" -eq 65 ] && [ "$(jq -r '.opencode_status' "$MISSING_REPORT_ROOT/result.json" 2>/dev/null)" = "0" ] && [ "$(jq -r '.status' "$MISSING_REPORT_ROOT/result.json" 2>/dev/null)" = "65" ] && [ "$(jq -r '.report_status' "$MISSING_REPORT_ROOT/result.json" 2>/dev/null)" = "missing" ] && grep -Fxq 'Delegated model did not return a final textual report.' "$MISSING_REPORT_ROOT/report.md" && grep -Fq 'report:' delegate-show-missing-report.out; then
+  ok "delegate-worker: 本文なし正常終了を失敗として成果物へ保存"
+else
+  ng "delegate-worker: 空応答の失敗分類または再表示statusが不正"; cat delegate-missing-report.out; cat delegate-show-missing-report.out
+fi
+printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"text","timestamp":2,"text":"complete report"}\\n'\''\nprintf '\''{"type":"step_finish","timestamp":3,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" complete-report-survey '正常応答の判定を調査する' > delegate-complete-report.out 2>&1 && [ "$(jq -r '.status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "0" ] && [ "$(jq -r '.report_status' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/result.json" 2>/dev/null)" = "complete" ] && grep -Fxq 'complete report' "$DELEGATE_REPO/.claude/tmp/worker/complete-report-survey/report.md"; then
+  ok "delegate-worker: stop後の最終文章をcompleteとして保存"
+else
+  ng "delegate-worker: 正常な最終文章の分類が不正"; cat delegate-complete-report.out
+fi
+XDG_PATH_LOG="$DELEGATE_REPO/opencode-xdg-paths.log"
+printf '#!/bin/bash\nfor path in "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$TMPDIR"; do [ -d "$path" ] || exit 51; done\nprintf '\''%%s\\n'\'' "$XDG_DATA_HOME" >> "%s"\n/bin/sleep 0.1\nprintf '\''{"type":"text","text":"isolated"}\\n'\''\n' "$XDG_PATH_LOG" > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" parallel-xdg-a '並列状態Aを調査する' > delegate-parallel-a.out 2>&1 &
+PARALLEL_A_PID=$!
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" parallel-xdg-b '並列状態Bを調査する' > delegate-parallel-b.out 2>&1 &
+PARALLEL_B_PID=$!
+wait "$PARALLEL_A_PID"; PARALLEL_A_STATUS=$?
+wait "$PARALLEL_B_PID"; PARALLEL_B_STATUS=$?
+XDG_PATH_COUNT=$(sort -u "$XDG_PATH_LOG" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$PARALLEL_A_STATUS" -eq 0 ] && [ "$PARALLEL_B_STATUS" -eq 0 ] && [ "$XDG_PATH_COUNT" = "2" ] && ! grep -Fq "$HOME/.local/share/opencode" "$XDG_PATH_LOG"; then
+  ok "delegate-worker: 並列taskはOpenCode data領域を共有しない"
+else
+  ng "delegate-worker: 並列taskのOpenCode状態分離が不正"; cat delegate-parallel-a.out; cat delegate-parallel-b.out; cat "$XDG_PATH_LOG"
+fi
+rm -f "$XDG_PATH_LOG"
 printf '#!/bin/bash\njq -cn --arg text "$*" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 mkdir -p src
@@ -639,8 +676,8 @@ PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" surve
 HARD_TIMEOUT_STATUS=$?
 HARD_TIMEOUT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/timeout-hard-survey"
 HARD_TIMEOUT_PID=$(sed -n '1p' "$TIMEOUT_PID_FILE")
-if [ "$HARD_TIMEOUT_STATUS" -eq 124 ] && [ "$(jq -r '.timeout_kind' "$HARD_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "hard" ] && grep -Fxq 'Delegated model did not return a final textual report.' "$HARD_TIMEOUT_ROOT/report.md" && ! grep -Fq 'partial' "$HARD_TIMEOUT_ROOT/report.md" && ! kill -0 "$HARD_TIMEOUT_PID" 2>/dev/null; then
-  ok "delegate-worker: 総時間timeoutで部分出力を最終reportへ昇格しない"
+if [ "$HARD_TIMEOUT_STATUS" -eq 124 ] && [ "$(jq -r '.timeout_kind' "$HARD_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "hard" ] && [ "$(jq -r '.report_status' "$HARD_TIMEOUT_ROOT/result.json" 2>/dev/null)" = "partial" ] && grep -Fxq 'partial' "$HARD_TIMEOUT_ROOT/report.md" && ! kill -0 "$HARD_TIMEOUT_PID" 2>/dev/null; then
+  ok "delegate-worker: 総時間timeoutでも途中文章を診断用に保持"
 else
   ng "delegate-worker: 総時間timeoutまたは部分出力の扱いが不正"; cat delegate-timeout-hard.out; cat "$HARD_TIMEOUT_ROOT/result.json"
 fi
