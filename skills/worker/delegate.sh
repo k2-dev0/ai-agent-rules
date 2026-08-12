@@ -729,8 +729,7 @@ if [ "$MODE" = "show" ]; then
     printf '%s\n' 'worker-result:' "  task-id: $TASK_ID" '  report: legacy' 'report:'
     extract_report "$RESULT_ROOT/opencode.jsonl" || fail "cannot extract legacy result report"
     if [ -s "$RESULT_ROOT/candidate.patch" ]; then
-      printf '%s\n' 'candidate.patch:'
-      cat "$RESULT_ROOT/candidate.patch" || fail "cannot read candidate patch"
+      render_artifact "candidate.patch" "$RESULT_ROOT/candidate.patch" "$MAX_RENDERED_PATCH_LINES"
     fi
   fi
   RESULT_STATUS=$(jq -er '.status' "$RESULT_ROOT/result.json") || fail "cannot read result status"
