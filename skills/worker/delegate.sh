@@ -27,6 +27,8 @@ readonly MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"
 readonly MIN_TIMEOUT_REASON_CHARACTERS="24"
 readonly SMOKE_PROMPT="hello"
 readonly SMOKE_ERROR_LINE_LIMIT="20"
+readonly MISSING_REPORT_STATUS="65"
+readonly MISSING_REPORT_MESSAGE="Delegated model did not return a final textual report."
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
 readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 
@@ -66,19 +68,26 @@ if [ -n "$MODEL_VARIANT" ] && [[ ! "$MODEL_VARIANT" =~ ^[A-Za-z0-9][A-Za-z0-9._-
 fi
 
 extract_report() {
+  jq -rs --arg missing "$MISSING_REPORT_MESSAGE" '
+    def nonempty_text:
+      select(.type == "text")
+      | (.part.text // .text // empty)
+      | select(type == "string" and test("[^[:space:]]"));
+    ([.[] | nonempty_text] | last // $missing)
+  ' "$1"
+}
+
+report_status() {
   jq -rs '
     def nonempty_text:
       select(.type == "text")
       | (.part.text // .text // empty)
       | select(type == "string" and test("[^[:space:]]"));
-    ([.[] | select(.type == "step_start" or .type == "step_finish")] | length) as $step_events
-    | ([.[] | select(.type == "step_finish" and .part.reason == "stop") | .timestamp] | last) as $stop_at
-    | if $step_events == 0 then
-        ([.[] | nonempty_text] | last // "Delegated model did not return a final textual report.")
-      elif $stop_at == null then
-        "Delegated model did not return a final textual report."
-      else
-        ([.[] | select((.timestamp // 0) <= $stop_at) | nonempty_text] | last // "Delegated model did not return a final textual report.")
+    ([to_entries[] | select(.value | nonempty_text) | .key] | last) as $text_at
+    | ([to_entries[] | select(.value.type == "step_finish" and .value.part.reason == "stop") | .key] | last) as $stop_at
+    | if $text_at == null then "missing"
+      elif $stop_at == null or $stop_at < $text_at then "partial"
+      else "complete"
       end
   ' "$1"
 }
@@ -383,6 +392,8 @@ if [ "$MODE" = "show" ]; then
     printf '%s\n' 'candidate.patch:'
     cat "$RESULT_ROOT/candidate.patch" || fail "cannot read candidate patch"
   fi
+  RESULT_STATUS=$(jq -er '.status' "$RESULT_ROOT/result.json") || fail "cannot read result status"
+  [ "$RESULT_STATUS" -eq 0 ] || exit "$RESULT_STATUS"
   exit 0
 fi
 
@@ -409,10 +420,16 @@ fi
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-openrouter.XXXXXX") || fail "cannot create temporary directory"
 WORKTREE="$TEMP_ROOT/worktree"
 CURL_CONFIG="$TEMP_ROOT/curl.conf"
+OPENCODE_XDG_DATA_HOME="$TEMP_ROOT/xdg-data"
+OPENCODE_XDG_STATE_HOME="$TEMP_ROOT/xdg-state"
+OPENCODE_XDG_CACHE_HOME="$TEMP_ROOT/xdg-cache"
+OPENCODE_XDG_CONFIG_HOME="$TEMP_ROOT/xdg-config"
+OPENCODE_TMPDIR="$TEMP_ROOT/opencode-tmp"
 WORKTREE_ADDED=0
 RESULT_ROOT=""
 RESULT_STAGING=""
 TIMEOUT_MARKER="$TEMP_ROOT/timeout.kind"
+mkdir -p "$OPENCODE_XDG_DATA_HOME" "$OPENCODE_XDG_STATE_HOME" "$OPENCODE_XDG_CACHE_HOME" "$OPENCODE_XDG_CONFIG_HOME" "$OPENCODE_TMPDIR" || fail "cannot create isolated OpenCode state directories"
 
 cleanup() {
   local exit_status=$?
@@ -607,6 +624,11 @@ OPENCODE_COMMAND+=("$PROMPT")
 set -m
 env -i \
   HOME="$HOME" \
+  XDG_DATA_HOME="$OPENCODE_XDG_DATA_HOME" \
+  XDG_STATE_HOME="$OPENCODE_XDG_STATE_HOME" \
+  XDG_CACHE_HOME="$OPENCODE_XDG_CACHE_HOME" \
+  XDG_CONFIG_HOME="$OPENCODE_XDG_CONFIG_HOME" \
+  TMPDIR="$OPENCODE_TMPDIR" \
   PATH="$PATH" \
   LANG="${LANG:-C.UTF-8}" \
   TERM="${TERM:-dumb}" \
@@ -652,6 +674,10 @@ if [ "$MODE" = "research" ] || [ "$MODE" = "implement" ]; then
 fi
 
 extract_report "$OPENCODE_OUTPUT" > "$RESULT_STAGING/report.md" || fail "cannot extract delegated report"
+REPORT_STATUS=$(report_status "$OPENCODE_OUTPUT") || fail "cannot classify delegated report"
+if [ "$FINAL_STATUS" -eq 0 ] && [ "$REPORT_STATUS" = "missing" ]; then
+  FINAL_STATUS="$MISSING_REPORT_STATUS"
+fi
 
 if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
   git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
@@ -707,6 +733,7 @@ jq -n \
   --arg model "$MODEL" \
   --arg model_variant "$MODEL_VARIANT" \
   --arg report_file "report.md" \
+  --arg report_status "$REPORT_STATUS" \
   --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --argjson opencode_status "$OPENCODE_STATUS" \
   --argjson final_status "$FINAL_STATUS" \
@@ -725,7 +752,7 @@ jq -n \
   --argjson usage_current "$CURRENT_USAGE" \
   --arg limit_reset "$KEY_RESET" \
   --argjson changed_paths "$CHANGED_PATHS_JSON" \
-  '{mode:$mode,task_id:$task_id,model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),opencode_status:$opencode_status,status:$final_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,source_snapshot:(if $context_snapshot_paths | length > 0 then "HEAD+ignored-agent-context" else "HEAD" end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),opencode_status:$opencode_status,status:$final_status,report_status:$report_status,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,source_snapshot:(if $context_snapshot_paths | length > 0 then "HEAD+ignored-agent-context" else "HEAD" end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
@@ -738,4 +765,5 @@ TASK_FINISHED=1
 printf 'result: %s\n' "$RESULT_ROOT"
 printf '%s\n' 'report:'
 cat "$RESULT_ROOT/report.md"
+[ "$FINAL_STATUS" -ne "$MISSING_REPORT_STATUS" ] || printf 'delegate: final textual report is missing\n' >&2
 [ "$FINAL_STATUS" -eq 0 ] || exit "$FINAL_STATUS"

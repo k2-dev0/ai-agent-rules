@@ -118,7 +118,7 @@ $bootstrap codex
 
 workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
-surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最終文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。再表示と候補patchの確認には`bash [skills_root]/worker/delegate.sh show <task-id>`を使える。
+surveyは実行ステップ数を固定上限で打ち切り、上限到達時もOpenCodeに調査済み範囲と残件を文章で返させる。実行器は最後の文章を`report.md`へ抽出して標準出力にも返すため、上位モデルが成果物を探す必要はない。本文なしの正常終了は`status: 65`の応答失敗とし、停止eventなしの途中文章も診断用に保持する。再表示と候補patchの確認には`bash [skills_root]/worker/delegate.sh show <task-id>`を使える。
 
 `survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。通常値はlowがhard 30分・idle 600秒、mediumがhard 45分・idle 900秒、highがhard 60分・idle 900秒で、pollは30秒とする。timeoutは上限なので正常終了を遅らせない。限定調査や再調査でも勝手に短縮せず、ユーザーが明示的に短い上限を指定した場合だけ基準値を下回れる。
 
@@ -153,7 +153,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellを外部ワーカーへ許可しない。
 
-隔離worktreeは現在のHEADを基準にし、`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`を`HEAD+ignored-agent-context`にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。
+隔離worktreeは現在のHEADを基準にし、`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`を`HEAD+ignored-agent-context`にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
 テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
 

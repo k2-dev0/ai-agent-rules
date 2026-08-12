@@ -13,7 +13,7 @@ workerを呼ぶスキルは、この文書を全文読んでから実行する�
 | 承認済み範囲の初回実装 | worker |
 | 候補返却後のレビュー・修正・テスト・Git | 上位モデル。レビューや修正を外部ワーカーへ戻さない |
 
-固定実行器より先、または実行中に、同じ仕事をAgent / subagentへ並行委任しない。
+固定実行器より先、または実行中に、同じ仕事をAgent / subagentへ並行委任しない。複数workerを並列実行しても、固定実行器はOpenCodeのdata・state・cache・config・tmp領域をtaskごとの一時directoryへ分離し、共有SQLiteを使わせない。
 
 workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とする。M3自身の既定であるadaptive reasoningを使い、モデル固有のvariantを固定しない。別モデルを試す場合だけ、実行前に`DELEGATE_MODEL=openrouter/<provider>/<model>`を設定する。variantが必要なモデルでは`DELEGATE_MODEL_VARIANT=<variant>`も明示する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
@@ -61,4 +61,4 @@ bash [skills_root]/worker/delegate.sh <mode> \
 
 上位モデル相当のAgent / subagentを利用できる場合、外部ワーカー失敗後の調査は読み取り専用、実装は許可パス限定で優先する。利用できなければオーケストレーター自身が担当する。
 
-成功時も自己申告ではなく`result.json`、`report.md`、必要なら`candidate.patch`を確認する。`status != 0`または`timed_out: true`の候補patchは診断専用とする。
+成功時も自己申告ではなく`result.json`、`report.md`、必要なら`candidate.patch`を確認する。最終textが無ければOpenCodeの終了statusが0でも`status: 65`、`report_status: missing`として応答失敗にする。`step_finish(reason=stop)`が無くても最後のtextは失敗診断のため`report.md`へ保持し、`report_status: partial`とする。`status != 0`または`timed_out: true`の候補patchは診断専用とする。
