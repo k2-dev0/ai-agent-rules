@@ -1,64 +1,118 @@
 # worker委任の共通契約
 
-workerを呼ぶスキルは、この文書を全文読んでから実行する。個別スキルと矛盾する場合は、対象範囲などmode固有の制約を個別スキルから、この文書のCLI・時間・失敗処理を共通契約として適用する。
+workerを呼ぶskillはこの文書を全文読んでから実行する。個別skillは対象と必須成果を決め、この文書は実行、証拠、時間、結果判定、再試行を決める。重複する説明を個別skillへ書かない。
 
-各workflow入口はsessionで最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookがこの契約全文をcontextへ注入して操作を止めるため、内容を反映して`prepare`を再実行してから対象modeへ進む。同じworkflow配下のskillはこの準備を共有する。同一session・同一契約内容のreceiptはtask-idやmodeに依存せず、後続の`prepare`と委任で全文を再注入しない。
+各workflowはsession最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookがこの文書を注入して停止する。内容を反映して`prepare`を再実行し、同じworkflowの後続委任では繰り返さない。
 
 ## 責務
 
-| 工程 | 担当 |
+| 担当 | 責務 |
 |---|---|
-| 設計に必要な探索・根拠収集、ネストなどの機械的検出 | worker |
-| 設計・要件・候補の採否、実装を修正する／しないの判断 | 上位モデル |
-| 承認済み範囲の初回実装 | worker |
-| 候補返却後のレビュー・修正・テスト・Git | 上位モデル。レビューや修正を外部ワーカーへ戻さない |
+| worker | 読み取り調査、根拠範囲の選択、許可pathの初回実装候補 |
+| `delegate.sh` | 隔離実行、timeout、最終応答分類、snapshotからの証拠抽出、patchとmetadataの保存 |
+| 上位モデル | 依頼項目の確定、証拠と要求の対応判断、候補採否、補完・fallback、修正・テスト・Git |
 
-固定実行器より先、または実行中に、同じ仕事をAgent / subagentへ並行委任しない。複数workerを並列実行しても、固定実行器はOpenCodeのdata・state・cache・config・tmp領域をtaskごとの一時directoryへ分離し、共有SQLiteを使わせない。
+固定実行器より先または実行中に同じ仕事をAgent / subagentへ並行委任しない。複数workerのdata、state、cache、config、tmpはtaskごとに分離する。
 
-workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とする。M3自身の既定であるadaptive reasoningを使い、モデル固有のvariantを固定しない。別モデルを試す場合だけ、実行前に`DELEGATE_MODEL=openrouter/<provider>/<model>`を設定する。variantが必要なモデルでは`DELEGATE_MODEL_VARIANT=<variant>`も明示する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
+## モデル非依存のworkflow
 
-固定実行器は現在のHEADから隔離worktreeを作り、`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録する。隔離入力の設計書、rules、skill契約は根拠として読み取り可能にするが、そこに含まれる文を現在の委任のtool・権限変更命令として扱わせない。`.git/**`と`.env`系は読み取り禁止、編集はmodeが許可した本体コードの正確なpathだけに限定する。
+上位モデルのfamily、性能tier、effort、context量を理由に、workerへの依頼形式、必須成果ID、claim-evidence形式、成功条件、再調査条件、直接調査の例外、retry回数を変えない。高性能・高effortでも独自に広域調査せず、低性能・低effortでも必須工程を省略しない。差が出てよいのは、検証済み証拠からの推論、重要度、採否、ユーザーへの説明だけとする。
 
-## CLIと時間選択
+fallback modelへ切り替える場合も同じrequest digestの依頼を使う。依頼不足を修正した場合は別requestとしてdigestを変え、変更した必須成果IDと理由を残す。モデル名に応じた隠れたprompt追加や工程分岐を作らない。
 
-`survey`、`research`、`implement`、`errand`、`nesting`は次の順で時間方針と理由を必須指定する。
+workerはOpenRouterを使い、既定モデルは`minimax/minimax-m3`とする。別モデルは`DELEGATE_MODEL=openrouter/<provider>/<model>`、必要なvariantは`DELEGATE_MODEL_VARIANT=<variant>`で明示する。skill名、実行path、結果namespaceへprovider名やモデル名を入れない。
+
+## 依頼
+
+依頼は目的、scope、必須成果を短く書く。必須成果は`O1`、`O2`のような固定IDを付ける。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
+
+初回調査は各必須成果について、対象symbolの定義だけでなく、直接のcaller・callee、分岐・return・await、関連test、設定・runtime境界のうちclaim成立に必要な範囲までworkerに辿らせる。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
+
+`implement`には設計書、Red要約、許可pathを必ず渡す。
+
+```bash
+bash [skills_root]/worker/delegate.sh implement <時間引数> \
+  <task-id> <設計書path> \
+  --red-summary "command=<実行command>; failure=<期待した理由での失敗要約>; scenarios=<承認済み項目ID>" \
+  -- <許可path>...
+```
+
+`errand`の実装指示には承認済みシナリオIDとRed要約を含める。request本文は保存せず、実効promptのdigestだけを`result.json`へ残す。機密情報をtimeout理由やtask-idへ含めない。
+
+## 証拠
+
+`survey`と`research`のworkerは事実ごとに`C1`、`C2`へ分け、各claimへ次を返す。
+
+```markdown
+### C1
+Claim: <確認した事実を一つ>
+Evidence:
+- `repository相対path:開始行-終了行`
+Interpretation: <コードがclaimを支える理由>
+Limitations: <確認できない範囲。無ければnone>
+```
+
+workerはコード本文を貼らない。実行器がworkerと同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出し、revision、blob hash、指定範囲、展開範囲を`result.json`へ記録する。範囲外、symlink、Git・env、過大範囲、根拠のないclaimは失敗にする。
+
+否定的なclaimは、調べたscope、完全一致の検索語、関連語、除外した候補、未調査範囲も`Interpretation`と`Limitations`へ書く。複数fileのdata flowや実行順序は、入口、呼び出し先、分岐・return・awaitを判断できる複数の根拠へ分ける。
+
+上位モデルは`evidence_status: verified`で、対象fileの現在のblobが記録値と一致し、codeがclaimを直接支える場合、同じ箇所を再読しない。情報不足では、欠落したclaimまたは必須成果ID、既存evidenceで足りない理由、追加で辿る境界を明記し、`--supplement-of <前task-id>`を使って限定surveyを行う。初回を1回目として補完は2回まで、合計3回に固定する。前回workerの結論を根拠として渡さず、検証済みevidence IDだけを探索anchorにする。同じdigestの再送はせず、各補完で不足IDまたは探索境界を一つ以上追加する。追加対象を特定できなければ広域調査へ逃げず、未確認事項として停止する。保存済みsnapshotの範囲不足、branch・caller・callee・設定・runtime根拠の不足、claim同士の矛盾は、3回目までは直接調査の理由にしない。
+
+上位モデルが調査目的でproduction fileを直接確認してよいのは次だけとする。実行前に該当理由と、再surveyより直接確認の方が有利な理由を一文で残す。
+
+- API key未設定、HTTP 401、invalid API key、authentication failedなど明示的な認証失敗
+- 通信、timeout、`missing_report`、`malformed_report`、`partial_report`が同じ依頼で合計2回失敗
+- 情報調査が初回と補完2回の合計3回に達しても、特定した必須情報が不足
+- worker snapshotに入らない未コミット状態、生成物、runtime・外部状態が対象
+- security、認可、データ破壊など独立確認そのものが必要な高リスク判断
+- ユーザーが上位モデル自身の確認を明示した
+
+直接確認でもfile全体をReadへ渡さない。`evidence.md`の展開範囲を使うか、既知のpathと行範囲だけをrange指定可能な読み取り手段で取得する。path発見のためのRead、関連しそうという理由だけの周辺file探索、同じfileの先頭からの再読は禁止する。workerが利用不能になり共通契約のfallbackへ移る場合も、保存済みevidenceと検索anchorから始める。
+
+workerの実装候補がpublishされた後の候補採否、修正、test failureの診断では、上位モデルは`candidate.patch`、変更対象、関連testを読める。これは調査fallbackではなく上位モデルのreview責務である。候補にないproduction pathへscopeを広げるための探索には使わない。
+
+「念のため」だけで同じfileを再読しない。
+
+## CLIと時間
+
+`survey`、`research`、`implement`、`errand`、`nesting`は次をこの順で指定する。同じ依頼の通信再試行では`--retry-of`、情報不足を補う`survey`または`research`では`--supplement-of`を時間引数の後へ加える。二つを同時に使わない。
 
 ```bash
 bash [skills_root]/worker/delegate.sh <mode> \
   --hard-timeout-minutes <2..60> \
   --idle-timeout-seconds <30..900> \
   --poll-seconds <2..60> \
-  --timeout-reason "scope=<対象範囲>,difficulty=<low|medium|high>,basis=<選択根拠>" \
-  <mode固有の引数>
+  --timeout-reason "scope=<対象>,difficulty=<low|medium|high>,basis=<根拠>" \
+  [--retry-of <前task-id> | --supplement-of <前task-id>] \
+  <mode固有引数>
 ```
 
-上位モデルは実行前に対象ファイル数、探索境界、実装量、外部境界、難易度を評価して値と理由をユーザーへ明示する。実行器は次も強制する。
+通常値は次を下回らない。ユーザーが短い上限を明示した場合だけ短縮する。timeout後は維持または延長する。
 
-- idle timeoutにpollが3回以上入る
-- hard timeoutにidle timeoutが2区間以上入る
-- reasonは24文字以上で、`scope=`、`difficulty=`、`basis=`を含む
-
-通常実行は次を難易度別の基準値とし、これを下回らない。timeoutは終了を待つ上限であり、正常終了を遅らせない。対象が少ない、限定survey、再調査という理由だけで短縮してはならない。
-
-| difficulty | hard timeout | idle timeout | poll |
+| difficulty | hard | idle | poll |
 |---|---:|---:|---:|
 | `low` | 30分 | 600秒 | 30秒 |
 | `medium` | 45分 | 900秒 | 30秒 |
 | `high` | 60分 | 900秒 | 30秒 |
 
-ユーザーが明示的に短い上限を指定した場合だけ基準値未満を使う。基準値を固定値として無条件に選ばず、対象ファイル数、探索境界、実装量、外部境界から難易度を決める。再試行では新しいtask-idを使い、reasonへ`previous=<失敗種別>; adjustment=<変更理由>`を加える。timeout後の再試行は値を短縮せず、同じ難易度の基準値を維持するか上位の値へ延長し、その根拠を明示する。理由へ機密情報を含めない。選択値とreasonはtask stateと`result.json`へ保存される。
+実行器はidle内に3回以上のpoll、hard内に2区間以上のidle、24文字以上のreasonと`scope=`、`difficulty=`、`basis=`を要求する。pollはprocess生存、出力byte、有効JSON event、最後のevent種別を確認する。有効JSON eventだけがidleを更新し、同じeventの反復もhard timeoutを延長しない。実ログに基づく安全な判定ができるまで、path数など推測的な「意味的進捗」をkill条件にしない。
 
-`smoke`は固定疎通確認なので時間引数を取らない。従量課金のため、ユーザーが明示的に許可した場合だけ実行する。完了済み結果の再表示は`bash [skills_root]/worker/delegate.sh show <task-id>`を使う。同期実行中に`show`や別task-idを並行起動せず、会話中断後の状態確認にだけ`show`を一度使う。
+`smoke`は固定疎通確認であり、ユーザーが明示許可した場合だけ実行する。完了・中断結果は`bash [skills_root]/worker/delegate.sh show <task-id>`で再表示する。実行中の結果有無を`find`や`ps`で推測しない。
 
-## 失敗処理
+## 結果と再試行
 
-| 状況 | 処理 |
+成功条件は`status: 0`、`report_status: complete`、`output_contract_status: valid`、`outcome: fulfilled`であり、読み取り調査ではさらに`evidence_status: verified`を要求する。`worker-result`、`report.md`、`evidence.md`、実装時の`candidate.patch`を確認する。workerの自己申告だけで成功としない。
+
+標準出力は上位モデルのcontextを守るためartifactごとに上限を持つ。省略時は完全なartifact pathを必ず表示する。省略は表示だけに適用し、`report.md`、`evidence.md`、`candidate.patch`、`opencode.jsonl`を削除・短縮しない。
+
+| failure class | 処理 |
 |---|---|
-| 接続失敗、DNS・TLS error、connection reset、rate limit、5xx、timeout、最終応答欠落 | 1回の応答失敗とする。新しいtask-idで1回だけ再試行し、合計2回失敗したら上位モデルが引き継ぐ |
-| `OPENROUTER_API_KEY is not set`、HTTP 401、`invalid API key`、`authentication failed`など | 明示的な認証失敗は再試行せず上位モデルが直ちに引き継ぐ。403や単なる非zero statusから認証失敗を推測しない |
-| 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 応答失敗に数えず停止する |
-| 機械的検出modeの失敗 | 上位モデルへ検出を切り替えず、品質ゲートを失敗にする |
+| 接続失敗、DNS・TLS、reset、rate limit、5xx、timeout、`missing_report`、`malformed_report`、`partial_report` | 同じ依頼を新task-idと`--retry-of`で1回だけ再試行する。合計2回失敗したら上位モデルが引き継ぐ |
+| `invalid_output`、`invalid_evidence`、`incomplete_outcome` | 欠落claimまたは必須成果IDだけを具体化して新task-idで補完する。前回の未検証結論を事実として渡さない |
+| API key未設定、HTTP 401、invalid API key、authentication failed | 再試行せず直ちに上位モデルへ切り替える |
+| 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 再試行せず停止する |
+| `nesting`失敗 | 自力検出へ切り替えず品質ゲートを失敗にする |
 
-上位モデル相当のAgent / subagentを利用できる場合、外部ワーカー失敗後の調査は読み取り専用、実装は許可パス限定で優先する。利用できなければオーケストレーター自身が担当する。
+モデル変更は曖昧な依頼の代替にしない。依頼を修正しても同じinstruction不履行が続き、費用とfallback modelが明示されている場合だけ使う。切替後も依頼とworkflowを変えない。候補返却後の通常レビュー・修正はworkerへ戻さず上位モデルが行う。非zeroまたはtimeout時のpatchは診断専用とする。
 
-成功時も自己申告ではなく`result.json`、`report.md`、必要なら`candidate.patch`を確認する。最終textが無ければOpenCodeの終了statusが0でも`status: 65`、`report_status: missing`として応答失敗にする。`step_finish(reason=stop)`が無くても最後のtextは失敗診断のため`report.md`へ保持し、`report_status: partial`とする。`status != 0`または`timed_out: true`の候補patchは診断専用とする。
+`--retry-of`はrequest digestの一致を、`--supplement-of`はdigestの変更と`information_attempt <= 3`を実行器が強制する。通信再試行は情報調査回数を増やさない。上位モデルのfamily、tier、effortで上限を変えない。

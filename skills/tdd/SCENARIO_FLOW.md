@@ -15,16 +15,17 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 必須の調査パケット
 
-実装前のsurveyでは、reportだけから[agent_name]がシナリオとテスト資産を作れるよう次を返させる。
+実装前のsurveyでは、共通委任契約のclaim-evidence形式で次の必須成果IDを返させる。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
 
-- 重要な根拠の`file:line`と判断に必要な最小限の抜粋
-- import元、export名、関数signature、型、enum・定数の実値
-- 最寄りの既存test・helper・fixture・seedの接続方法と模倣に必要な構造
-- DB model・table・列型、日付と時刻の扱い、外部境界の観測方法
-- 実在する検証command、cwd、必要な環境・guard・初期化順
-- 読めなかったpath、未確認事項、推測を分けた残件一覧
+- `O1`: import元、export名、関数signature、型、enum・定数の実値
+- `O2`: 最寄りの既存test・helper・fixture・seedの接続方法と模倣に必要な構造
+- `O3`: DB model・table・列型、日付と時刻の扱い、外部境界の観測方法
+- `O4`: 実在する検証command、cwd、必要な環境・guard・初期化順
+- `O5`: 読めなかったpath、未確認事項、推測を分けた残件一覧
 
-各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。正常終了したreportでも必須情報が足りなければ、未解決項目だけを限定surveyへ戻す。
+各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でもO1〜O5が足りなければ、`--supplement-of`で欠落IDだけを補完する。補完は2回、初回を含め合計3回までとする。
+
+初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 
 ## 1. シナリオを一括承認する
 
@@ -57,7 +58,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 4. workerへ初回実装を委任する
 
-呼び出し元が指定したmodeへ、実装入力、Redの要約、許可pathを渡す。workerにはshell、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]はworkerの最初の応答前にstub、雛形、部分実装を作らず、共通委任契約のfallback条件を満たした場合だけ初回実装を引き継ぐ。
+呼び出し元が指定したmodeへ、実装入力、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、許可pathを渡す。`implement`は`--red-summary`を省略しない。workerにはshell、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]はworkerの最初の応答前にstub、雛形、部分実装を作らず、共通委任契約のfallback条件を満たした場合だけ初回実装を引き継ぐ。
 
 ## 5. 相談を処理する
 

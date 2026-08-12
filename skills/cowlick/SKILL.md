@@ -45,7 +45,7 @@ mkdir -p draft-prompt
 
 ### コードベース調査
 
-各設計書をworkerの`research`へ1枚ずつ渡す。コード、テスト、ドラフトは変更させず、次を`file:line`の根拠、不明点、設計リスクとともに探させる。
+各設計書をworkerの`research`へ1枚ずつ渡す。コード、テスト、ドラフトは変更させず、次を共通契約のclaim-evidence、不明点、設計リスクとともに探させる。
 `research`は必ず`bash [skills_root]/worker/delegate.sh research`で実行する。
 
 - 設計書ごと削除できる既存経路
@@ -53,7 +53,7 @@ mkdir -p draft-prompt
 - 既存のdeployment、scheduling、failure recovery pattern
 - 新設要素が生んだ失敗モードと緩和策をまとめて消せる反証
 
-共通契約の代替調査まで使えない場合は、理由と未調査範囲を含む`research_blocked`をmeetingへ返す。重要な根拠は[agent_name]が実ファイルで再確認する。要件revisionと異なる判断が必要なら、選択肢、挙動差、推奨を含む`consultation_required`をmeetingへ返す。
+共通契約の代替調査まで使えない場合は、理由と未調査範囲を含む`research_blocked`をmeetingへ返す。検証済みevidenceがclaimを直接支える場合は同じ箇所を再読しない。要件revisionと異なる判断が必要なら、選択肢、挙動差、推奨を含む`consultation_required`をmeetingへ返す。
 
 調査後に全設計書を横断し、各新設境界とglobal/shared変更が明示要件または既存制約へ直接対応し、基準案では満たせないことを確認する。設計選択同士にしか依存しない要素を残さない。Changesが実装時の再設計を必要とせず、重要な分岐・式・順序・契約を保持していることも確認する。満たせばファイル名と内容で識別できるdraft revisionと`draft_ready`を返して停止し、ponytailやapplyへ自動で進まない。
 

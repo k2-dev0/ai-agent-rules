@@ -46,17 +46,19 @@ hooks:
 
 - 対象設計書1枚と`from-prompt`で必要なindex 1枚
 - 今回変更するテスト資産そのもの
-- workerが返した`result.json`、`report.md`、`candidate.patch`、`opencode.jsonl`
+- workerが返した`result.json`、`report.md`、`evidence.md`、`candidate.patch`、`opencode.jsonl`
 - [agent_name]自身がこの実行で作成したファイル
 
-この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。workerの`file:line`はreportの監査根拠であって全件再読の許可ではない。import、型、列名、fixture形式、実行commandが足りなければ、推測や直接確認をせず限定surveyへ戻す。テスト実行のdiagnosticと、[agent_name]が変更するテスト資産の読み直しは探索に含めない。
+この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。`evidence_status: verified`のコードがclaimを直接支え、blobが現在も一致する場合は同じ箇所を再読しない。import、型、列名、fixture形式、実行commandが足りなければ、推測や直接確認をせず欠落IDの限定surveyへ戻す。テスト実行のdiagnosticと、[agent_name]が変更するテスト資産の読み直しは探索に含めない。
 
 [agent_name]が直接調査へ切り替えてよいのは次だけとする。
 
 1. 共通委任契約の応答失敗・認証失敗によるfallback条件が成立した
-2. [agent_name]またはユーザーがreportの特定claimへ具体的な疑義を示した
+2. worker snapshotに入らない未コミット状態、生成物、runtime・外部状態が対象である
+3. 情報調査が初回と補完2回の合計3回に達しても必須情報が不足した、または共通契約どおり再試行しても委任経路が利用不能である
+4. 高リスク判断で独立確認そのものが必要、またはユーザーが上位モデル自身の確認を明示した
 
-疑義にはreport内の矛盾、根拠行の欠落、設計書との不一致、test diagnosticとclaimの衝突を含む。単なる情報不足や「念のため」は疑義に含めず限定surveyへ戻す。疑義を検証するときは、疑わしいclaim、疑義の根拠、読むpathまたは範囲を先にユーザーへ明示し、その確認に必要な最小範囲だけを直接読む。正常終了したが不完全なreportを[agent_name]のRead / Grep / Glob / shell検索で補完しない。
+report内の矛盾、evidence欠落、claimと抽出コードの不一致、snapshot不一致、設計書との不一致、test diagnosticとの衝突は、欠落claim、既存evidenceで足りない理由、追加境界を指定し、`--supplement-of`で初回を含む合計3回まで限定surveyを行う。3回目までは保存範囲の不足自体を直接確認の理由にしない。直接確認するときは理由と再surveyより有利な理由を残し、`evidence.md`または既知の行範囲だけを読む。全file Read、path発見のためのRead、正常終了した不完全reportの通常探索による補完は禁止する。
 
 ## 実行フロー
 
@@ -64,7 +66,7 @@ hooks:
 
 選んだ設計書の対象ファイルを、テスト資産、workerへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。委任対象pathまたは変更予定のテスト資産に未コミット変更があれば停止する。
 
-機能名と、今回変更する本体コードおよび`schema.prisma`の相対pathを確定し、変更前に次を1回実行する。新規pathはまだ存在しなくてよい。設計書path modeの機能名は`branch-<機能名>-prompt.md`から得る。
+機能名と、今回変更する本体コードおよび`schema.prisma`の相対pathを承認済み設計書または検証済みsurveyから確定し、変更前に次を1回実行する。pathを得るためにproduction fileを読まない。新規pathはまだ存在しなくてよい。設計書path modeの機能名は`branch-<機能名>-prompt.md`から得る。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
@@ -76,7 +78,7 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 
 workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
 
-設計書を要求根拠としてworkerの`survey`へ委任し、共通フローの必須調査パケットを返させる。[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。`result.json`が正常終了し、`report.md`の残件一覧が空で、調査パケットが揃った場合だけ進む。不足は項目を絞った新しいsurveyへ戻す。
+設計書を要求根拠としてworkerの`survey`へ委任し、共通フローのO1〜O5を返させる。[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。共通契約の成功条件を満たし、残件が空で、O1〜O5が揃った場合だけ進む。不足は欠落IDだけの新しいsurveyへ戻す。
 
 ### 3. 共通のシナリオ駆動実装フローを完了する
 
