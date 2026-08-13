@@ -24,9 +24,9 @@ workerはOpenRouterを使い、既定モデルは`minimax/minimax-m3`とする�
 
 ## 依頼
 
-依頼は目的、scope、必須成果を短く書く。必須成果は`O1`、`O2`のような固定IDを付ける。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
+依頼は目的、scope、必須成果を短く書く。初回`survey`は変更判断に直結する最大6 claim（目安4〜6）へ縮約し、`C1`、`C2`の固定IDを付ける。小さい依頼へdata flow全体、同型実装、全test資産、DB・schema、全環境設定、全検証command、runtime・初期化順を一括要求しない。各claimには確認対象を一つだけ書き、不要なschedule、handler、HTTP、設定、DB、schema、migration、test基盤などを除外scopeとして列挙する。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
 
-初回調査は各必須成果について、対象symbolの定義だけでなく、直接のcaller・callee、分岐・return・await、関連test、設定・runtime境界のうちclaim成立に必要な範囲までworkerに辿らせる。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
+初回調査は各claimを直接立証する最小境界だけをworkerに辿らせる。対象symbolごとにcaller・callee、分岐・return・await、関連test、設定・runtimeを一律に要求しない。必要な情報が揃った時点を「C1〜C4の各claimへ1件以上の直接根拠があり、未確認事項がRemainingへ分離された」など具体的に定義する。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
 
 `implement`には設計書、Red要約、許可pathを必ず渡す。
 
@@ -54,9 +54,19 @@ Limitations: <確認できない範囲。無ければnone>
 
 workerはコード本文を貼らない。実行器がworkerと同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出し、revision、blob hash、指定範囲、展開範囲を`result.json`へ記録する。範囲外、symlink、Git・env、過大範囲、根拠のないclaimは失敗にする。
 
+`Evidence`は各claim 1〜3範囲、全claimで最大20範囲、推奨12範囲以下にする。次の形式と完全一致させ、コロンの直後へ空白を入れない。
+
+```markdown
+- `path/to/file.ts:10-20`
+```
+
+各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は最大6 claimとし、実行器が件数、順序、Evidence形式を検証する。
+
 否定的なclaimは、調べたscope、完全一致の検索語、関連語、除外した候補、未調査範囲も`Interpretation`と`Limitations`へ書く。複数fileのdata flowや実行順序は、入口、呼び出し先、分岐・return・awaitを判断できる複数の根拠へ分ける。
 
 上位モデルは`evidence_status: verified`で、対象fileの現在のblobが記録値と一致し、codeがclaimを直接支える場合、同じ箇所を再読しない。情報不足では、欠落したclaimまたは必須成果ID、既存evidenceで足りない理由、追加で辿る境界を明記し、`--supplement-of <前task-id>`を使って限定surveyを行う。初回を1回目として補完は2回まで、合計3回に固定する。前回workerの結論を根拠として渡さず、検証済みevidence IDだけを探索anchorにする。同じdigestの再送はせず、各補完で不足IDまたは探索境界を一つ以上追加する。追加対象を特定できなければ広域調査へ逃げず、未確認事項として停止する。保存済みsnapshotの範囲不足、branch・caller・callee・設定・runtime根拠の不足、claim同士の矛盾は、3回目までは直接調査の理由にしない。
+
+調査内容が揃っていて`invalid_output`または`invalid_evidence`だけが残る場合は、情報補完をやり直さず、同じmodeへ`--repair-of <前task-id>`と新task-idだけを渡す。実行器は親reportと機械検証結果だけをworkerへ見せ、repositoryのRead、Grep、Glob、LSPを拒否する。形式修正は1回までで、`information_attempt`を増やさない。親reportにない事実が必要なら追加せず`Outcome: partial`へ落とす。
 
 上位モデルが調査目的でproduction fileを直接確認してよいのは次だけとする。実行前に該当理由と、再surveyより直接確認の方が有利な理由を一文で残す。
 
@@ -75,7 +85,7 @@ workerの実装候補がpublishされた後の候補採否、修正、test failu
 
 ## CLIと時間
 
-`survey`、`research`、`implement`、`errand`、`nesting`は次をこの順で指定する。同じ依頼の通信再試行では`--retry-of`、情報不足を補う`survey`または`research`では`--supplement-of`を時間引数の後へ加える。二つを同時に使わない。
+`survey`、`research`、`implement`、`errand`、`nesting`は次をこの順で指定する。同じ依頼の通信再試行では`--retry-of`、情報不足を補う`survey`または`research`では`--supplement-of`、形式だけを直す場合は`--repair-of`を時間引数の後へ加える。三つを同時に使わない。
 
 ```bash
 bash [skills_root]/worker/delegate.sh <mode> \
@@ -83,9 +93,11 @@ bash [skills_root]/worker/delegate.sh <mode> \
   --idle-timeout-seconds <30..900> \
   --poll-seconds <2..60> \
   --timeout-reason "scope=<対象>,difficulty=<low|medium|high>,basis=<根拠>" \
-  [--retry-of <前task-id> | --supplement-of <前task-id>] \
+  [--retry-of <前task-id> | --supplement-of <前task-id> | --repair-of <前task-id>] \
   <mode固有引数>
 ```
+
+`--repair-of`ではmode固有引数を新task-idだけにする。調査指示や設計書を再送しない。
 
 通常値は次を下回らない。ユーザーが短い上限を明示した場合だけ短縮する。timeout後は維持または延長する。
 
@@ -108,11 +120,12 @@ bash [skills_root]/worker/delegate.sh <mode> \
 | failure class | 処理 |
 |---|---|
 | 接続失敗、DNS・TLS、reset、rate limit、5xx、timeout、`missing_report`、`malformed_report`、`partial_report` | 同じ依頼を新task-idと`--retry-of`で1回だけ再試行する。合計2回失敗したら上位モデルが引き継ぐ |
-| `invalid_output`、`invalid_evidence`、`incomplete_outcome` | 欠落claimまたは必須成果IDだけを具体化して新task-idで補完する。前回の未検証結論を事実として渡さない |
+| `invalid_output`、形式だけが原因の`invalid_evidence` | 新task-idと`--repair-of`で形式修正を1回だけ行う。再調査しない |
+| 内容不足の`invalid_evidence`、`incomplete_outcome` | 欠落claimまたは必須成果IDだけを具体化して新task-idで補完する。前回の未検証結論を事実として渡さない |
 | API key未設定、HTTP 401、invalid API key、authentication failed | 再試行せず直ちに上位モデルへ切り替える |
 | 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 再試行せず停止する |
 | `nesting`失敗 | 自力検出へ切り替えず品質ゲートを失敗にする |
 
 モデル変更は曖昧な依頼の代替にしない。依頼を修正しても同じinstruction不履行が続き、費用とfallback modelが明示されている場合だけ使う。切替後も依頼とworkflowを変えない。候補返却後の通常レビュー・修正はworkerへ戻さず上位モデルが行う。非zeroまたはtimeout時のpatchは診断専用とする。
 
-`--retry-of`はrequest digestの一致を、`--supplement-of`はdigestの変更と`information_attempt <= 3`を実行器が強制する。通信再試行は情報調査回数を増やさない。上位モデルのfamily、tier、effortで上限を変えない。
+`--retry-of`はrequest digestの一致を、`--supplement-of`はdigestの変更と`information_attempt <= 3`を、`--repair-of`は親の失敗分類、同一HEAD、形式修正1回までを実行器が強制する。通信再試行と形式修正は情報調査回数を増やさない。上位モデルのfamily、tier、effortで上限を変えない。

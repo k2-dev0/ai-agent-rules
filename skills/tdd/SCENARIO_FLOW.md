@@ -15,15 +15,15 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 必須の調査パケット
 
-実装前のsurveyでは、共通委任契約のclaim-evidence形式で次の必須成果IDを返させる。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
+実装前のsurveyでは、共通委任契約のclaim-evidence形式で、今回の変更判断に必要な最大6 claim（目安4〜6）だけを返させる。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
 
-- `O1`: import元、export名、関数signature、型、enum・定数の実値
-- `O2`: 最寄りの既存test・helper・fixture・seedの接続方法と模倣に必要な構造
-- `O3`: DB model・table・列型、日付と時刻の扱い、外部境界の観測方法
-- `O4`: 実在する検証command、cwd、必要な環境・guard・初期化順
-- `O5`: 読めなかったpath、未確認事項、推測を分けた残件一覧
+- 変更対象の現在の挙動・型・保存先
+- 最寄りの同型実装1件と置換する識別子・値
+- 今回の入力、schema、設定、test資産のうち実装判断に直接必要な境界
+- 対象へ直接使う既存検証command
+- 読めなかったpath、未確認事項、推測を分けたRemaining
 
-各commandを`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でもO1〜O5が足りなければ、`--supplement-of`で欠落IDだけを補完する。補完は2回、初回を含め合計3回までとする。
+上の分類を毎回すべて要求しない。たとえば既存列への値の入れ替えなら、現在の生成方法、同型実装1件、入力mapの存在、列型の4 claimで止め、schedule、handler、HTTP、全test基盤、無関係なDB model、全command、runtime・初期化順を除外する。検証commandがclaimに含まれる場合だけ`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でも指定claimが足りなければ、`--supplement-of`で欠落IDだけを補完する。形式だけが壊れた場合は`--repair-of`で再調査せず直す。情報補完は2回、初回を含め合計3回までとする。
 
 初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 

@@ -110,13 +110,13 @@ $bootstrap codex
 | 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後は外部ワーカーへ戻さない |
 | ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認は、まず共通の外部ワーカー実行器へ委任する。依頼は目的、scope、`O1`から始まる必須成果IDへ分ける。workerは事実ごとのclaimと根拠範囲を返し、実行器が同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出する。検証済みcodeがclaimを直接支え、blobが現在も一致する場合、上位モデルは同じ箇所を再読しない。
+コードベースの事実確認は、まず共通の外部ワーカー実行器へ委任する。初回`survey`は目的、scope、変更判断に直結する最大6 claim（目安4〜6）へ分け、今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤などを除外scopeへ明記する。workerは各claim 1〜3件、全体20件以下・推奨12件以下の根拠範囲を返し、実行器が同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出する。検証済みcodeがclaimを直接支え、blobが現在も一致する場合、上位モデルは同じ箇所を再読しない。
 
-情報不足は`--supplement-of`で欠落claimだけを補い、初回を含め合計3回までとする。3回目までは保存範囲の不足を上位モデルが直接確認する理由にしない。直接確認は、明示的な認証失敗、同じ依頼の通信・最終応答失敗2回、情報調査3回後の不足、worker snapshot外の状態、高リスクの独立確認、ユーザーの明示指定に限り、file全体のReadは使わない。workerの実装候補返却後のレビュー・修正は上位モデルの通常責務とする。調査pathを作るためにproduction fileを読まず、探索anchorはユーザー入力、設計書、既知の識別子、検証済みevidenceから作る。実装の許可pathもsurvey結果または承認済み設計から得る。
+情報不足は`--supplement-of`で欠落claimだけを補い、初回を含め合計3回までとする。内容が揃い、出力形式または証拠表記だけが壊れた場合は`--repair-of`を1回だけ使い、親report以外を読ませず形式だけを直す。3回目までは保存範囲の不足を上位モデルが直接確認する理由にしない。直接確認は、明示的な認証失敗、同じ依頼の通信・最終応答失敗2回、情報調査3回後の不足、worker snapshot外の状態、高リスクの独立確認、ユーザーの明示指定に限り、file全体のReadは使わない。workerの実装候補返却後のレビュー・修正は上位モデルの通常責務とする。調査pathを作るためにproduction fileを読まず、探索anchorはユーザー入力、設計書、既知の識別子、検証済みevidenceから作る。実装の許可pathもsurvey結果または承認済み設計から得る。
 
 `preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。通信・timeout・最終応答の失敗は新task-idと`--retry-of`で1回だけ再試行する。出力形式、証拠、成果不足では欠落IDだけを具体化し、前回の未検証結論を事実として渡さない。2回の通信失敗または明示的な認証失敗後は上位モデルが引き継ぐ。予算、ZDR、依存command、参照先の問題は停止する。
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有する。surveyはO1〜O5としてsymbol、型、fixture、DB、検証command、残件を返す。`implement`は設計書、承認済みシナリオID、`--red-summary`、許可pathを必須入力とする。候補返却後のレビューや修正はworkerへ戻さない。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandから最大6 claim（目安4〜6）を選び、全分類を毎回網羅しない。`implement`は設計書、承認済みシナリオID、`--red-summary`、許可pathを必須入力とする。候補返却後のレビューや修正はworkerへ戻さない。
 
 workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
