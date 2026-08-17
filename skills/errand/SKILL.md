@@ -43,7 +43,7 @@ hooks:
 workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`errand`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
 
 1. 依頼から公開挙動、完了条件、既知の識別子・機能語を探索anchorとして固定する。候補pathを得るためにproduction fileを読まない。依頼にある識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
-2. workerの`survey`を必ず1回実行し、共通契約のvalidatorを通る最大4 claimのJSONを渡す。現在の対象挙動、最寄りの同型実装1件、置換する要素、対象pathを一つのclaimへ混ぜず、独立境界は別task-idにする。今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandを各claimのexcludeへ明記する。網羅監査は依頼しない。
+2. 必要な事実ごとにworkerの`survey`を別task-idで実行し、共通契約のvalidatorを通る`C1` 1件だけのJSONを渡す。現在の対象挙動、最寄りの同型実装1件、置換する要素、test・schema境界を同じtaskへ混ぜない。旧branch・tag・commitを読むsurveyには`--source-ref <revision>`を付け、現在HEADの調査と分ける。今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandをexcludeへ明記する。
 3. 次がすべて一意なら続け、一つでも欠ければ変更せず停止する。
    - 依頼後の公開挙動と完了条件
    - 最寄りの同型実装1件の正確なpath
@@ -52,7 +52,7 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
    - 共通フローで使う既存の検証command
 4. 共通フローのStep 1〜3を実行し、[agent_name]がシナリオを一括提示して明示承認を得た後、必要なテストを作成してRedを確認する。test除外pathだけの変更は共通フローの例外に従う。
 5. 依頼、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、survey結果から短い実装指示を作る。許可pathは検証済みsurveyが返したcleanな本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルだけにする。
-6. `errand` modeへ実装指示と`--`以降の許可pathを渡し、共通フローのStep 4〜8を完了する。workerにテスト、設定、migration、Git、設計資産を変更させない。
+6. `errand` modeへ判断に使った検証済みsurvey task-idを`--evidence-from`で全件渡し、実装指示と`--`以降の許可pathを渡す。列名、型幅、relationなどは短い指示だけから再推測させない。共通フローのStep 4〜8を完了し、workerにテスト、設定、migration、Git、設計資産を変更させない。
 7. 共通フローのGreenに加え、path指定可能な既存lintを実行する。利用可能なcommandがなければ発明せず、未実行として報告する。test除外pathだけの依頼でtestを探索・実行せず、検証失敗は共通フローどおりscopeへ帰属させる。
 
 ユーザーが設定やmigration fileなどerrand禁止対象の変更を明示した場合は、`errand`を終了して通常実装へ移ることを一文で宣言する。明示された範囲だけを通常実装として扱い、禁止対象をworkerへ委任しない。

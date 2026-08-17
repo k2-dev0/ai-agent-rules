@@ -114,9 +114,9 @@ grep -q '^build_evidence_packet()' "$WORKER_RUNNER" && grep -q '^claims_have_evi
 grep -q 'MAX_EVIDENCE_REFERENCES="20"' "$WORKER_RUNNER" && grep -q 'RECOMMENDED_EVIDENCE_REFERENCES="12"' "$WORKER_RUNNER" && grep -Fq 'MAX_SURVEY_CLAIMS="$MAX_SURVEY_REQUEST_CLAIMS"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_EVIDENCE_PER_CLAIM="3"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_LINES_PER_REFERENCE="80"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_TOTAL_LINES="400"' "$WORKER_RUNNER" && grep -Fq '1範囲あたり最大%s行' "$WORKER_RUNNER" && ok "worker evidence: validator定数をpromptと検証へ共有" || ng "worker evidenceのclaim・範囲上限またはprompt共有が不足"
 grep -q 'implement mode requires --red-summary after spec path' "$WORKER_RUNNER" && grep -Fq 'Red要約:\n$RED_SUMMARY' "$WORKER_RUNNER" && ok "worker implement: Red要約を必須入力へ固定" || ng "worker implementがRed要約を受け取らない"
 grep -q 'XDG_DATA_HOME="\$OPENCODE_XDG_DATA_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="\$OPENCODE_XDG_STATE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="\$OPENCODE_XDG_CACHE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="\$OPENCODE_XDG_CONFIG_HOME"' "$WORKER_RUNNER" && grep -q 'TMPDIR="\$OPENCODE_TMPDIR"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
-grep -q 'SURVEY_STEPS_PER_CLAIM="5"' "$WORKER_RUNNER" && grep -q 'SURVEY_FINALIZATION_STEPS="3"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: claim数と最終化余白からagent step上限を算出" || ng "worker surveyの動的step上限が不正"
+grep -q 'SURVEY_STEPS_PER_CLAIM="8"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_REQUEST_CLAIMS="1"' "$WORKER_RUNNER" && grep -q 'SURVEY_FINALIZATION_STEPS="3"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 単一claimの調査と最終化にstepを固定" || ng "worker surveyの単一claimまたはstep上限が不正"
 grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q 'last_event_type' "$WORKER_RUNNER" && grep -q 'valid_event_observed' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
-grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && grep -q 'HEAD+ignored-agent-context' "$WORKER_RUNNER" && grep -q 'context_snapshot_paths' "$WORKER_RUNNER" && ok "worker lifecycle: task状態・重複拒否・入力snapshotを記録" || ng "worker lifecycle管理が不正"
+grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && grep -q 'source_ref:\$source_ref' "$WORKER_RUNNER" && grep -q 'context_snapshot_paths' "$WORKER_RUNNER" && ok "worker lifecycle: task状態・重複拒否・revision snapshotを記録" || ng "worker lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$WORKER_RUNNER" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$WORKER_RUNNER" && ok "worker config: readonly定数をjq引数で受け渡す" || ng "worker config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$WORKER_RUNNER" && grep -q '"data_collection":"deny"' "$WORKER_RUNNER" && ok "worker routing: ZDRとdata collection拒否" || ng "worker routingのprivacy強制漏れ"
 grep -q '"bash":"deny"' "$WORKER_RUNNER" && grep -q '"external_directory":"deny"' "$WORKER_RUNNER" && grep -q 'opencode --pure run' "$WORKER_RUNNER" && ok "worker権限: shell・外部dir・pluginを拒否" || ng "worker権限境界が不正"
@@ -127,11 +127,14 @@ grep -q '^  nesting)' "$WORKER_RUNNER" && grep -q '修正案・コード変更�
 grep -q '^  survey)' "$WORKER_RUNNER" && grep -q 'survey mode requires task id and one structured request JSON argument' "$WORKER_RUNNER" && grep -q 'validate-survey-request.sh' "$WORKER_RUNNER" && grep -q 'failed validation before external execution' "$WORKER_RUNNER" && grep -q 'anchorsの完全一致、機能語・ドメイン語、隣接モジュール、リポジトリ全体の順' "$WORKER_RUNNER" && grep -Fq '別kindの定義' "$WORKER_RUNNER" && ok "worker survey: 構造化依頼を外部実行前に検証して段階調査" || ng "worker surveyの構造化依頼または段階調査契約が不正"
 VALID_SURVEY_REQUEST='{"purpose":"移植元の変換規則を確認する","claims":[{"id":"C1","kind":"behavior","subject":"固定長入力変換","question":"入力から出力列を生成する規則は何か","anchors":["sagawa-delivery-import","tool-def.tsx"],"done_when":"入力位置と出力列を直接示す根拠がある","exclude":["admin-2026","全test基盤"]}]}'
 INVALID_SURVEY_REQUEST='{"purpose":"境界を詰め込む","claims":[]}'
-if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1; then
-  ok "worker survey validator: valid依頼を正規化し空claimを外部実行前に拒否"
+MULTI_SURVEY_REQUEST='{"purpose":"旧新を同時に調べる","claims":[{"id":"C1","kind":"behavior","subject":"旧実装","question":"旧実装の入力は何か","anchors":["old"],"done_when":"入力の根拠がある","exclude":["current"]},{"id":"C2","kind":"behavior","subject":"現実装","question":"現実装の入力は何か","anchors":["current"],"done_when":"入力の根拠がある","exclude":["old"]}]}'
+DENSE_SURVEY_REQUEST='{"purpose":"過密claimを拒否する","claims":[{"id":"C1","kind":"behavior","subject":"同期batch","question":"入口、入力、変換、保存、出力をすべて確認せよ","anchors":["sync"],"done_when":"全体の根拠がある","exclude":["test"]}]}'
+if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$MULTI_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$DENSE_SURVEY_REQUEST" >/dev/null 2>&1; then
+  ok "worker survey validator: 1 task 1 claimと列挙密度を外部実行前に強制"
 else
-  ng "worker survey validatorのschema検証が不正"
+  ng "worker survey validatorの単一claimまたは密度検証が不正"
 fi
+grep -Fq 'git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT"' "$WORKER_RUNNER" && grep -Fq -- '--source-ref is only valid for survey and research' "$WORKER_RUNNER" && grep -Fq -- '--evidence-from task ids must be unique' "$WORKER_RUNNER" && grep -Fq 'evidence task is not a verified successful result' "$WORKER_RUNNER" && ok "worker snapshot: revision選択と検証済みevidence handoffを機械強制" || ng "workerのrevision snapshotまたはevidence handoffが不正"
 grep -Fq 'Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません' "$WORKER_RUNNER" && grep -Fq 'repair parent must have formatting-only invalid_output' "$WORKER_RUNNER" && grep -q 'EVIDENCE_FAILURE_KIND="range_too_wide"' "$WORKER_RUNNER" && grep -q 'NEXT_ACTION="supplement"' "$WORKER_RUNNER" && grep -q 'FAILURE_CLASS="step_limit_exhausted"' "$WORKER_RUNNER" && ok "worker再試行: 形式修正と意味上の証拠補完を機械分離" || ng "worker再試行のrepair・supplement分類が不正"
 grep -q '^  show)' "$WORKER_RUNNER" && grep -q 'show mode requires task id' "$WORKER_RUNNER" && grep -q "cannot extract delegated report" "$WORKER_RUNNER" && ok "外部ワーカー結果: report抽出と固定showを提供" || ng "外部ワーカー結果の固定取得経路が不正"
 grep -q '^  errand)' "$WORKER_RUNNER" && grep -q 'errand mode requires task id, instruction, --, and production paths' "$WORKER_RUNNER" && grep -q '短い実装指示に従い' "$WORKER_RUNNER" && ok "worker errand: 設計書なしの限定実装を受け付ける" || ng "worker errand実装モードが不正"
@@ -235,9 +238,9 @@ echo "== 軽微な実装委任と全体調査委任 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/tdd/SCENARIO_FLOW.md"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'validatorを通る最大4 claimのJSON' "$ERRAND_SKILL" && grep -Fq '各claimのexcludeへ明記する' "$ERRAND_SKILL" && ok "errand は識別子を保持して構造化surveyへ限定" || ng "errand の軽量調査境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'validatorを通る`C1` 1件だけのJSON' "$ERRAND_SKILL" && grep -Fq '`--source-ref <revision>`' "$ERRAND_SKILL" && ok "errand は識別子を保持して単一claimのsurveyへ限定" || ng "errand の軽量調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && ok "errand はシナリオ承認とテスト追加を許可" || ng "errand が追加テストで停止または承認なしで変更可能"
-grep -Fq 'workerの`survey`を必ず1回実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$ERRAND_SKILL" && grep -Fq '`errand` modeへ実装指示と`--`以降の許可path' "$ERRAND_SKILL" && grep -Fq 'workerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はprepare・固定実行器とworker実装境界を固定" || ng "errand のprepare・固定実行器または実装境界が不正"
+grep -Fq '必要な事実ごとにworkerの`survey`を別task-idで実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$ERRAND_SKILL" && grep -Fq '`--evidence-from`で全件渡し' "$ERRAND_SKILL" && grep -Fq 'workerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はprepare・固定実行器と検証済みevidence実装境界を固定" || ng "errand のprepare・固定実行器または実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q 'new allowed path parent must exist' "$WORKER_RUNNER" && grep -q 'new allowed path must not be ignored' "$WORKER_RUNNER" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装、複数、または対応テストが未作成であることだけを理由に停止しない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
 grep -Fq '初回実装はworkerの`candidate.patch`から始める' "$ERRAND_SKILL" && grep -Fq '2回続けて応答に失敗した場合' "$ERRAND_SKILL" && grep -Fq '修正をworkerへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && grep -Fq '初回実装候補を作成してください' "$WORKER_RUNNER" && ok "errand はworker初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
@@ -274,7 +277,7 @@ grep -Fq '| `from-prompt` |' "$TDD_SKILL" && grep -Fq '| `<承認済み設計書
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
 grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh <mode>' "$TDD_SKILL" && grep -Fq 'workerの2回連続応答失敗または認証失敗後だけ可' "$TDD_SKILL" && grep -Fq 'worker候補反映後の本体コード修正 | 可 | 禁止' "$TDD_SKILL" && ok "tdd はprepare・固定実行器・worker初回実装・上位fallback・上位修正へ固定" || ng "tdd の委任・fallback・修正境界が不正"
 grep -Fq '設計書を選んでから共通フローでworkerの初回実装候補を受領するまで' "$TDD_SKILL" && grep -Fq '`evidence_status: verified`のコードがclaimを直接支え' "$TDD_SKILL" && grep -Fq '`--supplement-of`で初回を含む合計3回まで限定survey' "$TDD_SKILL" && grep -Fq '3回目までは保存範囲の不足自体を直接確認の理由にしない' "$TDD_SKILL" && grep -Fq '全file Read、path発見のためのRead' "$TDD_SKILL" && ok "tdd は検証済みevidenceを標準根拠、直接探索を例外へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
-grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '上の分類を毎回すべて要求しない' "$SCENARIO_FLOW" && grep -Fq '`--repair-of`で再調査せず直す' "$SCENARIO_FLOW" && ok "共通フローはシナリオ承認とテスト設計を上位モデルへ固定" || ng "共通フローのシナリオ・テスト責務が不正"
+grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionを読むtaskには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq '`--evidence-from`で渡し' "$SCENARIO_FLOW" && ok "共通フローはシナリオ承認・単一claim調査・evidence handoffを固定" || ng "共通フローのシナリオ・テスト責務が不正"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない' "$SCENARIO_FLOW" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
@@ -445,6 +448,10 @@ printf '# research spec\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\
 awk 'BEGIN { for (line = 1; line <= 100; line++) print "line " line }' > long-evidence.txt
 git add spec.md long-evidence.txt
 git commit -qm "test: research fixture"
+git branch legacy-fixture
+printf 'current only\n' > current-only.txt
+git add current-only.txt
+git commit -qm "test: current revision fixture"
 printf '/.codex/\n/.agents/\n/AGENTS.md\n' > .git/info/exclude
 mkdir -p .codex/prompt .codex/rules .codex/tmp .agents/skills/sample
 printf '# ignored agent instructions\n' > AGENTS.md
@@ -495,6 +502,21 @@ elif [ ! -e "$INVALID_SURVEY_CALL_MARKER" ] && grep -Fq 'failed validation befor
 else
   ng "delegate-worker: 不正survey依頼の事前拒否が不正"; cat delegate-invalid-structured-survey.out
 fi
+INVALID_SOURCE_CALL_MARKER="$DELEGATE_REPO/invalid-source-called-curl"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test CURL_CALL_MARKER="$INVALID_SOURCE_CALL_MARKER" bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --source-ref missing-fixture invalid-source-survey '{"purpose":"旧実装を確認する","claims":[{"id":"C1","kind":"behavior","subject":"旧実装","question":"旧実装の入力は何か","anchors":["legacy"],"done_when":"入力の根拠がある","exclude":["current"]}]}' > delegate-invalid-source.out 2>&1; then
+  ng "delegate-worker: 存在しないsource revisionを許可"
+elif [ ! -e "$INVALID_SOURCE_CALL_MARKER" ] && grep -Fq -- '--source-ref does not resolve to a commit' delegate-invalid-source.out; then
+  ok "delegate-worker: 不正source revisionをHTTP前に拒否"
+else
+  ng "delegate-worker: source revisionの事前拒否が不正"; cat delegate-invalid-source.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --source-ref HEAD --source-ref legacy-fixture duplicate-source-survey '{"purpose":"旧実装を確認する","claims":[{"id":"C1","kind":"behavior","subject":"旧実装","question":"旧実装の入力は何か","anchors":["legacy"],"done_when":"入力の根拠がある","exclude":["current"]}]}' > delegate-duplicate-source.out 2>&1; then
+  ng "delegate-worker: source revisionの重複指定を許可"
+elif grep -Fq -- '--source-ref may be specified only once' delegate-duplicate-source.out; then
+  ok "delegate-worker: HEAD明示を含むsource revision重複を拒否"
+else
+  ng "delegate-worker: source revision重複の拒否理由が不正"; cat delegate-duplicate-source.out
+fi
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research "${DELEGATE_TIMEOUT_ARGS[@]}" empty-research spec.md > delegate-empty.out 2>&1; then
   ok "delegate-worker: Bash 3.2で変更ゼロのresearchを完了"
 else
@@ -506,7 +528,7 @@ if [ -f "$EMPTY_RESULT" ] && [ "$(jq -c '.changed_paths' "$EMPTY_RESULT")" = "[]
 else
   ng "delegate-worker: 変更ゼロのresult.jsonが不正"
 fi
-printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 8)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\n[ -f AGENTS.md ] && [ -f .codex/prompt/ignored-design.md ] && [ -f .codex/rules/ignored.rules ] && [ -f .agents/skills/sample/SKILL.md ] && [ ! -e .codex/tmp/private.txt ] || exit 42\nprompt=$(printf '\''%%s'\'' "$*" | tr '\''\\n'\'' '\'' '\'')\ntext=$(printf '\''Outcome: fulfilled\n## Claims\n### C1\nClaim: fixtureを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: %%s\nLimitations: none\n## Remaining\nnone\n'\'' "$prompt")\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\njq -e '\''(.default_agent == "delegate") and (.agent.delegate.steps == 11)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41\n[ -f AGENTS.md ] && [ -f .codex/prompt/ignored-design.md ] && [ -f .codex/rules/ignored.rules ] && [ -f .agents/skills/sample/SKILL.md ] && [ ! -e .codex/tmp/private.txt ] || exit 42\nprompt=$(printf '\''%%s'\'' "$*" | tr '\''\\n'\'' '\'' '\'')\ntext=$(printf '\''Outcome: fulfilled\n## Claims\n### C1\nClaim: fixtureを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: %%s\nLimitations: none\n## Remaining\nnone\n'\'' "$prompt")\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
 SURVEY_REQUEST=$(jq -cn --arg anchor "$SURVEY_EXACT_IDENTIFIER" '{purpose:"同型実装の境界を確認する",claims:[{id:"C1",kind:"integration",subject:"指定識別子の同型実装",question:"指定識別子と同じ責務を持つ統合境界は何か",anchors:[$anchor],done_when:"直接の統合点を示す根拠がある",exclude:["全DB","全test基盤"]}]}')
@@ -521,7 +543,7 @@ else
 fi
 SURVEY_ROOT="$DELEGATE_REPO/.claude/tmp/worker/empty-survey"
 SURVEY_RESULT="$SURVEY_ROOT/result.json"
-if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.evidence_file' "$SURVEY_RESULT")" = "evidence.md" ] && [ "$(jq -r '.evidence_status' "$SURVEY_RESULT")" = "verified" ] && [ "$(jq -r '.output_contract_status' "$SURVEY_RESULT")" = "valid" ] && [ "$(jq -r '.outcome' "$SURVEY_RESULT")" = "fulfilled" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "8" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD+ignored-agent-context" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ "$(jq -c '.context_snapshot_paths' "$SURVEY_RESULT")" = '[".agents/skills/sample/SKILL.md",".codex/prompt/ignored-design.md",".codex/rules/ignored.rules","AGENTS.md"]' ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/.empty-survey.task" ]; then
+if [ -f "$SURVEY_RESULT" ] && [ "$(jq -r '.mode' "$SURVEY_RESULT")" = "survey" ] && [ "$(jq -r '.report_file' "$SURVEY_RESULT")" = "report.md" ] && [ "$(jq -r '.evidence_file' "$SURVEY_RESULT")" = "evidence.md" ] && [ "$(jq -r '.evidence_status' "$SURVEY_RESULT")" = "verified" ] && [ "$(jq -r '.output_contract_status' "$SURVEY_RESULT")" = "valid" ] && [ "$(jq -r '.outcome' "$SURVEY_RESULT")" = "fulfilled" ] && [ "$(jq -r '.step_limit' "$SURVEY_RESULT")" = "11" ] && [ "$(jq -r '.source_ref' "$SURVEY_RESULT")" = "HEAD" ] && [ "$(jq -r '.source_snapshot' "$SURVEY_RESULT")" = "HEAD+ignored-agent-context" ] && [ "$(jq -r '.source_head' "$SURVEY_RESULT")" = "$SURVEY_SOURCE_HEAD" ] && [ "$(jq -r '.source_worktree_dirty' "$SURVEY_RESULT")" = "true" ] && [ "$(jq -r '.timeout_policy_source' "$SURVEY_RESULT")" = "explicit" ] && [ "$(jq -r '.poll_seconds' "$SURVEY_RESULT")" = "5" ] && [ "$(jq -r '.timeout_reason' "$SURVEY_RESULT")" = "$DELEGATE_TIMEOUT_REASON" ] && [ "$(jq -c '.context_snapshot_paths' "$SURVEY_RESULT")" = '[".agents/skills/sample/SKILL.md",".codex/prompt/ignored-design.md",".codex/rules/ignored.rules","AGENTS.md"]' ] && [ ! -e "$SURVEY_ROOT/spec.md" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/.empty-survey.task" ]; then
   ok "delegate-worker: surveyはignored agent資料を監査可能なsnapshotとして読む"
 else
   ng "delegate-worker: surveyのignored agent資料snapshotまたはresult.jsonが不正"
@@ -543,6 +565,14 @@ else
   ng "delegate-worker: showで旧jsonlの最終reportを復元できない"; cat delegate-show-legacy.out
 fi
 mv "$SURVEY_ROOT/report.saved" "$SURVEY_ROOT/report.md"
+LEGACY_SOURCE_HEAD=$(git rev-parse legacy-fixture)
+printf '#!/bin/bash\n[ ! -e current-only.txt ] || exit 43\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: legacy revisionを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --source-ref legacy-fixture legacy-source-survey "$SURVEY_REQUEST" > delegate-legacy-source.out 2>&1 && [ "$(jq -r '.source_ref' "$DELEGATE_REPO/.claude/tmp/worker/legacy-source-survey/result.json" 2>/dev/null)" = "legacy-fixture" ] && [ "$(jq -r '.source_head' "$DELEGATE_REPO/.claude/tmp/worker/legacy-source-survey/result.json" 2>/dev/null)" = "$LEGACY_SOURCE_HEAD" ] && [ "$(jq -r '.source_snapshot' "$DELEGATE_REPO/.claude/tmp/worker/legacy-source-survey/result.json" 2>/dev/null)" = "legacy-fixture+ignored-agent-context" ]; then
+  ok "delegate-worker: 指定revisionから隔離worktreeとevidenceを作成"
+else
+  ng "delegate-worker: 指定revisionのsnapshotが不正"; cat delegate-legacy-source.out
+fi
 printf '#!/bin/bash\nprintf '\''{"type":"step_start","timestamp":1}\\n'\''\nprintf '\''{"type":"step_finish","timestamp":2,"part":{"reason":"stop"}}\\n'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" missing-report-survey "$SURVEY_REQUEST" > delegate-missing-report.out 2>&1
@@ -560,12 +590,12 @@ chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" invalid-output-survey "$SURVEY_REQUEST" > delegate-invalid-output.out 2>&1
 INVALID_OUTPUT_STATUS=$?
 INVALID_OUTPUT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/invalid-output-survey"
-if [ "$INVALID_OUTPUT_STATUS" -eq 69 ] && [ "$(jq -r '.report_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "complete" ] && [ "$(jq -r '.output_contract_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.failure_class' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid_output" ]; then
+if [ "$INVALID_OUTPUT_STATUS" -eq 69 ] && [ "$(jq -r '.report_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "complete" ] && [ "$(jq -r '.output_contract_status' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.failure_class' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "invalid_output" ] && [ "$(jq -r '.next_action' "$INVALID_OUTPUT_ROOT/result.json" 2>/dev/null)" = "repair" ]; then
   ok "delegate-worker: stop済みでも出力契約欠落を成功にしない"
 else
   ng "delegate-worker: 出力契約欠落の分類が不正"; cat delegate-invalid-output.out
 fi
-printf '#!/bin/bash\nfor step in 1 2 3 4 5 6 7 8; do jq -cn --argjson step "$step" '\''{type:"step_start",step:$step}'\''; done\njq -cn --arg text "format missing after step limit" '\''{type:"text",text:$text}'\''\njq -cn '\''{type:"step_finish",part:{reason:"stop"}}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\nfor step in 1 2 3 4 5 6 7 8 9 10 11; do jq -cn --argjson step "$step" '\''{type:"step_start",step:$step}'\''; done\njq -cn --arg text "format missing after step limit" '\''{type:"text",text:$text}'\''\njq -cn '\''{type:"step_finish",part:{reason:"stop"}}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" exhausted-step-survey "$SURVEY_REQUEST" > delegate-exhausted-step.out 2>&1
 EXHAUSTED_STEP_STATUS=$?
@@ -610,12 +640,12 @@ if [ "$EXCESSIVE_CLAIM_EVIDENCE_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract
 else
   ng "delegate-worker: claim単位のEvidence上限検証が不正"; cat delegate-excessive-claim-evidence.out
 fi
-printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 1\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C2\nClaim: 2\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C3\nClaim: 3\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C4\nClaim: 4\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C5\nClaim: 5\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C6\nClaim: 6\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C7\nClaim: 7\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 1\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C2\nClaim: 2\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" excessive-claims-survey "$SURVEY_REQUEST" > delegate-excessive-claims.out 2>&1
 EXCESSIVE_CLAIMS_STATUS=$?
 if [ "$EXCESSIVE_CLAIMS_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract_status' "$DELEGATE_REPO/.claude/tmp/worker/excessive-claims-survey/result.json" 2>/dev/null)" = "invalid" ]; then
-  ok "delegate-worker: surveyを最大4 claimへ強制"
+  ok "delegate-worker: surveyをC1 1件へ強制"
 else
   ng "delegate-worker: surveyのclaim上限検証が不正"; cat delegate-excessive-claims.out
 fi
@@ -727,12 +757,19 @@ mkdir -p src
 printf 'export const subject = true\n' > src/subject.ts
 git add src/subject.ts
 git commit -qm "test: nesting対象"
-printf '#!/bin/bash\ncase "$*" in *red-marker*) ;; *) exit 61 ;; esac\nprintf '\''export const subject = false\\n'\'' > src/subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- S1: Red要約に従いsrc/subject.tsを変更\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\n[ -f .delegate-request/evidence/empty-survey/result.json ] && [ -f .delegate-request/evidence/empty-survey/report.md ] && [ -f .delegate-request/evidence/empty-survey/evidence.md ] || exit 60\ncase "$*" in *.delegate-request/evidence/empty-survey/report.md*.delegate-request/evidence/empty-survey/evidence.md*red-marker*) ;; *) exit 61 ;; esac\nprintf '\''export const subject = false\\n'\'' > src/subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- S1: Red要約と検証済みevidenceに従いsrc/subject.tsを変更\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" implement "${DELEGATE_TIMEOUT_ARGS[@]}" implement-red-summary spec.md --red-summary 'command=npm-test; failure=red-marker; scenarios=S1' -- src/subject.ts > delegate-implement-red.out 2>&1 && grep -Fq 'subject = false' "$DELEGATE_REPO/.claude/tmp/worker/implement-red-summary/candidate.patch"; then
-  ok "delegate-worker: implementはRed要約を実効promptへ渡して候補を生成"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" implement "${DELEGATE_TIMEOUT_ARGS[@]}" implement-missing-evidence spec.md --red-summary 'command=npm-test; failure=red-marker; scenarios=S1' -- src/subject.ts > delegate-implement-missing-evidence.out 2>&1; then
+  ng "delegate-worker: implementを検証済みevidenceなしで許可"
+elif grep -Fq 'implement mode requires at least one --evidence-from task id' delegate-implement-missing-evidence.out; then
+  ok "delegate-worker: implementへ検証済みevidenceを必須化"
 else
-  ng "delegate-worker: implementのRed要約入力または候補生成が不正"; cat delegate-implement-red.out
+  ng "delegate-worker: implementのevidence必須判定が不正"; cat delegate-implement-missing-evidence.out
+fi
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" implement "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey implement-red-summary spec.md --red-summary 'command=npm-test; failure=red-marker; scenarios=S1' -- src/subject.ts > delegate-implement-red.out 2>&1 && grep -Fq 'subject = false' "$DELEGATE_REPO/.claude/tmp/worker/implement-red-summary/candidate.patch" && [ "$(jq -c '.evidence_from' "$DELEGATE_REPO/.claude/tmp/worker/implement-red-summary/result.json" 2>/dev/null)" = '["empty-survey"]' ]; then
+  ok "delegate-worker: implementはRed要約と検証済みevidence packetから候補を生成"
+else
+  ng "delegate-worker: implementのRed要約・evidence handoffまたは候補生成が不正"; cat delegate-implement-red.out
 fi
 printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 3段階以上の制御フローネストなし\nEvidence:\n- `src/subject.ts:1-1`\nInterpretation: 対象file全体\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
@@ -749,20 +786,30 @@ else
 fi
 printf '#!/bin/bash\nprintf '\''export const subject = false\\n'\'' > src/subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: src/subject.tsのboolean定数をfalseへ変更\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-check 'O1: 承認済みS1とRed failure=subjectがtrueに従いsubject.tsをfalseへ変更する' -- src/subject.ts > delegate-errand.out 2>&1; then
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-check 'O1: 承認済みS1とRed failure=subjectがtrueに従いsubject.tsをfalseへ変更する' -- src/subject.ts > delegate-errand.out 2>&1; then
   ok "delegate-worker: errandは一時設計書なしで限定実装を完了"
 else
   ng "delegate-worker: errandが失敗"; cat delegate-errand.out
 fi
 ERRAND_RESULT="$DELEGATE_REPO/.claude/tmp/worker/errand-check/result.json"
-if [ -f "$ERRAND_RESULT" ] && [ "$(jq -r '.mode' "$ERRAND_RESULT")" = "errand" ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/errand-check/spec.md" ]; then
+if [ -f "$ERRAND_RESULT" ] && [ "$(jq -r '.mode' "$ERRAND_RESULT")" = "errand" ] && [ "$(jq -c '.evidence_from' "$ERRAND_RESULT")" = '["empty-survey"]' ] && [ ! -e "$DELEGATE_REPO/.claude/tmp/worker/errand-check/spec.md" ]; then
   ok "delegate-worker: errandは実装指示を永続化しない"
 else
   ng "delegate-worker: errandの一時指示またはresult.jsonが不正"
 fi
+printf '#!/bin/bash\njq -cn --arg text "format missing" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-invalid-output 'subject.tsを変更する' -- src/subject.ts > delegate-errand-invalid-output.out 2>&1
+ERRAND_INVALID_STATUS=$?
+ERRAND_INVALID_RESULT="$DELEGATE_REPO/.claude/tmp/worker/errand-invalid-output/result.json"
+if [ "$ERRAND_INVALID_STATUS" -eq 69 ] && [ "$(jq -r '.failure_class' "$ERRAND_INVALID_RESULT" 2>/dev/null)" = "invalid_output" ] && [ "$(jq -r '.next_action' "$ERRAND_INVALID_RESULT" 2>/dev/null)" = "review" ]; then
+  ok "delegate-worker: errand契約違反をrepairせず上位レビューへ戻す"
+else
+  ng "delegate-worker: errand契約違反のnext actionが不正"; cat delegate-errand-invalid-output.out
+fi
 printf '#!/bin/bash\nprintf '\''export const addedSubject = true\\n'\'' > src/added-subject.ts\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: src/added-subject.tsを追加\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-new-file '同型に従いadded-subject.tsを追加する' -- src/added-subject.ts > delegate-errand-new.out 2>&1; then
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-new-file '同型に従いadded-subject.tsを追加する' -- src/added-subject.ts > delegate-errand-new.out 2>&1; then
   ok "delegate-worker: errandは既存directoryへの定型ファイル追加を許可"
 else
   ng "delegate-worker: errandの定型ファイル追加に失敗"; cat delegate-errand-new.out
@@ -778,7 +825,7 @@ if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show errand-new-file > del
 else
   ng "delegate-worker: showで候補patchを再取得できない"; cat delegate-show-patch.out
 fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-missing-parent '存在しないdirectoryへ追加する' -- missing/added-subject.ts > delegate-errand-missing.out 2>&1; then
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-missing-parent '存在しないdirectoryへ追加する' -- missing/added-subject.ts > delegate-errand-missing.out 2>&1; then
   ng "delegate-worker: 存在しない親directoryへの追加を許可"
 else
   ok "delegate-worker: 存在しない親directoryへの追加を拒否"
@@ -789,7 +836,7 @@ git add prisma/schema.prisma
 git commit -qm "test: Prisma schema対象"
 printf '#!/bin/bash\nprintf '\''model AddedSubject {}\\n'\'' >> prisma/schema.prisma\ntext='\''Outcome: fulfilled\n## Requirement mapping\n- O1: prisma/schema.prismaへmodelを追加\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-prisma-schema '既存規約に従いPrisma modelを追加する' -- prisma/schema.prisma > delegate-errand-prisma.out 2>&1; then
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-prisma-schema '既存規約に従いPrisma modelを追加する' -- prisma/schema.prisma > delegate-errand-prisma.out 2>&1; then
   ok "delegate-worker: errandはschema.prismaの候補patchを作成"
 else
   ng "delegate-worker: errandがschema.prismaを拒否"; cat delegate-errand-prisma.out
@@ -800,7 +847,7 @@ if grep -Fq 'model AddedSubject' "$PRISMA_RESULT_ROOT/candidate.patch" && [ "$(j
 else
   ng "delegate-worker: Prisma候補patchの変更範囲が不正"
 fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" errand-migration-file 'migration fileを追加する' -- prisma/migrations/001.sql > delegate-errand-migration.out 2>&1; then
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" errand "${DELEGATE_TIMEOUT_ARGS[@]}" --evidence-from empty-survey errand-migration-file 'migration fileを追加する' -- prisma/migrations/001.sql > delegate-errand-migration.out 2>&1; then
   ng "delegate-worker: migration fileを許可"
 else
   ok "delegate-worker: migration fileを引き続き拒否"

@@ -24,30 +24,33 @@ workerはOpenRouterを使い、既定モデルは`minimax/minimax-m3`とする�
 
 ## 依頼
 
-`survey`依頼は自由文を渡さず、実行器と同じdirectoryの`validate-survey-request.sh`が受理するJSONを一つの引数として渡す。validatorは外部通信より前に、最大4 claim、`C1`からの連番、claimごとの単一`kind`、単一`subject`、question、1〜4 anchors、done_when、excludeを検証し、不正ならworkerを起動せず停止する。独立した移植元、移植先、test、runtime契約を一つのtaskへ詰めず、固有task-idへ分ける。
+`survey`依頼は自由文を渡さず、実行器と同じdirectoryの`validate-survey-request.sh`が受理するJSONを一つの引数として渡す。validatorは外部通信より前に、1 taskに`C1` 1件だけ、単一`kind`、単一`subject`、question、1〜4 anchors、done_when、exclude、列挙密度を検証し、不正ならworkerを起動せず停止する。移植元revision、移植先HEAD、test、schema・runtime契約は必ず固有task-idへ分ける。
 
 ```json
 {"purpose":"変更判断に必要な入力変換を確認する","claims":[{"id":"C1","kind":"behavior","subject":"sagawa-delivery-importの固定長入力変換","question":"固定長入力から出力CSV各列を生成する規則は何か","anchors":["sagawa-delivery-import","tool-def.tsx"],"done_when":"入力位置、抽出値、出力列を直接示す根拠がある","exclude":["admin-2026","全test基盤"]}]}
 ```
 
-`kind`は`behavior`、`control_flow`、`integration`、`contract`、`test`、`absence`のどれか一つにする。小さい依頼へdata flow全体、同型実装、全test資産、DB・schema、全環境設定、全検証command、runtime・初期化順を一括要求しない。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
+`kind`は`behavior`、`control_flow`、`integration`、`contract`、`test`、`absence`のどれか一つにする。入口、入力、変換、保存、pathなど複数成果の羅列をquestionへ入れず、一つの変更判断を直接支える最小の事実だけを聞く。小さい依頼へdata flow全体、同型実装、全test資産、DB・schema、全環境設定、全検証command、runtime・初期化順を一括要求しない。識別子、path、数値、固有名詞を省略・翻訳しない。
 
-初回調査は各claimを直接立証する最小境界だけをworkerに辿らせる。対象symbolごとにcaller・callee、分岐・return・await、関連test、設定・runtimeを一律に要求しない。必要な情報が揃った時点を「C1〜C4の各claimへ1件以上の直接根拠があり、未確認事項がRemainingへ分離された」など具体的に定義する。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
+現在HEAD以外のbranch・tag・commitを調べる場合は`--source-ref <revision>`を必ず使う。runnerはそのrevisionをcommitへ解決し、そのcommitから隔離worktreeを作る。旧revisionと現在HEADを一つのsurveyで比較せず、別task-idの検証済みevidenceを上位モデルが比較する。
 
-`implement`には設計書、Red要約、許可pathを必ず渡す。
+初回調査は単一claimを直接立証する最小境界だけをworkerに辿らせる。対象symbolごとにcaller・callee、分岐・return・await、関連test、設定・runtimeを一律に要求しない。必要な情報が揃った時点を「C1へ1件以上の直接根拠があり、未確認事項がRemainingへ分離された」など具体的に定義する。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
+
+`implement`と`errand`には、判断に使った成功済み`survey`または`research`のtask-idを`--evidence-from <task-id>`ですべて渡す。runnerは`status: 0`、完全なreport、有効な出力契約、`fulfilled`、`verified`でないevidenceを拒否し、検証済みpacketを隔離worktreeの`.delegate-request/evidence/<task-id>/`へcopyする。workerは`report.md`のclaim・解釈と`evidence.md`の検証済みsource範囲を組で読む。`implement`にはさらに設計書、Red要約、許可pathを必ず渡す。
 
 ```bash
 bash [skills_root]/worker/delegate.sh implement <時間引数> \
+  --evidence-from <survey-task-id> \
   <task-id> <設計書path> \
   --red-summary "command=<実行command>; failure=<期待した理由での失敗要約>; scenarios=<承認済み項目ID>" \
   -- <許可path>...
 ```
 
-`errand`の実装指示には承認済みシナリオIDとRed要約を含める。request本文は保存せず、実効promptのdigestだけを`result.json`へ残す。機密情報をtimeout理由やtask-idへ含めない。
+`errand`の実装指示には承認済みシナリオIDとRed要約を含める。列名、型幅、relation名などを短い指示だけから再推測させず、workerに`--evidence-from`のpacketを正として読ませる。request本文は保存せず、実効promptのdigestだけを`result.json`へ残す。
 
 ## 証拠
 
-`survey`と`research`のworkerは事実ごとに`C1`、`C2`へ分け、各claimへ次を返す。
+`survey`のworkerは`C1`だけを返す。`research`で複数claimを依頼した場合も、各claimへ次を返す。
 
 ```markdown
 ### C1
@@ -66,7 +69,7 @@ workerはコード本文を貼らない。実行器がworkerと同じsnapshotか
 - `path/to/file.ts:10-20`
 ```
 
-各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は依頼JSONと同じ最大4 claimとし、実行器がID、件数、順序、Evidence形式を検証する。
+各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は依頼JSONと同じ`C1` 1件とし、実行器がID、件数、順序、Evidence形式を検証する。
 
 否定的なclaimは、調べたscope、完全一致の検索語、関連語、除外した候補、未調査範囲も`Interpretation`と`Limitations`へ書く。複数fileのdata flowや実行順序は、入口、呼び出し先、分岐・return・awaitを判断できる複数の根拠へ分ける。
 
@@ -101,11 +104,13 @@ bash [skills_root]/worker/delegate.sh <mode> \
   --idle-timeout-seconds <30..900> \
   --poll-seconds <2..60> \
   --timeout-reason "scope=<対象>,difficulty=<low|medium|high>,basis=<根拠>" \
+  [--source-ref <revision>] \
+  [--evidence-from <verified-task-id>]... \
   [--retry-of <前task-id> | --supplement-of <前task-id> | --repair-of <前task-id>] \
   <mode固有引数>
 ```
 
-`survey`のmode固有引数は`<task-id> '<検証対象JSON>'`とする。`--repair-of`ではmode固有引数を新task-idだけにする。調査指示や設計書を再送しない。positional argumentを省略したcommandを推測で再実行せず、実行器のvalidation errorに従って組み直す。
+`--source-ref`は`survey`と`research`だけに使い、retry・supplement・repairでも同じrevisionを再指定する。`--evidence-from`は`implement`と`errand`で必須とし、複数指定できる。`survey`のmode固有引数は`<task-id> '<検証対象JSON>'`とする。`--repair-of`ではmode固有引数を新task-idだけにする。
 
 通常値は次を下回らない。ユーザーが短い上限を明示した場合だけ短縮する。timeout後は維持または延長する。
 
@@ -128,12 +133,13 @@ bash [skills_root]/worker/delegate.sh <mode> \
 | failure class | 処理 |
 |---|---|
 | 接続失敗、DNS・TLS、reset、rate limit、5xx、timeout、`missing_report`、`malformed_report`、`partial_report` | 同じ依頼を新task-idと`--retry-of`で1回だけ再試行する。合計2回失敗したら上位モデルが引き継ぐ |
-| `invalid_output` | Evidenceのpath・行・件数を変えず、新task-idと`--repair-of`で形式修正を1回だけ行う |
-| `evidence_missing`、`evidence_range_too_wide`、`evidence_out_of_bounds`、`evidence_unsafe_path`、`evidence_reference_limit`、`evidence_packet_limit`、`incomplete_outcome`、`step_limit_exhausted` | 欠落claimだけの検証済みJSONを新task-idと`--supplement-of`で渡す。前回の未検証結論を事実として渡さない |
+| `survey` / `research`の`invalid_output` | Evidenceのpath・行・件数を変えず、新task-idと`--repair-of`で形式修正を1回だけ行う |
+| `implement` / `errand`の`invalid_output`または`incomplete_outcome` | `next-action: review`に従い、実パッチを上位モデルが許可path・evidence・要求に照らして採否する。`--repair-of`を使わない |
+| `evidence_missing`、`evidence_range_too_wide`、`evidence_out_of_bounds`、`evidence_unsafe_path`、`evidence_reference_limit`、`evidence_packet_limit`、`survey` / `research`の`incomplete_outcome`、`step_limit_exhausted` | 欠落claimだけの検証済みJSONを新task-idと`--supplement-of`で渡す。前回の未検証結論を事実として渡さない |
 | API key未設定、HTTP 401、invalid API key、authentication failed | 再試行せず直ちに上位モデルへ切り替える |
 | 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 再試行せず停止する |
 | `nesting`失敗 | 自力検出へ切り替えず品質ゲートを失敗にする |
 
 モデル変更は曖昧な依頼の代替にしない。依頼を修正しても同じinstruction不履行が続き、費用とfallback modelが明示されている場合だけ使う。切替後も依頼とworkflowを変えない。候補返却後の通常レビュー・修正はworkerへ戻さず上位モデルが行う。非zeroまたはtimeout時のpatchは診断専用とする。
 
-`--retry-of`はrequest digestの一致を、`--supplement-of`はdigestの変更と`information_attempt <= 3`を、`--repair-of`は親の失敗分類、同一HEAD、形式修正1回までを実行器が強制する。通信再試行と形式修正は情報調査回数を増やさない。上位モデルのfamily、tier、effortで上限を変えない。
+`--retry-of`はrequest digestの一致を、`--supplement-of`はdigestの変更と`information_attempt <= 3`を、`--repair-of`は親の失敗分類、同一source commit、形式修正1回までを実行器が強制する。契約違反やrunnerの拒否は、配布先の`.claude`・`.codex`・`.agents`を直接編集する権限にならない。`result.json`の`next_action`と固定CLIだけに従う。

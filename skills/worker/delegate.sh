@@ -9,9 +9,9 @@ readonly MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"
 readonly MODEL_ID="${MODEL#openrouter/}"
 readonly MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly SURVEY_STEPS_PER_CLAIM="5"
+readonly SURVEY_STEPS_PER_CLAIM="8"
 readonly SURVEY_FINALIZATION_STEPS="3"
-readonly MAX_SURVEY_REQUEST_CLAIMS="4"
+readonly MAX_SURVEY_REQUEST_CLAIMS="1"
 readonly TIMEOUT_MINUTE_SECONDS="60"
 readonly TIMEOUT_TERM_GRACE_SECONDS="10"
 readonly SMOKE_HARD_TIMEOUT_MINUTES="1"
@@ -62,6 +62,12 @@ RED_SUMMARY=""
 RETRY_OF=""
 SUPPLEMENT_OF=""
 REPAIR_OF=""
+SOURCE_REF="HEAD"
+SOURCE_REF_SET=false
+SOURCE_COMMIT=""
+EVIDENCE_FROM=()
+EVIDENCE_FROM_JSON='[]'
+EVIDENCE_DIGEST_INPUT=""
 ATTEMPT="1"
 INFORMATION_ATTEMPT="1"
 REPAIR_ATTEMPT="0"
@@ -369,7 +375,7 @@ build_evidence_packet() {
       continue
     fi
     blob=$(git hash-object "$WORKTREE/$path") || { invalid=true; continue; }
-    source_kind="HEAD"
+    source_kind="$SOURCE_REF"
     for context_path in "${CONTEXT_SNAPSHOT_PATHS[@]}"; do
       [ "$path" = "$context_path" ] && source_kind="ignored-agent-context"
     done
@@ -428,6 +434,8 @@ render_result() {
     "  retry-of: \(.retry_of // "none")",
     "  supplement-of: \(.supplement_of // "none")",
     "  repair-of: \(.repair_of // "none")",
+    "  source-ref: \(.source_ref // "HEAD")",
+    "  evidence-from: \((.evidence_from // []) | join(",") | if length == 0 then "none" else . end)",
     "  repair-attempt: \(.repair_attempt // 0)",
     "  execution-status: \(.status)",
     "  report: \(.report_status)",
@@ -674,23 +682,40 @@ case "$MODE" in
     [ "$7" = "--timeout-reason" ] || fail "$MODE mode requires --timeout-reason fourth"
     TIMEOUT_REASON="$8"
     shift 8
-    case "${1:-}" in
-      --retry-of)
-        RETRY_OF="${2:-}"
-        [[ "$RETRY_OF" =~ $TASK_ID_PATTERN ]] || fail "--retry-of must be a lowercase kebab-case task id"
-        shift 2
-        ;;
-      --supplement-of)
-        SUPPLEMENT_OF="${2:-}"
-        [[ "$SUPPLEMENT_OF" =~ $TASK_ID_PATTERN ]] || fail "--supplement-of must be a lowercase kebab-case task id"
-        shift 2
-        ;;
-      --repair-of)
-        REPAIR_OF="${2:-}"
-        [[ "$REPAIR_OF" =~ $TASK_ID_PATTERN ]] || fail "--repair-of must be a lowercase kebab-case task id"
-        shift 2
-        ;;
-    esac
+    while [ "$#" -ge 2 ]; do
+      case "$1" in
+        --source-ref)
+          [ "$SOURCE_REF_SET" = false ] || fail "--source-ref may be specified only once"
+          SOURCE_REF="$2"
+          SOURCE_REF_SET=true
+          shift 2
+          ;;
+        --evidence-from)
+          [[ "$2" =~ $TASK_ID_PATTERN ]] || fail "--evidence-from must name a lowercase kebab-case task id"
+          EVIDENCE_FROM+=("$2")
+          shift 2
+          ;;
+        --retry-of)
+          [ -z "$RETRY_OF$SUPPLEMENT_OF$REPAIR_OF" ] || fail "retry, supplement, and repair lineage options are mutually exclusive"
+          RETRY_OF="$2"
+          [[ "$RETRY_OF" =~ $TASK_ID_PATTERN ]] || fail "--retry-of must be a lowercase kebab-case task id"
+          shift 2
+          ;;
+        --supplement-of)
+          [ -z "$RETRY_OF$SUPPLEMENT_OF$REPAIR_OF" ] || fail "retry, supplement, and repair lineage options are mutually exclusive"
+          SUPPLEMENT_OF="$2"
+          [[ "$SUPPLEMENT_OF" =~ $TASK_ID_PATTERN ]] || fail "--supplement-of must be a lowercase kebab-case task id"
+          shift 2
+          ;;
+        --repair-of)
+          [ -z "$RETRY_OF$SUPPLEMENT_OF$REPAIR_OF" ] || fail "retry, supplement, and repair lineage options are mutually exclusive"
+          REPAIR_OF="$2"
+          [[ "$REPAIR_OF" =~ $TASK_ID_PATTERN ]] || fail "--repair-of must be a lowercase kebab-case task id"
+          shift 2
+          ;;
+        *) break ;;
+      esac
+    done
     configure_timeouts
     ;;
   smoke) configure_timeouts ;;
@@ -767,6 +792,27 @@ command -v jq >/dev/null 2>&1 || fail "jq is required"
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || fail "not inside a git repository"
 cd "$REPO_ROOT" || fail "cannot enter repository root"
+
+case "$SOURCE_REF" in
+  ""|-*|*..*|*@\{*|*~*|*^*|*:*|*\\*|*" "*|*$'\t'*|*$'\n'*|*$'\r'*) fail "--source-ref contains unsupported revision syntax" ;;
+esac
+case "$MODE" in
+  survey|research) ;;
+  *) [ "$SOURCE_REF_SET" = false ] || fail "--source-ref is only valid for survey and research" ;;
+esac
+SOURCE_COMMIT=$(git rev-parse --verify "${SOURCE_REF}^{commit}" 2>/dev/null) || fail "--source-ref does not resolve to a commit: $SOURCE_REF"
+
+case "$MODE" in
+  implement|errand)
+    [ "${#EVIDENCE_FROM[@]}" -gt 0 ] || fail "$MODE mode requires at least one --evidence-from task id"
+    ;;
+  *) [ "${#EVIDENCE_FROM[@]}" -eq 0 ] || fail "--evidence-from is only valid for implement and errand" ;;
+esac
+
+if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
+  EVIDENCE_FROM_JSON=$(printf '%s\n' "${EVIDENCE_FROM[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot serialize evidence task ids"
+  [ "$(printf '%s' "$EVIDENCE_FROM_JSON" | jq 'length')" = "$(printf '%s' "$EVIDENCE_FROM_JSON" | jq 'unique | length')" ] || fail "--evidence-from task ids must be unique"
+fi
 
 if [ "$MODE" = "survey" ] && [ -z "$REPAIR_OF" ]; then
   [ -f "$SCRIPT_DIR/validate-survey-request.sh" ] || fail "survey request validator is missing"
@@ -890,10 +936,27 @@ if [ "$MODE" != "smoke" ]; then
   [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
   RESULT_PARENT=${RESULT_ROOT%/*}
   mkdir -p "$RESULT_PARENT" || fail "cannot create result parent directory"
+  if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
+    for evidence_task_id in "${EVIDENCE_FROM[@]}"; do
+      EVIDENCE_PARENT="$RESULT_PARENT/$evidence_task_id"
+      EVIDENCE_PARENT_RESULT="$EVIDENCE_PARENT/result.json"
+      [ -f "$EVIDENCE_PARENT_RESULT" ] || fail "evidence task result not found: $evidence_task_id"
+      case "$(jq -r '.mode' "$EVIDENCE_PARENT_RESULT")" in
+        survey|research) ;;
+        *) fail "evidence task must be survey or research: $evidence_task_id" ;;
+      esac
+      jq -e '(.status == 0) and (.report_status == "complete") and (.output_contract_status == "valid") and (.outcome == "fulfilled") and (.evidence_status == "verified")' "$EVIDENCE_PARENT_RESULT" >/dev/null 2>&1 || \
+        fail "evidence task is not a verified successful result: $evidence_task_id"
+      [ -f "$EVIDENCE_PARENT/report.md" ] || fail "evidence task report not found: $evidence_task_id"
+      [ -f "$EVIDENCE_PARENT/evidence.md" ] || fail "evidence task packet not found: $evidence_task_id"
+      EVIDENCE_DIGEST_INPUT=$(printf '%s\n%s:%s:%s:%s' "$EVIDENCE_DIGEST_INPUT" "$evidence_task_id" "$(git hash-object "$EVIDENCE_PARENT_RESULT")" "$(git hash-object "$EVIDENCE_PARENT/report.md")" "$(git hash-object "$EVIDENCE_PARENT/evidence.md")") || fail "cannot hash evidence task: $evidence_task_id"
+    done
+  fi
   if [ -n "$RETRY_OF" ]; then
     PARENT_RESULT="$RESULT_PARENT/$RETRY_OF/result.json"
     [ -f "$PARENT_RESULT" ] || fail "retry parent result not found: $RETRY_OF"
     [ "$(jq -r '.mode' "$PARENT_RESULT")" = "$MODE" ] || fail "retry parent mode does not match: $RETRY_OF"
+    [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$SOURCE_COMMIT" ] || fail "retry parent source snapshot does not match --source-ref: $RETRY_OF"
     ATTEMPT=$(jq -er '(.attempt // 1) + 1' "$PARENT_RESULT") || fail "cannot read retry parent attempt"
     INFORMATION_ATTEMPT=$(jq -er '.information_attempt // 1' "$PARENT_RESULT") || fail "cannot read retry parent information attempt"
   elif [ -n "$SUPPLEMENT_OF" ]; then
@@ -901,6 +964,7 @@ if [ "$MODE" != "smoke" ]; then
     PARENT_RESULT="$RESULT_PARENT/$SUPPLEMENT_OF/result.json"
     [ -f "$PARENT_RESULT" ] || fail "supplement parent result not found: $SUPPLEMENT_OF"
     [ "$(jq -r '.mode' "$PARENT_RESULT")" = "$MODE" ] || fail "supplement parent mode does not match: $SUPPLEMENT_OF"
+    [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$SOURCE_COMMIT" ] || fail "supplement parent source snapshot does not match --source-ref: $SUPPLEMENT_OF"
     [ "$(jq -r '.report_status' "$PARENT_RESULT")" = "complete" ] || fail "supplement parent must have a complete report: $SUPPLEMENT_OF"
     ATTEMPT=$(jq -er '(.attempt // 1) + 1' "$PARENT_RESULT") || fail "cannot read supplement parent attempt"
     INFORMATION_ATTEMPT=$(jq -er '(.information_attempt // 1) + 1' "$PARENT_RESULT") || fail "cannot read supplement parent information attempt"
@@ -913,7 +977,7 @@ if [ "$MODE" != "smoke" ]; then
     [ "$(jq -r '.report_status' "$PARENT_RESULT")" = "complete" ] || fail "repair parent must have a complete report: $REPAIR_OF"
     [ "$(jq -r '.failure_class' "$PARENT_RESULT")" = "invalid_output" ] || \
       fail "repair parent must have formatting-only invalid_output; evidence selection requires supplement: $REPAIR_OF"
-    [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$(git rev-parse HEAD)" ] || fail "repair parent source snapshot no longer matches HEAD: $REPAIR_OF"
+    [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$SOURCE_COMMIT" ] || fail "repair parent source snapshot does not match --source-ref: $REPAIR_OF"
     [ -f "$RESULT_PARENT/$REPAIR_OF/report.md" ] || fail "repair parent report not found: $REPAIR_OF"
     [ -f "$RESULT_PARENT/$REPAIR_OF/evidence.md" ] || fail "repair parent evidence not found: $REPAIR_OF"
     ATTEMPT=$(jq -er '(.attempt // 1) + 1' "$PARENT_RESULT") || fail "cannot read repair parent attempt"
@@ -927,7 +991,7 @@ if [ "$MODE" != "smoke" ]; then
       SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"
     fi
   fi
-  SOURCE_HEAD=$(git rev-parse HEAD) || fail "cannot read source HEAD"
+  SOURCE_HEAD="$SOURCE_COMMIT"
   SOURCE_WORKTREE_STATUS_JSON=$(git status --porcelain=v1 --untracked-files=all | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot record source worktree status"
   TASK_RUNTIME="$RESULT_PARENT/.${TASK_ID}.task"
   mkdir "$TASK_RUNTIME" 2>/dev/null || fail "task is already active or has unfinished state: $TASK_ID; use show before choosing a new task id"
@@ -953,9 +1017,20 @@ jq -ne --argjson usage "$CURRENT_USAGE" --argjson soft "$SOFT_BUDGET_USD" '$usag
 jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <= $hard' >/dev/null || fail "API key hard limit exceeds $HARD_BUDGET_USD USD"
 
 if [ "$MODE" != "smoke" ]; then
-  git worktree add --detach "$WORKTREE" HEAD >/dev/null || fail "cannot create isolated worktree"
+  git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT" >/dev/null || fail "cannot create isolated worktree"
   WORKTREE_ADDED=1
   snapshot_ignored_agent_context
+fi
+
+if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
+  mkdir -p "$WORKTREE/.delegate-request/evidence" || fail "cannot create delegated evidence directory"
+  for evidence_task_id in "${EVIDENCE_FROM[@]}"; do
+    EVIDENCE_TARGET="$WORKTREE/.delegate-request/evidence/$evidence_task_id"
+    mkdir "$EVIDENCE_TARGET" || fail "cannot create delegated evidence task directory: $evidence_task_id"
+    cp "$RESULT_PARENT/$evidence_task_id/result.json" "$EVIDENCE_TARGET/result.json" || fail "cannot copy evidence task metadata: $evidence_task_id"
+    cp "$RESULT_PARENT/$evidence_task_id/report.md" "$EVIDENCE_TARGET/report.md" || fail "cannot copy evidence task report: $evidence_task_id"
+    cp "$RESULT_PARENT/$evidence_task_id/evidence.md" "$EVIDENCE_TARGET/evidence.md" || fail "cannot copy evidence task packet: $evidence_task_id"
+  done
 fi
 
 if { [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; } || [ "$MODE" = "implement" ]; then
@@ -1080,6 +1155,11 @@ IMPLEMENT_OUTPUT_CONTRACT='最終回答は次の形式だけを使ってくだ�
 設計・承認済みシナリオ・Redの各項目について、変更pathと対応内容を1行ずつ書いてください。
 ## Remaining
 未実装、曖昧さ、許可外変更の必要性を書き、無ければ none と書いてください。'
+VERIFIED_EVIDENCE_INSTRUCTION=""
+if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
+  EVIDENCE_TASK_LIST=$(printf '%s\n' "${EVIDENCE_FROM[@]}" | awk '{ print "- .delegate-request/evidence/" $0 "/report.md"; print "- .delegate-request/evidence/" $0 "/evidence.md" }')
+  VERIFIED_EVIDENCE_INSTRUCTION="次の検証済みevidence packetを実装根拠として必ず読み、report.mdのclaim・解釈とevidence.mdの検証済みsource範囲を組で使ってください。識別子、列名、型幅、relation、制御フローを短い実装指示から再推測してはなりません。packetと指示が矛盾する、またはpacketが必須契約を直接支えない場合は変更せずconsultation_requiredを返してください。\n$EVIDENCE_TASK_LIST"
+fi
 
 if [ -n "$REPAIR_OF" ]; then
   PROMPT=".delegate-request/parent-report.mdを、事実や結論を追加せず出力契約へ整形し直してください。.delegate-request/parent-evidence.mdは前回の機械検証エラー確認にだけ使ってください。repository、production code、設定、test、schemaを再調査してはなりません。Claim、Interpretation、Limitationsを各claim内へ戻し、Evidenceの記号・空白・配置だけを固定形式へ直してください。Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません。行範囲の選び直しが必要なら修復せずOutcome: partialとしてRemainingへ書いてください。親reportにない事実を補完してはなりません。"
@@ -1109,13 +1189,13 @@ elif [ "$MODE" = "nesting" ]; then
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 elif [ "$MODE" = "implement" ]; then
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="承認済み設計 .delegate-request/spec.md と次のRed要約に従い、許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。設計、シナリオ、Redが矛盾する、または許可外変更が必要なら変更せずOutcomeをconsultation_requiredとして理由を報告してください。Red要約:\n$RED_SUMMARY\n許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="承認済み設計 .delegate-request/spec.md と次のRed要約に従い、許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。設計、シナリオ、Redが矛盾する、または許可外変更が必要なら変更せずOutcomeをconsultation_requiredとして理由を報告してください。$VERIFIED_EVIDENCE_INSTRUCTION\nRed要約:\n$RED_SUMMARY\n許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 else
   ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="次の短い実装指示に従い、許可ファイルの初回実装候補を作成してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
+  PROMPT="次の短い実装指示に従い、許可ファイルの初回実装候補を作成してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。$VERIFIED_EVIDENCE_INSTRUCTION\n実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
@@ -1132,7 +1212,7 @@ if [ "$MODE" != "smoke" ]; then
   elif [ -n "$SPEC_PATH" ]; then
     SPEC_BLOB=$(git hash-object "$REPO_ROOT/$SPEC_PATH") || fail "cannot hash delegated spec"
   fi
-  REQUEST_DIGEST=$(printf '%s\n%s' "$PROMPT" "$SPEC_BLOB" | git hash-object --stdin) || fail "cannot hash effective request"
+  REQUEST_DIGEST=$(printf '%s\n%s\n%s\n%s' "$PROMPT" "$SPEC_BLOB" "$SOURCE_COMMIT" "$EVIDENCE_DIGEST_INPUT" | git hash-object --stdin) || fail "cannot hash effective request"
   if [ -n "$RETRY_OF" ]; then
     PARENT_REQUEST_DIGEST=$(jq -r '.request_digest // ""' "$PARENT_RESULT") || fail "cannot read retry parent request digest"
     if [ "$REQUEST_DIGEST" = "$PARENT_REQUEST_DIGEST" ]; then
@@ -1330,8 +1410,13 @@ fi
 case "$FAILURE_CLASS" in
   none) NEXT_ACTION="none" ;;
   missing_report|malformed_report|partial_report|timeout) NEXT_ACTION="retry" ;;
-  invalid_output) NEXT_ACTION="repair" ;;
-  evidence_*|incomplete_outcome|step_limit_exhausted) NEXT_ACTION="supplement" ;;
+  invalid_output)
+    case "$MODE" in survey|research) NEXT_ACTION="repair" ;; implement|errand) NEXT_ACTION="review" ;; *) NEXT_ACTION="stop" ;; esac
+    ;;
+  incomplete_outcome)
+    case "$MODE" in survey|research) NEXT_ACTION="supplement" ;; implement|errand) NEXT_ACTION="review" ;; *) NEXT_ACTION="stop" ;; esac
+    ;;
+  evidence_*|step_limit_exhausted) NEXT_ACTION="supplement" ;;
   *) NEXT_ACTION="stop" ;;
 esac
 
@@ -1372,7 +1457,9 @@ jq -n \
   --argjson termination_grace_seconds "$TIMEOUT_TERM_GRACE_SECONDS" \
   --arg timeout_policy_source "$TIMEOUT_POLICY_SOURCE" \
   --arg timeout_reason "$TIMEOUT_REASON" \
+  --arg source_ref "$SOURCE_REF" \
   --arg source_head "$SOURCE_HEAD" \
+  --argjson evidence_from "$EVIDENCE_FROM_JSON" \
   --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
   --argjson context_snapshot_paths "$CONTEXT_SNAPSHOT_PATHS_JSON" \
   --argjson usage_current "$CURRENT_USAGE" \
@@ -1383,7 +1470,7 @@ jq -n \
   --argjson observed_output_bytes "$OBSERVED_OUTPUT_BYTES" \
   --argjson observed_survey_steps "$OBSERVED_SURVEY_STEPS" \
   --argjson step_limit_reached "$STEP_LIMIT_REACHED" \
-  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_snapshot:(if $context_snapshot_paths | length > 0 then "HEAD+ignored-agent-context" else "HEAD" end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"

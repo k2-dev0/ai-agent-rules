@@ -15,7 +15,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 必須の調査パケット
 
-実装前のsurveyでは、共通委任契約のvalidatorを通る最大4 claimのJSONを渡し、同じIDのclaim-evidenceだけを返させる。一つのclaimへ現在挙動、同型実装、schema、test、検証commandを混ぜない。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
+実装前のsurveyでは、共通委任契約のvalidatorを通る`C1` 1件だけのJSONをtask-idごとに渡す。現在挙動、同型実装、schema、test、検証commandを別taskへ分ける。旧revisionを読むtaskには`--source-ref <revision>`を付け、現在HEADと同じtaskで比較しない。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
 
 - 変更対象の現在の挙動・型・保存先
 - 最寄りの同型実装1件と置換する識別子・値
@@ -23,7 +23,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 - 対象へ直接使う既存検証command
 - 読めなかったpath、未確認事項、推測を分けたRemaining
 
-上の分類を毎回すべて要求しない。たとえば既存列への値の入れ替えなら、現在の生成方法、同型実装1件、入力mapの存在、列型の4 claimで止め、schedule、handler、HTTP、全test基盤、無関係なDB model、全command、runtime・初期化順を除外する。検証commandがclaimに含まれる場合だけ`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でも指定claimが足りなければ、`--supplement-of`で欠落IDだけを補完する。形式だけが壊れた場合は`--repair-of`で再調査せず直す。情報補完は2回、初回を含め合計3回までとする。
+上の分類を毎回すべて要求しない。たとえば既存列への値の入れ替えなら、現在の生成方法、同型実装1件、入力mapの存在、列型を必要な順に別task-idで調べる。次の変更判断に不要なclaimは起動しない。検証commandのtaskだけ`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でも`C1`が足りなければ、`--supplement-of`で同じ事実の欠落境界だけを補完する。
 
 初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 
@@ -64,7 +64,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 4. workerへ初回実装を委任する
 
-呼び出し元が指定したmodeへ、実装入力、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、許可pathを渡す。`implement`は`--red-summary`を省略しない。workerにはshell、Git、外部通信、テスト・設計・設定の編集を許可しない。[agent_name]はworkerの最初の応答前にstub、雛形、部分実装を作らず、共通委任契約のfallback条件を満たした場合だけ初回実装を引き継ぐ。
+呼び出し元が指定したmodeへ、実装判断に使った検証済みtask-id全件を`--evidence-from`で渡し、実装入力、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、許可pathを渡す。`implement`は`--red-summary`を省略しない。workerにはshell、Git、外部通信、テスト・設計・設定の編集を許可しない。
 
 ## 5. 相談を処理する
 

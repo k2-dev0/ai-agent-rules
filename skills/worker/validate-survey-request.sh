@@ -2,13 +2,14 @@
 # survey依頼を外部workerへ送る前に、scopeとclaim境界を機械検証する。
 set -u
 
-readonly MAX_CLAIMS="4"
-readonly MAX_PURPOSE_CHARACTERS="500"
-readonly MAX_SUBJECT_CHARACTERS="160"
-readonly MAX_QUESTION_CHARACTERS="240"
+readonly MAX_CLAIMS="1"
+readonly MAX_PURPOSE_CHARACTERS="240"
+readonly MAX_SUBJECT_CHARACTERS="120"
+readonly MAX_QUESTION_CHARACTERS="160"
+readonly MAX_QUESTION_ENUMERATORS="2"
 readonly MAX_ANCHORS="4"
 readonly MAX_ANCHOR_CHARACTERS="200"
-readonly MAX_DONE_WHEN_CHARACTERS="240"
+readonly MAX_DONE_WHEN_CHARACTERS="160"
 readonly MAX_EXCLUDES="8"
 readonly MAX_EXCLUDE_CHARACTERS="160"
 
@@ -62,6 +63,7 @@ printf '%s' "$REQUEST_JSON" | jq -e '
 printf '%s' "$REQUEST_JSON" | jq -e \
   --argjson max_subject "$MAX_SUBJECT_CHARACTERS" \
   --argjson max_question "$MAX_QUESTION_CHARACTERS" \
+  --argjson max_question_enumerators "$MAX_QUESTION_ENUMERATORS" \
   --argjson max_anchors "$MAX_ANCHORS" \
   --argjson max_anchor "$MAX_ANCHOR_CHARACTERS" \
   --argjson max_done_when "$MAX_DONE_WHEN_CHARACTERS" \
@@ -70,6 +72,8 @@ printf '%s' "$REQUEST_JSON" | jq -e \
   all(.claims[];
     (.subject | length <= $max_subject)
     and (.question | length <= $max_question)
+    and (([.question | scan("[、,;；]")] | length) <= $max_question_enumerators)
+    and ([.subject, .question, .done_when, .anchors[], .exclude[]] | all(test("[\\n\\r\\t]") | not))
     and (.anchors | length <= $max_anchors and length == (unique | length))
     and (all(.anchors[]; type == "string" and length > 0 and length <= $max_anchor))
     and (.done_when | length <= $max_done_when)
@@ -77,7 +81,7 @@ printf '%s' "$REQUEST_JSON" | jq -e \
     and (all(.exclude[]; type == "string" and length > 0 and length <= $max_exclude))
   )
 ' >/dev/null 2>&1 || \
-  fail "claim text or list limits exceeded, or anchors/exclude contain empty or duplicate values"
+  fail "claim text, enumeration, or list limits exceeded, or values contain controls, empties, or duplicates"
 
 # key順と空白を正規化し、同じ意味の依頼が同じdigestになるようにする。
 printf '%s' "$REQUEST_JSON" | jq -cS . || fail "cannot normalize request"
