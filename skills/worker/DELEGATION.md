@@ -24,7 +24,13 @@ workerはOpenRouterを使い、既定モデルは`minimax/minimax-m3`とする�
 
 ## 依頼
 
-依頼は目的、scope、必須成果を短く書く。初回`survey`は変更判断に直結する最大6 claim（目安4〜6）へ縮約し、`C1`、`C2`の固定IDを付ける。小さい依頼へdata flow全体、同型実装、全test資産、DB・schema、全環境設定、全検証command、runtime・初期化順を一括要求しない。各claimには確認対象を一つだけ書き、不要なschedule、handler、HTTP、設定、DB、schema、migration、test基盤などを除外scopeとして列挙する。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
+`survey`依頼は自由文を渡さず、実行器と同じdirectoryの`validate-survey-request.sh`が受理するJSONを一つの引数として渡す。validatorは外部通信より前に、最大4 claim、`C1`からの連番、claimごとの単一`kind`、単一`subject`、question、1〜4 anchors、done_when、excludeを検証し、不正ならworkerを起動せず停止する。独立した移植元、移植先、test、runtime契約を一つのtaskへ詰めず、固有task-idへ分ける。
+
+```json
+{"purpose":"変更判断に必要な入力変換を確認する","claims":[{"id":"C1","kind":"behavior","subject":"sagawa-delivery-importの固定長入力変換","question":"固定長入力から出力CSV各列を生成する規則は何か","anchors":["sagawa-delivery-import","tool-def.tsx"],"done_when":"入力位置、抽出値、出力列を直接示す根拠がある","exclude":["admin-2026","全test基盤"]}]}
+```
+
+`kind`は`behavior`、`control_flow`、`integration`、`contract`、`test`、`absence`のどれか一つにする。小さい依頼へdata flow全体、同型実装、全test資産、DB・schema、全環境設定、全検証command、runtime・初期化順を一括要求しない。識別子、path、数値、固有名詞を省略・翻訳しない。曖昧な「詳しく」「適切に」「必要なら」だけで完了条件を表さない。
 
 初回調査は各claimを直接立証する最小境界だけをworkerに辿らせる。対象symbolごとにcaller・callee、分岐・return・await、関連test、設定・runtimeを一律に要求しない。必要な情報が揃った時点を「C1〜C4の各claimへ1件以上の直接根拠があり、未確認事項がRemainingへ分離された」など具体的に定義する。上位モデルは調査pathを作るためにproduction fileを読まない。`survey`へproduction pathを渡す必要はなく、ユーザー入力、設計書、既知の識別子・機能語を探索anchorとして渡す。正確なpathを含めるのは、ユーザー入力、設計書、過去の検証済みevidence、変更一覧ですでに判明している場合だけとする。
 
@@ -54,19 +60,21 @@ Limitations: <確認できない範囲。無ければnone>
 
 workerはコード本文を貼らない。実行器がworkerと同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出し、revision、blob hash、指定範囲、展開範囲を`result.json`へ記録する。範囲外、symlink、Git・env、過大範囲、根拠のないclaimは失敗にする。
 
-`Evidence`は各claim 1〜3範囲、全claimで最大20範囲、推奨12範囲以下にする。次の形式と完全一致させ、コロンの直後へ空白を入れない。
+`Evidence`は各claim 1〜3範囲、全claimで最大20範囲、推奨12範囲以下、1範囲80行以下にする。実行器が前後8行を展開したpacket全体は400行以下にする。次の形式と完全一致させ、コロンの直後へ空白を入れない。
 
 ```markdown
 - `path/to/file.ts:10-20`
 ```
 
-各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は最大6 claimとし、実行器が件数、順序、Evidence形式を検証する。
+各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は依頼JSONと同じ最大4 claimとし、実行器がID、件数、順序、Evidence形式を検証する。
 
 否定的なclaimは、調べたscope、完全一致の検索語、関連語、除外した候補、未調査範囲も`Interpretation`と`Limitations`へ書く。複数fileのdata flowや実行順序は、入口、呼び出し先、分岐・return・awaitを判断できる複数の根拠へ分ける。
 
 上位モデルは`evidence_status: verified`で、対象fileの現在のblobが記録値と一致し、codeがclaimを直接支える場合、同じ箇所を再読しない。情報不足では、欠落したclaimまたは必須成果ID、既存evidenceで足りない理由、追加で辿る境界を明記し、`--supplement-of <前task-id>`を使って限定surveyを行う。初回を1回目として補完は2回まで、合計3回に固定する。前回workerの結論を根拠として渡さず、検証済みevidence IDだけを探索anchorにする。同じdigestの再送はせず、各補完で不足IDまたは探索境界を一つ以上追加する。追加対象を特定できなければ広域調査へ逃げず、未確認事項として停止する。保存済みsnapshotの範囲不足、branch・caller・callee・設定・runtime根拠の不足、claim同士の矛盾は、3回目までは直接調査の理由にしない。
 
-調査内容が揃っていて`invalid_output`または`invalid_evidence`だけが残る場合は、情報補完をやり直さず、同じmodeへ`--repair-of <前task-id>`と新task-idだけを渡す。実行器は親reportと機械検証結果だけをworkerへ見せ、repositoryのRead、Grep、Glob、LSPを拒否する。形式修正は1回までで、`information_attempt`を増やさない。親reportにない事実が必要なら追加せず`Outcome: partial`へ落とす。
+調査内容が揃い、見出し、空白、field順、Evidence記法だけが不正な`invalid_output`では、情報補完をやり直さず、同じmodeへ`--repair-of <前task-id>`と新task-idだけを渡す。repairはEvidenceのpath、開始行、終了行、件数を変更できない。実行器は親reportと機械検証結果だけをworkerへ見せ、repositoryのRead、Grep、Glob、LSPを拒否する。形式修正は1回までで、`information_attempt`を増やさない。
+
+Evidenceの範囲超過、範囲外、存在しないpath、件数超過、packet超過、根拠不足は意味上の選択不足であり、repairへ渡さない。`next_action: supplement`に従い、欠落claimだけを新しい検証済みJSONで調査する。step上限到達時に出力契約が不正なら`step_limit_exhausted`としてrepairを拒否する。
 
 上位モデルが調査目的でproduction fileを直接確認してよいのは次だけとする。実行前に該当理由と、再surveyより直接確認の方が有利な理由を一文で残す。
 
@@ -97,7 +105,7 @@ bash [skills_root]/worker/delegate.sh <mode> \
   <mode固有引数>
 ```
 
-`--repair-of`ではmode固有引数を新task-idだけにする。調査指示や設計書を再送しない。
+`survey`のmode固有引数は`<task-id> '<検証対象JSON>'`とする。`--repair-of`ではmode固有引数を新task-idだけにする。調査指示や設計書を再送しない。positional argumentを省略したcommandを推測で再実行せず、実行器のvalidation errorに従って組み直す。
 
 通常値は次を下回らない。ユーザーが短い上限を明示した場合だけ短縮する。timeout後は維持または延長する。
 
@@ -113,15 +121,15 @@ bash [skills_root]/worker/delegate.sh <mode> \
 
 ## 結果と再試行
 
-成功条件は`status: 0`、`report_status: complete`、`output_contract_status: valid`、`outcome: fulfilled`であり、読み取り調査ではさらに`evidence_status: verified`を要求する。`worker-result`、`report.md`、`evidence.md`、実装時の`candidate.patch`を確認する。workerの自己申告だけで成功としない。
+成功条件は`status: 0`、`report_status: complete`、`output_contract_status: valid`、`outcome: fulfilled`であり、読み取り調査ではさらに`evidence_status: verified`を要求する。`worker-result`の`failure-class`と`next-action`、`report.md`、`evidence.md`、実装時の`candidate.patch`を確認する。workerの自己申告だけで成功としない。
 
 標準出力は上位モデルのcontextを守るためartifactごとに上限を持つ。省略時は完全なartifact pathを必ず表示する。省略は表示だけに適用し、`report.md`、`evidence.md`、`candidate.patch`、`opencode.jsonl`を削除・短縮しない。
 
 | failure class | 処理 |
 |---|---|
 | 接続失敗、DNS・TLS、reset、rate limit、5xx、timeout、`missing_report`、`malformed_report`、`partial_report` | 同じ依頼を新task-idと`--retry-of`で1回だけ再試行する。合計2回失敗したら上位モデルが引き継ぐ |
-| `invalid_output`、形式だけが原因の`invalid_evidence` | 新task-idと`--repair-of`で形式修正を1回だけ行う。再調査しない |
-| 内容不足の`invalid_evidence`、`incomplete_outcome` | 欠落claimまたは必須成果IDだけを具体化して新task-idで補完する。前回の未検証結論を事実として渡さない |
+| `invalid_output` | Evidenceのpath・行・件数を変えず、新task-idと`--repair-of`で形式修正を1回だけ行う |
+| `evidence_missing`、`evidence_range_too_wide`、`evidence_out_of_bounds`、`evidence_unsafe_path`、`evidence_reference_limit`、`evidence_packet_limit`、`incomplete_outcome`、`step_limit_exhausted` | 欠落claimだけの検証済みJSONを新task-idと`--supplement-of`で渡す。前回の未検証結論を事実として渡さない |
 | API key未設定、HTTP 401、invalid API key、authentication failed | 再試行せず直ちに上位モデルへ切り替える |
 | 予算超過、ZDR非対応、依存command欠落、参照先欠落 | 再試行せず停止する |
 | `nesting`失敗 | 自力検出へ切り替えず品質ゲートを失敗にする |

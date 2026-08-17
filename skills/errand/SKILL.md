@@ -43,7 +43,7 @@ hooks:
 workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`errand`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
 
 1. 依頼から公開挙動、完了条件、既知の識別子・機能語を探索anchorとして固定する。候補pathを得るためにproduction fileを読まない。依頼にある識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
-2. workerの`survey`を必ず1回実行し、変更判断に必要な最大6 claim（目安4〜6）へ絞る。現在の対象挙動、最寄りの同型実装1件、置換する要素、対象pathを中心にし、今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandを除外scopeへ明記する。網羅監査は依頼しない。
+2. workerの`survey`を必ず1回実行し、共通契約のvalidatorを通る最大4 claimのJSONを渡す。現在の対象挙動、最寄りの同型実装1件、置換する要素、対象pathを一つのclaimへ混ぜず、独立境界は別task-idにする。今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandを各claimのexcludeへ明記する。網羅監査は依頼しない。
 3. 次がすべて一意なら続け、一つでも欠ければ変更せず停止する。
    - 依頼後の公開挙動と完了条件
    - 最寄りの同型実装1件の正確なpath

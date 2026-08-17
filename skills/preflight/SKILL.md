@@ -24,11 +24,16 @@ user-invocable: false
 コードベースの事実確認はworkerの`survey`へ委任する。設計・要件・採否判断は[agent_name]が行う。
 `survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
 
+このskillでBashを使ってよいのは`delegate.sh prepare`、`survey`、`show`だけとする。path探索やproduction code調査へBash、shell loop、条件分岐、pipelineを使わず、上位モデルのRead、Grep、Globによる広域調査へも切り替えない。Bashが同じ理由で一度拒否された工程ではBash探索を再試行しない。
+
 1. 上位モデルが、確認したい仮説、探索範囲、期待する根拠を具体的な調査項目へ分ける
-2. 独立した調査項目はそれぞれ固有の task-id で固定実行器へ委任する
-3. 下位モデルには変更系 tool を与えず、共通契約のclaim-evidence、確認できない事項、反証候補だけを返させる
-4. `evidence_status: verified`のコードがclaimを直接支え、blobが現在も一致する場合は同じ箇所を再読しない。不足時はclaimを指定して限定surveyへ戻す
-5. 共通契約の代替調査も使えない、または参照先がない場合は調査不能な範囲を報告し、推測で穴埋めしない
+2. 移植では少なくとも移植元の挙動と移植先の統合境界を別task-idにし、test、runtime、schemaを同じclaimへ混ぜない
+3. 共通契約のschemaに従い、最大4 claimの依頼JSONを作る。自由文の調査指示はworkerへ渡さない
+4. `validate-survey-request.sh`に拒否された依頼は外部実行せず、claimを分割して別task-idへ直す
+5. 下位モデルには変更系 tool を与えず、依頼JSONと同じclaim IDのclaim-evidence、確認できない事項、反証候補だけを返させる
+6. `worker-result`の`next-action`が`repair`の場合だけ形式修正し、Evidence範囲、path、件数の不正では限定surveyへ戻す
+7. `evidence_status: verified`のコードがclaimを直接支え、blobが現在も一致する場合は同じ箇所を再読しない。不足時はclaimを指定して限定surveyへ戻す
+8. 共通契約の代替調査も使えない、または参照先がない場合は調査不能な範囲を報告し、推測で穴埋めしない
 
 上位モデル自身による広範なコード探索を避ける。証拠不備、snapshot不一致、矛盾は欠落claimの限定surveyを先に行う。直接確認は共通契約の条件を満たす場合だけとし、理由を残して全file Readではなく既知の行範囲を読む。
 

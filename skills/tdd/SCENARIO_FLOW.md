@@ -15,7 +15,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 ## 必須の調査パケット
 
-実装前のsurveyでは、共通委任契約のclaim-evidence形式で、今回の変更判断に必要な最大6 claim（目安4〜6）だけを返させる。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
+実装前のsurveyでは、共通委任契約のvalidatorを通る最大4 claimのJSONを渡し、同じIDのclaim-evidenceだけを返させる。一つのclaimへ現在挙動、同型実装、schema、test、検証commandを混ぜない。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
 
 - 変更対象の現在の挙動・型・保存先
 - 最寄りの同型実装1件と置換する識別子・値
