@@ -25,10 +25,10 @@ if
     # テストファイル自体は TDD の Red フェーズ。deny 対象外(棄権して settings に委ねる)
     echo "$FILE" | grep -q '\.test\.' && continue
 
-    # Prisma schemaは対応テストではなく format / validate / generate で検証する。
+    # Prisma schemaと定数定義は対応テストを要求しない。
     # 拡張子判定の偶然に依存せず、TDD契約上の明示的な除外として固定する。
     case "$FILE" in
-      schema.prisma|*/schema.prisma) continue ;;
+      schema.prisma|*/schema.prisma|constants.ts|*/constants.ts|constants.js|*/constants.js|constants/*|*/constants/*) continue ;;
     esac
 
     # JSX/TSX componentとReact hookには隣接unit testを強制しない。

@@ -50,13 +50,13 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
    - 同型実装から置き換える識別子・値の対応
    - cleanな本体コード・schema・テスト資産の候補path一覧
    - 共通フローで使う既存の検証command
-4. 共通フローのStep 1〜3を実行し、[agent_name]がシナリオを一括提示して明示承認を得た後、必要なテストを作成してRedを確認する。`schema.prisma`だけの変更は共通フローの例外に従う。
+4. 共通フローのStep 1〜3を実行し、[agent_name]がシナリオを一括提示して明示承認を得た後、必要なテストを作成してRedを確認する。test除外pathだけの変更は共通フローの例外に従う。
 5. 依頼、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、survey結果から短い実装指示を作る。許可pathは検証済みsurveyが返したcleanな本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルだけにする。
-6. `errand` modeへ実装指示と`--`以降の許可pathを渡し、共通フローのStep 4〜7を完了する。workerにテスト、設定、migration、Git、設計資産を変更させない。
-7. 共通フローのGreenに加え、path指定可能な既存lintを実行する。利用可能なcommandがなければ発明せず、未実行として報告する。
+6. `errand` modeへ実装指示と`--`以降の許可pathを渡し、共通フローのStep 4〜8を完了する。workerにテスト、設定、migration、Git、設計資産を変更させない。
+7. 共通フローのGreenに加え、path指定可能な既存lintを実行する。利用可能なcommandがなければ発明せず、未実行として報告する。test除外pathだけの依頼でtestを探索・実行せず、検証失敗は共通フローどおりscopeへ帰属させる。
 
 ユーザーが設定やmigration fileなどerrand禁止対象の変更を明示した場合は、`errand`を終了して通常実装へ移ることを一文で宣言する。明示された範囲だけを通常実装として扱い、禁止対象をworkerへ委任しない。
 
 ## 完了報告
 
-依頼、承認シナリオ、Red、Green、workerのsurvey / errand task-id、許可path、候補パッチの採否、実行した検証、コミットを簡潔に報告して停止する。
+依頼、承認シナリオ、Red、Green、workerのsurvey / errand task-id、許可path、候補パッチの採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。

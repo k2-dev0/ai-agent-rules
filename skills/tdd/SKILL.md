@@ -82,13 +82,13 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
 
 ### 3. 共通のシナリオ駆動実装フローを完了する
 
-共通フローのStep 1〜7を順に実行する。要求根拠は承認済み設計書とsurvey、worker modeは`implement`、workerへの入力は設計書、Redの要約、許可pathとする。`schema.prisma`だけの変更、component・React hookのテスト境界、シナリオ再承認、相談、候補採否、Greenはすべて共通フローに従う。
+共通フローのStep 1〜8を順に実行する。要求根拠は承認済み設計書とsurvey、worker modeは`implement`、workerへの入力は設計書、Redの要約、許可pathとする。test除外pathだけの変更、component・React hookのテスト境界、シナリオ再承認、相談、候補採否、Green、失敗のscope帰属はすべて共通フローに従う。
 
 ### 4. polishと完了処理を行う
 
-設計書の完了条件、共通フローのGreen、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`を実変更pathだけへ適用し、最後のscope path検査で入力の完全一致とtracked・cleanを確認する。formatterの自動修正は必要範囲だけ再確認し、上位モデルがコードを判断して修正した場合は全品質ゲートを先頭から再実行する。
+設計書の完了条件、共通フローのGreenまたはtest除外、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`を実変更pathだけへ適用し、最後のscope path検査で入力の完全一致とtracked・cleanを確認する。formatterの自動修正は必要範囲だけ再確認し、上位モデルがコードを判断して修正した場合は全品質ゲートを先頭から再実行する。
 
-`from-prompt`では、polishのscope path検査が成功した後だけ次を単独実行する。失敗時はindexを直接編集しない。
+`from-prompt`では、実装差分、scopeへ帰属した検証結果、`unrelated`・`uncertain`・`not run`を先にユーザーへ報告し、完了マークを付けるか明示的に確認する。検証の成否から[agent_name]が自動判定しない。ユーザーが付けると回答した場合だけ次を単独実行する。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
@@ -104,13 +104,13 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - 2回の応答失敗後も上位モデルの実装経路を利用できない
 - DB、依存関係、公開APIなど承認範囲外の変更が必要になる
 
-## 完了条件
+## 完了報告
 
-- 承認済みシナリオがすべてGreen
-- 共通フローとpolishの検証が成功
+- 承認済みシナリオのGreen / `scope fail`、またはtest除外を報告済み
+- 共通フローとpolishの各結果がscopeへ帰属済み
 - [agent_name]が差分をレビュー済み
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミット理由を完了報告へ含めた
-- `from-prompt`ではpolishのscope path検査後にindexを更新した
+- `from-prompt`では検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
 
 対象設計書、承認シナリオ、Red、Green、workerの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミットを完了報告へ含める。`from-prompt`ではindexの残件数も含める。

@@ -39,7 +39,13 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 承認済みシナリオを忠実に表すためのimport、型、構文、テスト構造の修正は再承認しない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
-`schema.prisma`だけの変更では公開挙動のtest/specとRed/Greenを要求せず、シナリオ承認も省略する。同じ依頼に本体コードの公開挙動変更が含まれる場合、その挙動は通常どおりシナリオ、Red、Greenの対象にする。
+次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、シナリオ承認も省略する。workerのRed要約には除外pathと理由を明記する。
+
+- `schema.prisma`
+- basenameが`constants.ts`または`constants.js`のfile
+- `constants/`配下のfile
+
+同じ依頼にそれ以外の本体コードの公開挙動変更が含まれる場合、その挙動だけを通常どおりシナリオ、Red、Greenの対象にする。test除外pathがscopeにあることを理由にtest commandを追加しない。
 
 ## 2. [agent_name]がテストを書く
 
@@ -93,4 +99,14 @@ workerには発言権だけを認め、テスト・設計の編集権と決定�
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み範囲へ合わせる本体コード修正を直接行う。通常の修正をworkerへ再委任しない。テストまたはシナリオを変える必要が出た場合だけStep 1へ戻る。
+承認済みシナリオから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み範囲へ合わせる本体コード修正を直接行う。通常の修正をworkerへ再委任しない。テストまたはシナリオを変える必要が出た場合だけStep 1へ戻る。
+
+## 8. 失敗をscopeに帰属させる
+
+test、typecheck、lint、Prisma検証の終了codeだけで今回の成否を決めず、各diagnosticを次へ分類する。
+
+- `scope-related`: 承認済みシナリオの対象test、実変更path自体のdiagnostic、または変更した公開型・export・契約が原因と確認できるcallerの失敗
+- `unrelated`: 実変更pathと因果関係がない既存失敗、今回作成・変更していないignored / untracked test、checkout前のbranchの残留testが消えた実装を参照する失敗
+- `uncertain`: 診断情報だけで因果関係を確定できない失敗
+
+`scope-related`だけを修正・再検証の対象にする。承認範囲内の修正を尽くしても残る場合は`scope fail`として報告へ進む。`unrelated`はファイルを修正・削除せず、command、diagnostic、対象外と判断した根拠を報告してworkflowを続ける。`uncertain`は推測で緑または赤に倒さずユーザーへ報告する。どの分類が残っていてもそれから完了マークを自動判定せず、判断はユーザーに委ねる。

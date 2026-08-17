@@ -25,6 +25,7 @@
 1. テスト必須のlogic fileと同階層に `[ファイル名].test.ts` を配置する
 2. テスト必須のlogic fileと同階層に `.test` ファイルがなければ先に作成する
 3. `.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外とする。画面挙動は必要な場合だけ既存のintegration / E2E境界で検証する
+4. `schema.prisma`、`constants.ts`、`constants.js`、`constants/`配下は対応test/specの作成・実行対象外とする。これらだけの変更でRed / Greenを要求しない
 
 ## 実装方針
 
