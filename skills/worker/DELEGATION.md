@@ -1,8 +1,8 @@
 # worker委任の共通契約
 
-workerを呼ぶskillはこの文書を全文読んでから実行する。個別skillは対象と必須成果を決め、この文書は実行、証拠、時間、結果判定、再試行を決める。重複する説明を個別skillへ書かない。
+workerを呼ぶskillは、この文書を正本として必要な節を参照してから実行する。個別skillは対象と必須成果を決め、この文書は実行、証拠、時間、結果判定、再試行を決める。重複する説明を個別skillへ書かない。
 
-各workflowはsession最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookがこの文書を注入して停止する。内容を反映して`prepare`を再実行し、同じworkflowの後続委任では繰り返さない。
+各workflowはsession最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookが委任の要点を注入して停止する。内容を反映して`prepare`を再実行し、同じworkflowの後続委任では繰り返さない。
 
 ## 責務
 
