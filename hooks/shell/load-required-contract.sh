@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse hook: 判断前に必須の要点を、最初の保護操作を止めて注入する。
+# PreToolUse hook: 判断前に圧縮した必須契約を、最初の保護操作を止めて注入する。
 # task-idやmodeにかかわらず、同一session・同一内容ではreceiptを検証して棄権し、後続操作を通す。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
@@ -42,25 +42,9 @@ load_contract_once() {
     return 0
   fi
 
-  case "$RELATIVE_PATH" in
-    worker/DELEGATION.md)
-      REASON=$(cat <<'EOF'
-worker委任の要点:
-- workerは根拠収集と許可path内の初回実装候補だけを担当する。要件・設計・採否・修正・test・Gitは上位モデルの責務。
-- 委任は`delegate.sh`だけを使い、同じ仕事を並行委任しない。surveyは1 task = C1一件の検証済みJSONにする。
-- implement / errandには成功済みevidenceを渡し、許可pathを越えさせない。結果は`worker-result`の`next_action`に従う。
-- 調査済みの根拠を読み直さず、直接調査は契約の例外時だけ。smokeはユーザーの明示許可がある時だけ。
-
-CLIの完全な引数、証拠形式、timeout、再試行条件は`worker/DELEGATION.md`が正本です。必要な節だけ参照してください。このtoolはまだ実行していません。内容を反映して同じ工程を再試行してください。
-EOF
-)
-      ;;
-    *)
-      CONTENT=$(cat "$CONTRACT") || \
-        hook_deny "必須契約 $RELATIVE_PATH を読み込めません。"
-      REASON=$(printf '必須契約 %s を以下へ全文注入しました。このtoolはまだ実行していません。内容を反映して同じ工程を再試行してください。\n\n%s' "$RELATIVE_PATH" "$CONTENT")
-      ;;
-  esac
+  CONTENT=$(cat "$CONTRACT") || \
+    hook_deny "必須契約 $RELATIVE_PATH を読み込めません。"
+  REASON=$(printf '必須契約 %s を以下へ注入しました。このtoolはまだ実行していません。内容を反映して同じ工程を再試行してください。\n\n%s' "$RELATIVE_PATH" "$CONTENT")
   DECISION=$(hook_deny_json "$REASON") || \
     hook_deny "必須契約 $RELATIVE_PATH をhook応答へ変換できません。"
 

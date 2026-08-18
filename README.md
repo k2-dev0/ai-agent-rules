@@ -33,7 +33,7 @@ ai-agent-rules/
 │   ├── dictionary/         # context-dictionary MCPによる知見の検索・保存・更新policy
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
 ├── hooks/
-│   └── shell/              # PreToolUse hook 本体（必須契約の要点注入を含む）
+│   └── shell/              # PreToolUse hook 本体（圧縮した必須契約の注入を含む）
 ├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / tdd が使用）
 ├── e2e/                # .e2e.md の配置先シード（e2e スキルが使用）
 ├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
@@ -115,7 +115,7 @@ $bootstrap codex
 
 `errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、最大4 claimの検証済みJSONへ分ける。`implement`は設計書、承認済みシナリオID、`--red-summary`、許可pathを必須入力とする。候補返却後のレビューや修正はworkerへ戻さない。
 
-CLI、時間、claim-evidence、結果判定、再試行は`skills/worker/DELEGATION.md`だけを正本とする。session最初の委任前にhookが要点だけを一度注入し、詳細は必要な節を参照する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
+上位モデルの判断境界は圧縮した`skills/worker/DELEGATION.md`、CLI、時間、claim-evidence、結果判定、再試行の機械的制約は`delegate.sh`を正本とする。session最初の委任前にhookが前者を一度注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
 上位モデルのfamily、性能tier、effortが変わっても、workerへの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。差が出てよいのは検証済み証拠からの推論と採否だけとする。
 

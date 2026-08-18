@@ -95,10 +95,10 @@ fi
 DELEGATE_INPUT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/worker/delegate.sh prepare"}}')
 DELEGATE_FIRST=$(echo "$DELEGATE_INPUT" | bash "$H/load-required-contract.sh")
 DELEGATE_REASON=$(echo "$DELEGATE_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason')
-if matches_expected deny "$DELEGATE_FIRST" && echo "$DELEGATE_REASON" | grep -Fq 'worker委任の要点:' && echo "$DELEGATE_REASON" | grep -Fq 'CLIの完全な引数、証拠形式、timeout、再試行条件' && ! echo "$DELEGATE_REASON" | grep -Fq 'workerはOpenRouterを使い'; then
-  PASS=$((PASS+1)); echo "ok   required-reading: 外部ワーカー契約の要点だけを初回委任前に注入"
+if matches_expected deny "$DELEGATE_FIRST" && echo "$DELEGATE_REASON" | grep -Fq 'worker委任の共通契約' && [ "$(printf '%s' "$DELEGATE_REASON" | wc -c | tr -d ' ')" -le 4000 ]; then
+  PASS=$((PASS+1)); echo "ok   required-reading: 圧縮した外部ワーカー契約を初回委任前に注入"
 else
-  FAIL=$((FAIL+1)); echo "FAIL required-reading: 外部ワーカー契約の要点を注入できない -> [$DELEGATE_FIRST]"
+  FAIL=$((FAIL+1)); echo "FAIL required-reading: 圧縮した外部ワーカー契約を注入できない -> [$DELEGATE_FIRST]"
 fi
 check "required-reading: 外部ワーカー契約receipt後は棄権" empty load-required-contract.sh "$DELEGATE_INPUT"
 DELEGATE_NEXT_TASK=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/worker/delegate.sh errand --hard-timeout-minutes 2 --idle-timeout-seconds 60 --poll-seconds 10 --timeout-reason scope=src/foo.ts,difficulty=low,basis=hook-contract-reuse errand-task boolean変更 -- src/foo.ts"}}')
