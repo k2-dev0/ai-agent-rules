@@ -110,30 +110,10 @@ $bootstrap codex
 | 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後は外部ワーカーへ戻さない |
 | ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認は、まず共通の外部ワーカー実行器へ委任する。`survey`は自由文を受け付けず、目的と最大4 claimの`id`、`kind`、`subject`、`question`、`anchors`、`done_when`、`exclude`を持つJSONを外部通信前に検証する。独立した移植元、移植先、test、runtime契約は別task-idへ分ける。workerは各claim 1〜3件、全体20件以下・推奨12件以下・1範囲80行以下の根拠範囲を返し、実行器が同じsnapshotから前後8行を含む最大400行の`evidence.md`を抽出する。検証済みcodeがclaimを直接支え、blobが現在も一致する場合、上位モデルは同じ箇所を再読しない。
+コードベースの事実確認と初回実装候補の作成は共通の外部workerへ委任する。上位モデルは設計判断、候補採否、レビュー、修正、テスト、Gitを担当する。個別skillは対象と必須成果だけを定め、共通契約の詳細は`skills/worker/DELEGATION.md`を読む。
 
-情報不足は`--supplement-of`で欠落claimだけを補い、初回を含め合計3回までとする。内容が揃い、出力形式または証拠表記だけが壊れた場合は`--repair-of`を1回だけ使い、親report以外を読ませず形式だけを直す。3回目までは保存範囲の不足を上位モデルが直接確認する理由にしない。直接確認は、明示的な認証失敗、同じ依頼の通信・最終応答失敗2回、情報調査3回後の不足、worker snapshot外の状態、高リスクの独立確認、ユーザーの明示指定に限り、file全体のReadは使わない。workerの実装候補返却後のレビュー・修正は上位モデルの通常責務とする。調査pathを作るためにproduction fileを読まず、探索anchorはユーザー入力、設計書、既知の識別子、検証済みevidenceから作る。実装の許可pathもsurvey結果または承認済み設計から得る。
-
-`preflight`、`cowlick`、`ponytail`、`errand`の調査では汎用のAgent / subagentより固定実行器を優先する。通信・timeout・最終応答の失敗は新task-idと`--retry-of`で1回だけ再試行する。出力形式、証拠、成果不足では欠落IDだけを具体化し、前回の未検証結論を事実として渡さない。2回の通信失敗または明示的な認証失敗後は上位モデルが引き継ぐ。予算、ZDR、依存command、参照先の問題は停止する。
 
 `errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、最大4 claimの検証済みJSONへ分ける。`implement`は設計書、承認済みシナリオID、`--red-summary`、許可pathを必須入力とする。候補返却後のレビューや修正はworkerへ戻さない。
-
-workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
-
-surveyは実行ステップ数を固定上限で打ち切る。実行器は最終textを`report.md`、検証済みコードを`evidence.md`、許可pathの差分を`candidate.patch`へ保存し、同じ`worker-result`形式で出力する。本文欠落、壊れたJSON、stopなし、出力契約不一致、証拠不備、未完了outcomeを別のstatusとfailure classへ分類する。`show <task-id>`も同じ形式を使う。`zat`が利用できる場合は大きい対応fileの署名・行番号の絞り込みだけに使い、利用可否を`outline_tool`へ記録する。zat出力はEvidenceにせず、`schema.prisma`、constants、testには機械的に適用しない。
-
-`survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。通常値はlowがhard 30分・idle 600秒、mediumがhard 45分・idle 900秒、highがhard 60分・idle 900秒で、pollは30秒とする。timeoutは上限なので正常終了を遅らせない。限定調査や再調査でも勝手に短縮せず、ユーザーが明示的に短い上限を指定した場合だけ基準値を下回れる。
-
-各workflow入口はsessionで最初に外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。`prepare`は外部通信せず、初回だけPreToolUse hookが共通契約を注入して操作を止めるための固定入口である。同じworkflow配下のskillは一回の準備を共有する。
-
-```bash
-bash [skills_root]/worker/delegate.sh <mode> \
-  --hard-timeout-minutes <総待機分> \
-  --idle-timeout-seconds <無通信秒> \
-  --poll-seconds <確認間隔秒> \
-  --timeout-reason "scope=<対象範囲>,difficulty=<low|medium|high>,basis=<選択根拠>" \
-  <mode固有の引数>
-```
 
 CLI、時間、claim-evidence、結果判定、再試行は`skills/worker/DELEGATION.md`だけを正本とする。session最初の委任前にhookが全文を一度だけ注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
