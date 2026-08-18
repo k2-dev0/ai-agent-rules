@@ -1114,6 +1114,7 @@ else
 fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
 [ "$(jq '[.hooks.PreToolUse[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 読み取り検索の正規化hookをBashへ配線" || ng "codex: 読み取り検索の正規化hookが未配線"
+grep -Fq 'normalize_default_delegate_model' .codex/hooks/shell/readonly-search.sh && grep -Fq 'DELEGATE_MODEL=openrouter/minimax/minimax-m3' .codex/hooks/shell/readonly-search.sh && ok "codex: 既定workerモデルのwrapper化をhookで除去" || ng "codex: 既定workerモデルのwrapper化防止が不足"
 grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
 grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
 grep -q '^enabled = false$' .codex/config.toml && grep -q '^allow_local_binding = false$' .codex/config.toml && ok "permissions: localhost を含む network を遮断" || ng "permissions: network 境界が未設定"

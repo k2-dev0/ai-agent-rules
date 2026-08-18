@@ -86,6 +86,32 @@ invokes_inline_shell() {
   '
 }
 
+normalize_default_delegate_model() {
+  local default_assignment='DELEGATE_MODEL=openrouter/minimax/minimax-m3 '
+  local wrapped_prefix
+  local rewritten
+
+  # 既定値の明示は冗長であり、Codexがzsh -lcへ包むと固定runnerのallowから外れる。
+  # 既定値だけを外して、レビュー済みの裸のdelegate.sh呼び出しへ戻す。別モデルは触らない。
+  case "$1" in
+    "$default_assignment"bash\ .agents/skills/worker/delegate.sh*|"$default_assignment"bash\ .claude/skills/worker/delegate.sh*)
+      hook_rewrite_command "${1#"$default_assignment"}"
+      ;;
+  esac
+
+  for wrapped_prefix in \
+    '/bin/zsh -lc "DELEGATE_MODEL=openrouter/minimax/minimax-m3 ' \
+    'zsh -lc "DELEGATE_MODEL=openrouter/minimax/minimax-m3 '; do
+    case "$1" in
+      "$wrapped_prefix"bash\ .agents/skills/worker/delegate.sh*\"|"$wrapped_prefix"bash\ .claude/skills/worker/delegate.sh*\")
+        rewritten=${1#"$wrapped_prefix"}
+        rewritten=${rewritten%\"}
+        hook_rewrite_command "$rewritten"
+        ;;
+    esac
+  done
+}
+
 deny_dangerous_read_options() {
   local command_without_quote_splits
 
@@ -215,6 +241,8 @@ normalize_safe_dev_null() {
 }
 
 deny_dangerous_read_options "$CMD"
+
+normalize_default_delegate_model "$CMD"
 
 if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
   hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"

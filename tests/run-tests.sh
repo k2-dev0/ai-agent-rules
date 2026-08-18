@@ -148,6 +148,14 @@ check_bash_rewrite "readonly-search: quote済みrgのglob引数を保持" \
   "rg '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'" \
   readonly-search.sh \
   "'rg' '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'"
+check_bash_rewrite "readonly-search: 既定workerモデル指定を除去" \
+  "bash .claude/skills/worker/delegate.sh prepare" \
+  readonly-search.sh \
+  "DELEGATE_MODEL=openrouter/minimax/minimax-m3 bash .claude/skills/worker/delegate.sh prepare"
+check_bash_rewrite "readonly-search: wrapper化した既定workerモデル指定を除去" \
+  "bash .claude/skills/worker/delegate.sh prepare" \
+  readonly-search.sh \
+  'zsh -lc "DELEGATE_MODEL=openrouter/minimax/minimax-m3 bash .claude/skills/worker/delegate.sh prepare"'
 check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow readonly-search.sh \
   "rg 'foo|bar' src" \
   "find src -maxdepth 2 -type f -print" \
