@@ -561,6 +561,84 @@ if grep -Fq "$SURVEY_EXACT_IDENTIFIER" "$SURVEY_ROOT/report.md" && grep -Fq '機
 else
   ng "delegate-worker: survey reportまたは検証済みevidenceが不正"
 fi
+echo "== worker tool call metrics =="
+TOOL_METRICS_MODE_FILE="$DELEGATE_REPO/tool-metrics-mode"
+TOOL_METRICS_REPORT="$DELEGATE_REPO/tool-metrics-report.md"
+printf '%s\n' \
+  'Outcome: fulfilled' \
+  '## Claims' \
+  '### C1' \
+  'Claim: tool metrics fixture' \
+  'Evidence:' \
+  '- `spec.md:1-1`' \
+  'Interpretation: fixture' \
+  'Limitations: none' \
+  '## Remaining' \
+  'none' > "$TOOL_METRICS_REPORT"
+printf '%s\n' \
+  '#!/bin/bash' \
+  "mode=\$(sed -n '1p' \"$TOOL_METRICS_MODE_FILE\")" \
+  "text=\$(cat \"$TOOL_METRICS_REPORT\")" \
+  'case "$mode" in' \
+  '  zat)' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"bash\",state:{status:\"completed\",input:{command:\"zat skills/worker/delegate.sh\"}}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"bash\",state:{status:\"completed\",input:{command:\"grep -n tool_use skills/worker/delegate.sh\"}}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"read\",state:{status:\"completed\",input:{path:\"spec.md\"}}}}"' \
+  '    ;;' \
+  '  no-zat)' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"grep\",state:{status:\"completed\",input:{pattern:\"tool_use\",path:\"skills/worker/delegate.sh\"}}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"read\",state:{status:\"completed\",input:{path:\"spec.md\"}}}}"' \
+  '    ;;' \
+  '  denied)' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"bash\",state:{status:\"denied\",input:{command:\"cat .env\"}}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"read\",state:{status:\"error\",input:{path:\".env\"}}}}"' \
+  '    ;;' \
+  '  malformed-event)' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"grep\",state:{status:\"completed\",input:{pattern:\"tool_use\"}}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"invalid\",state:{status:\"completed\"}}}"' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"bash\",state:{status:\"completed\",input:{command:\"rg tool_use\"}}}}"' \
+  '    ;;' \
+  '  malformed-line)' \
+  '    jq -cn "{type:\"tool_use\",part:{tool:\"read\",state:{status:\"completed\",input:{path:\"spec.md\"}}}}"' \
+  '    printf "%s\\n" "not-json"' \
+  '    ;;' \
+  'esac' \
+  'jq -cn --arg text "$text" "{type:\"text\",text:\$text}"' \
+  > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+run_tool_metrics_fixture() {
+  local mode="$1"
+  local task_id="tool-metrics-$mode"
+  printf '%s\n' "$mode" > "$TOOL_METRICS_MODE_FILE"
+  PATH="$DELEGATE_BIN:/usr/bin:/bin" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" "$task_id" "$SURVEY_REQUEST" > "$task_id.out" 2>&1
+}
+if run_tool_metrics_fixture zat && jq -e '.status == 0 and .tool_call_count == 3 and .tool_calls_by_name == {bash:1,read:1,zat:1} and .denied_tool_call_count == 0' "$DELEGATE_REPO/.claude/tmp/worker/tool-metrics-zat/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: zat bashをzatへ分離してtool callを集計"
+else
+  ng "delegate-worker: zat使用時のtool call集計が不正"; cat tool-metrics-zat.out
+fi
+if run_tool_metrics_fixture no-zat && jq -e '.status == 0 and .tool_call_count == 2 and .tool_calls_by_name == {grep:1,read:1} and (.tool_calls_by_name.zat // 0) == 0' "$DELEGATE_REPO/.claude/tmp/worker/tool-metrics-no-zat/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: zat未使用のtool call集計を保存"
+else
+  ng "delegate-worker: zat未使用時のtool call集計が不正"; cat tool-metrics-no-zat.out
+fi
+if run_tool_metrics_fixture denied && jq -e '.status == 0 and .tool_call_count == 2 and .denied_tool_call_count == 2 and .tool_calls_by_name == {bash:1,read:1}' "$DELEGATE_REPO/.claude/tmp/worker/tool-metrics-denied/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: denied/error tool callを別集計"
+else
+  ng "delegate-worker: denied/error tool call集計が不正"; cat tool-metrics-denied.out
+fi
+if run_tool_metrics_fixture malformed-event && jq -e '.status == 0 and .tool_call_count == 2 and .tool_calls_by_name == {bash:1,grep:1} and .denied_tool_call_count == 0' "$DELEGATE_REPO/.claude/tmp/worker/tool-metrics-malformed-event/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: malformed tool_use eventを無視して正常結果を保持"
+else
+  ng "delegate-worker: malformed tool_use eventの扱いが不正"; cat tool-metrics-malformed-event.out
+fi
+run_tool_metrics_fixture malformed-line
+TOOL_METRICS_MALFORMED_STATUS=$?
+if [ "$TOOL_METRICS_MALFORMED_STATUS" -eq 66 ] && jq -e '.status == 66 and .failure_class == "malformed_report" and .next_action == "retry" and .tool_call_count == 1 and .tool_calls_by_name == {read:1}' "$DELEGATE_REPO/.claude/tmp/worker/tool-metrics-malformed-line/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: malformed lineは計測を壊さず既存protocol分類を維持"
+else
+  ng "delegate-worker: malformed lineの計測またはprotocol分類が不正"; cat tool-metrics-malformed-line.out
+fi
 if PATH="$DELEGATE_BIN:$PATH" bash "$DELEGATE_SCRIPT" show empty-survey > delegate-show.out 2>&1 && grep -Fq 'worker-result:' delegate-show.out && grep -Fq 'evidence: verified' delegate-show.out && grep -Fq "$SURVEY_EXACT_IDENTIFIER" delegate-show.out; then
   ok "delegate-worker: showはAPI keyなしで調査結果を再表示"
 else
@@ -754,16 +832,6 @@ if [ "$MALFORMED_REPORT_STATUS" -eq 66 ] && [ "$(jq -r '.report_status' "$MALFOR
   ok "delegate-worker: 壊れたJSONでもraw成果物とfailure classを保存"
 else
   ng "delegate-worker: malformed reportの保存または分類が不正"; cat delegate-malformed-report.out
-fi
-printf '#!/bin/bash\nprintf '\''"scalar-event"\\n'\''\n' > "$DELEGATE_BIN/opencode"
-chmod +x "$DELEGATE_BIN/opencode"
-PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" malformed-event-survey "$SURVEY_REQUEST" > delegate-malformed-event.out 2>&1
-MALFORMED_EVENT_STATUS=$?
-MALFORMED_EVENT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/malformed-event-survey"
-if [ "$MALFORMED_EVENT_STATUS" -eq 66 ] && [ "$(jq -r '.report_status' "$MALFORMED_EVENT_ROOT/result.json" 2>/dev/null)" = "malformed" ] && grep -Fxq '"scalar-event"' "$MALFORMED_EVENT_ROOT/opencode.jsonl"; then
-  ok "delegate-worker: JSON scalar eventもmalformedとしてraw保存"
-else
-  ng "delegate-worker: JSON event schema不正の保存または分類が不正"; cat delegate-malformed-event.out
 fi
 XDG_PATH_LOG="$DELEGATE_REPO/opencode-xdg-paths.log"
 printf '#!/bin/bash\nfor path in "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$TMPDIR"; do [ -d "$path" ] || exit 51; done\nprintf '\''%%s\\n'\'' "$XDG_DATA_HOME" >> "%s"\n/bin/sleep 0.1\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: isolated\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' "$XDG_PATH_LOG" > "$DELEGATE_BIN/opencode"
