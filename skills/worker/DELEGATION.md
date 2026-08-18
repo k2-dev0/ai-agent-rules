@@ -1,3 +1,7 @@
+# worker委任の共通契約
+
+session最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookがこの文書を注入して停止する。内容を反映して再実行し、後続委任では繰り返さない。
+
 ## 上位モデルとworkerの境界
 
 | 担当 | 責務 |
