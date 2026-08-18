@@ -11,6 +11,7 @@ readonly MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SURVEY_STEPS_PER_CLAIM="8"
 readonly SURVEY_FINALIZATION_STEPS="3"
+readonly SURVEY_OUTLINE_EXTRA_STEPS="4"
 readonly MAX_SURVEY_REQUEST_CLAIMS="1"
 readonly TIMEOUT_MINUTE_SECONDS="60"
 readonly TIMEOUT_TERM_GRACE_SECONDS="10"
@@ -93,6 +94,7 @@ CONTEXT_SNAPSHOT_PATHS=()
 CONTEXT_SNAPSHOT_HASHES=()
 REQUEST_DIGEST=""
 OUTCOME="unknown"
+REPORT_NORMALIZED=false
 OUTPUT_CONTRACT_STATUS="not_checked"
 EVIDENCE_STATUS="not_checked"
 EVIDENCE_FAILURE_KIND="none"
@@ -105,6 +107,7 @@ OBSERVED_SURVEY_STEPS="0"
 STEP_LIMIT_REACHED=false
 FAILURE_REASON=""
 NEXT_ACTION="none"
+OUTLINE_TOOL=""
 
 fail() {
   FAILURE_REASON="$1"
@@ -171,6 +174,38 @@ classify_output_contract() {
     return
   fi
   OUTPUT_CONTRACT_STATUS="valid"
+}
+
+normalize_report_format() {
+  local report_path="$1"
+  local normalized_path="$TEMP_ROOT/report.normalized"
+
+  awk '
+    !first_line_seen && /^[[:space:]]*$/ { next }
+    !first_line_seen {
+      first_line_seen = 1
+      if ($0 ~ /^Outcome: (fulfilled|partial|consultation_required|blocked)## Claims$/) {
+        sub(/## Claims$/, "")
+        print
+        print "## Claims"
+        next
+      }
+      if ($0 ~ /^Outcome: (fulfilled|partial|consultation_required|blocked)## Requirement mapping$/) {
+        sub(/## Requirement mapping$/, "")
+        print
+        print "## Requirement mapping"
+        next
+      }
+    }
+    { print }
+  ' "$report_path" > "$normalized_path" || fail "cannot normalize delegated report"
+
+  if cmp -s "$report_path" "$normalized_path"; then
+    rm -f "$normalized_path"
+  else
+    mv "$normalized_path" "$report_path" || fail "cannot publish normalized delegated report"
+    REPORT_NORMALIZED=true
+  fi
 }
 
 claims_follow_contract() {
@@ -376,9 +411,11 @@ build_evidence_packet() {
     fi
     blob=$(git hash-object "$WORKTREE/$path") || { invalid=true; continue; }
     source_kind="$SOURCE_REF"
-    for context_path in "${CONTEXT_SNAPSHOT_PATHS[@]}"; do
-      [ "$path" = "$context_path" ] && source_kind="ignored-agent-context"
-    done
+    if [ "${#CONTEXT_SNAPSHOT_PATHS[@]}" -gt 0 ]; then
+      for context_path in "${CONTEXT_SNAPSHOT_PATHS[@]}"; do
+        [ "$path" = "$context_path" ] && source_kind="ignored-agent-context"
+      done
+    fi
     printf '\n## E%s `%s:%s-%s`\n\n- context: `%s:%s-%s` (before/after %s lines)\n- source: `%s`\n- revision: `%s`\n- blob: `%s`\n\n```text\n' "$evidence_id" "$path" "$start_line" "$end_line" "$path" "$context_start" "$context_end" "$EVIDENCE_CONTEXT_LINES" "$source_kind" "$SOURCE_HEAD" "$blob" >> "$evidence_path"
     awk -v start="$context_start" -v end="$context_end" 'NR >= start && NR <= end { printf "%6d  %s\n", NR, $0 }' "$WORKTREE/$path" >> "$evidence_path"
     printf '```\n' >> "$evidence_path"
@@ -878,6 +915,15 @@ command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v opencode >/dev/null 2>&1 || fail "opencode is required"
 [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
 
+case "$MODE" in
+  research|survey|nesting)
+    if [ -z "$REPAIR_OF" ] && command -v zat >/dev/null 2>&1; then
+      OUTLINE_TOOL="zat"
+      SURVEY_MAX_STEPS="$((SURVEY_MAX_STEPS + SURVEY_OUTLINE_EXTRA_STEPS))"
+    fi
+    ;;
+esac
+
 if { [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; } || [ "$MODE" = "implement" ]; then
   validate_repo_path "$SPEC_PATH"
   [ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
@@ -1078,6 +1124,7 @@ jq -cn \
   --arg model_id "$MODEL_ID" \
   --argjson survey_max_steps "$SURVEY_MAX_STEPS" \
   --arg mode "$MODE" \
+  --arg outline_tool "$OUTLINE_TOOL" \
   --arg repair_of "$REPAIR_OF" '
   {
     "$schema":"https://opencode.ai/config.json",
@@ -1107,7 +1154,7 @@ jq -cn \
       "list":(if $mode == "smoke" or $repair_of != "" then "deny" else "allow" end),
       "lsp":(if $mode == "smoke" or $repair_of != "" then "deny" else "allow" end),
       "edit":$permission_edit,
-      "bash":"deny",
+      "bash":(if $outline_tool == "zat" then {"*":"deny","zat *":"allow"} else "deny" end),
       "task":"deny",
       "external_directory":"deny",
       "webfetch":"deny",
@@ -1144,6 +1191,7 @@ Evidence:
 Interpretation: この範囲がclaimを直接支える理由
 Limitations: none
 Evidenceの形式は上の例と完全一致させ、コロンの後ろや行番号の前に空白を入れないでください。調査依頼にclaim IDがある場合は同じIDと順序を保持してください。各claimは1〜3範囲です。重複範囲を増やさず、主張と実行順序を判断できる最小範囲を指定してください。コード本文は貼らないでください。否定的主張では調べたscope、検索語、除外した候補をInterpretationへ書いてください。
+Evidenceの各範囲はClaimまたはInterpretationに書いた一つの事実と一対一に対応させ、その事実を直接支える行だけを選んでください。読んだだけの隣接fileを引用しないでください。
 ## Remaining
 未確認事項と理由を書き、無ければ none と書いてください。'
 READ_ONLY_OUTPUT_CONTRACT=$(printf '%s\nEvidenceは全claim合計で最大%s範囲、推奨%s範囲以下、1範囲あたり最大%s行です。実行器は各範囲の前後%s行を追加し、展開後のpacket全体を最大%s行に制限します。上限を超える広い範囲を指定せず、直接根拠となる行だけを選んでください。' \
@@ -1156,6 +1204,10 @@ IMPLEMENT_OUTPUT_CONTRACT='最終回答は次の形式だけを使ってくだ�
 ## Remaining
 未実装、曖昧さ、許可外変更の必要性を書き、無ければ none と書いてください。'
 VERIFIED_EVIDENCE_INSTRUCTION=""
+OUTLINE_INSTRUCTION=""
+if [ "$OUTLINE_TOOL" = "zat" ]; then
+  OUTLINE_INSTRUCTION='Shellは、grep・Glob・LSPで特定済みの単一tracked fileに対する `zat <path>` だけです。最初のtoolはgrep・Glob・LSPにし、zatをdirectory・fileの探索、help・version確認、ls・pwd・wc・which・typeの代用にせず、zat以外のshell commandも試さないでください。zat対応の大きいfileごとに1回だけ署名と行番号を絞り、その後必要範囲を80行以下でReadしてください。zatのsymbol全rangeをEvidenceへ転記してはなりません。schema.prisma、constants.ts、constants/配下、testにはzatを使わないでください。zatが未対応または失敗したfileでは別のzat commandを試さず、従来のgrep・LSP・Readへ戻ってください。zat出力自体はEvidenceにしないでください。'
+fi
 if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
   EVIDENCE_TASK_LIST=$(printf '%s\n' "${EVIDENCE_FROM[@]}" | awk '{ print "- .delegate-request/evidence/" $0 "/report.md"; print "- .delegate-request/evidence/" $0 "/evidence.md" }')
   VERIFIED_EVIDENCE_INSTRUCTION="次の検証済みevidence packetを実装根拠として必ず読み、report.mdのclaim・解釈とevidence.mdの検証済みsource範囲を組で使ってください。識別子、列名、型幅、relation、制御フローを短い実装指示から再推測してはなりません。packetと指示が矛盾する、またはpacketが必須契約を直接支えない場合は変更せずconsultation_requiredを返してください。\n$EVIDENCE_TASK_LIST"
@@ -1202,7 +1254,7 @@ else
 fi
 
 case "$MODE" in
-  research|survey|nesting) PROMPT=$(printf '%s\n\n%s' "$PROMPT" "$READ_ONLY_OUTPUT_CONTRACT") ;;
+  research|survey|nesting) PROMPT=$(printf '%s\n\n%s\n\n%s' "$OUTLINE_INSTRUCTION" "$PROMPT" "$READ_ONLY_OUTPUT_CONTRACT") ;;
   implement|errand) PROMPT=$(printf '%s\n\n%s' "$PROMPT" "$IMPLEMENT_OUTPUT_CONTRACT") ;;
 esac
 if [ "$MODE" != "smoke" ]; then
@@ -1321,6 +1373,7 @@ case "$REPORT_STATUS" in
 esac
 
 if [ "$REPORT_STATUS" = "complete" ]; then
+  normalize_report_format "$RESULT_STAGING/report.md"
   classify_output_contract "$RESULT_STAGING/report.md"
   build_evidence_packet "$RESULT_STAGING/report.md" "$RESULT_STAGING/evidence.md" "$TEMP_ROOT/evidence.references"
   if [ "$OUTPUT_CONTRACT_STATUS" != "valid" ]; then
@@ -1411,7 +1464,13 @@ case "$FAILURE_CLASS" in
   none) NEXT_ACTION="none" ;;
   missing_report|malformed_report|partial_report|timeout) NEXT_ACTION="retry" ;;
   invalid_output)
-    case "$MODE" in survey|research) NEXT_ACTION="repair" ;; implement|errand) NEXT_ACTION="review" ;; *) NEXT_ACTION="stop" ;; esac
+    case "$MODE" in
+      survey|research)
+        if [ "$REPAIR_ATTEMPT" -ge "$MAX_FORMAT_REPAIRS" ]; then NEXT_ACTION="review"; else NEXT_ACTION="repair"; fi
+        ;;
+      implement|errand) NEXT_ACTION="review" ;;
+      *) NEXT_ACTION="stop" ;;
+    esac
     ;;
   incomplete_outcome)
     case "$MODE" in survey|research) NEXT_ACTION="supplement" ;; implement|errand) NEXT_ACTION="review" ;; *) NEXT_ACTION="stop" ;; esac
@@ -1433,9 +1492,11 @@ jq -n \
   --arg supplement_request_changed "$SUPPLEMENT_REQUEST_CHANGED" \
   --arg model "$MODEL" \
   --arg model_variant "$MODEL_VARIANT" \
+  --arg outline_tool "$OUTLINE_TOOL" \
   --arg request_digest "$REQUEST_DIGEST" \
   --arg report_file "report.md" \
   --arg report_status "$REPORT_STATUS" \
+  --argjson report_normalized "$REPORT_NORMALIZED" \
   --arg output_contract_status "$OUTPUT_CONTRACT_STATUS" \
   --arg outcome "$OUTCOME" \
   --arg evidence_file "evidence.md" \
@@ -1470,7 +1531,7 @@ jq -n \
   --argjson observed_output_bytes "$OBSERVED_OUTPUT_BYTES" \
   --argjson observed_survey_steps "$OBSERVED_SURVEY_STEPS" \
   --argjson step_limit_reached "$STEP_LIMIT_REACHED" \
-  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),outline_tool:(if $outline_tool == "" then null else $outline_tool end),request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,report_normalized:$report_normalized,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"

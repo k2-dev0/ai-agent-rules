@@ -120,7 +120,7 @@ $bootstrap codex
 
 workerの現在のproviderはOpenRouter、既定モデルは`minimax/minimax-m3`とし、M3の既定adaptive reasoningを使う。`DELEGATE_MODEL=openrouter/<provider>/<model>`で別モデルへ差し替えられ、必要な場合だけ`DELEGATE_MODEL_VARIANT=<variant>`を併用する。skill名、実行path、結果namespaceはproviderやモデル名を含まない`worker`へ統一する。
 
-surveyは実行ステップ数を固定上限で打ち切る。実行器は最終textを`report.md`、検証済みコードを`evidence.md`、許可pathの差分を`candidate.patch`へ保存し、同じ`worker-result`形式で出力する。本文欠落、壊れたJSON、stopなし、出力契約不一致、証拠不備、未完了outcomeを別のstatusとfailure classへ分類する。`show <task-id>`も同じ形式を使う。
+surveyは実行ステップ数を固定上限で打ち切る。実行器は最終textを`report.md`、検証済みコードを`evidence.md`、許可pathの差分を`candidate.patch`へ保存し、同じ`worker-result`形式で出力する。本文欠落、壊れたJSON、stopなし、出力契約不一致、証拠不備、未完了outcomeを別のstatusとfailure classへ分類する。`show <task-id>`も同じ形式を使う。`zat`が利用できる場合は大きい対応fileの署名・行番号の絞り込みだけに使い、利用可否を`outline_tool`へ記録する。zat出力はEvidenceにせず、`schema.prisma`、constants、testには機械的に適用しない。
 
 `survey`、`research`、`implement`、`errand`、`nesting`は、呼び出しごとに総待機時間、無通信timeout、確認間隔を必須指定する。呼び出し側は調査範囲、実装範囲、難易度から3値を選び、実行前に値と理由を明示する。通常値はlowがhard 30分・idle 600秒、mediumがhard 45分・idle 900秒、highがhard 60分・idle 900秒で、pollは30秒とする。timeoutは上限なので正常終了を遅らせない。限定調査や再調査でも勝手に短縮せず、ユーザーが明示的に短い上限を指定した場合だけ基準値を下回れる。
 
@@ -155,9 +155,9 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
-通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、shellを外部ワーカーへ許可しない。
+通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
 
-隔離worktreeは現在のHEADを基準にし、`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`を`HEAD+ignored-agent-context`にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
+隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
 テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
 

@@ -63,19 +63,21 @@ Limitations: <確認できない範囲。無ければnone>
 
 workerはコード本文を貼らない。実行器がworkerと同じsnapshotから指定範囲と前後8行の行番号付きコードを`evidence.md`へ抽出し、revision、blob hash、指定範囲、展開範囲を`result.json`へ記録する。範囲外、symlink、Git・env、過大範囲、根拠のないclaimは失敗にする。
 
+`zat`が利用できる場合、workerはgrep・Glob・LSPで単一のtracked file pathを特定した後、対応する大きいfileの署名と行番号を`zat <path>`の1回だけで絞ってから必要範囲だけ読む。zatをpath探索、help・version確認、`ls`・`pwd`・`wc`・`which`・`type`の代用にせず、失敗時は別のzat commandを試さない。zatのsymbol全rangeをEvidenceへ転記せず、80行以下の必要範囲をReadして選ぶ。`schema.prisma`、`constants.ts`、`constants/`配下、testには機械的に使わず、未対応・失敗時は従来のgrep・LSP・Readへ戻る。OpenCodeのshell権限は`zat *`だけをallowし、他はdenyする。zat出力自体はEvidenceにせず、利用可否を`result.json`の`outline_tool`へ記録する。zatが有効な`survey`だけはoutlineとrange Read用にstep上限を4増やし、未導入時の上限は変えない。
+
 `Evidence`は各claim 1〜3範囲、全claimで最大20範囲、推奨12範囲以下、1範囲80行以下にする。実行器が前後8行を展開したpacket全体は400行以下にする。次の形式と完全一致させ、コロンの直後へ空白を入れない。
 
 ```markdown
 - `path/to/file.ts:10-20`
 ```
 
-各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。`survey`は依頼JSONと同じ`C1` 1件とし、実行器がID、件数、順序、Evidence形式を検証する。
+各claim内で`Claim:`、`Evidence:`、`Interpretation:`、`Limitations:`をこの順に書き、後段へまとめない。Evidenceの各範囲はClaimまたはInterpretationの一つの事実と一対一に対応させ、読んだだけの隣接fileを引用しない。`survey`は依頼JSONと同じ`C1` 1件とし、実行器がID、件数、順序、Evidence形式を検証する。
 
 否定的なclaimは、調べたscope、完全一致の検索語、関連語、除外した候補、未調査範囲も`Interpretation`と`Limitations`へ書く。複数fileのdata flowや実行順序は、入口、呼び出し先、分岐・return・awaitを判断できる複数の根拠へ分ける。
 
 上位モデルは`evidence_status: verified`で、対象fileの現在のblobが記録値と一致し、codeがclaimを直接支える場合、同じ箇所を再読しない。情報不足では、欠落したclaimまたは必須成果ID、既存evidenceで足りない理由、追加で辿る境界を明記し、`--supplement-of <前task-id>`を使って限定surveyを行う。初回を1回目として補完は2回まで、合計3回に固定する。前回workerの結論を根拠として渡さず、検証済みevidence IDだけを探索anchorにする。同じdigestの再送はせず、各補完で不足IDまたは探索境界を一つ以上追加する。追加対象を特定できなければ広域調査へ逃げず、未確認事項として停止する。保存済みsnapshotの範囲不足、branch・caller・callee・設定・runtime根拠の不足、claim同士の矛盾は、3回目までは直接調査の理由にしない。
 
-調査内容が揃い、見出し、空白、field順、Evidence記法だけが不正な`invalid_output`では、情報補完をやり直さず、同じmodeへ`--repair-of <前task-id>`と新task-idだけを渡す。repairはEvidenceのpath、開始行、終了行、件数を変更できない。実行器は親reportと機械検証結果だけをworkerへ見せ、repositoryのRead、Grep、Glob、LSPを拒否する。形式修正は1回までで、`information_attempt`を増やさない。
+runnerはrawの`opencode.jsonl`を保持したまま、report先頭の空行と`Outcome`直後へ連結された固定section見出しだけを決定的に正規化する。事実、claim、Evidenceのpath・行・件数は変更しない。それ以外で調査内容が揃い、見出し、field順、Evidence記法だけが不正な`invalid_output`では、情報補完をやり直さず、同じmodeへ`--repair-of <前task-id>`と新task-idだけを渡す。repairはEvidenceのpath、開始行、終了行、件数を変更できない。実行器は親reportと機械検証結果だけをworkerへ見せ、repositoryのRead、Grep、Glob、LSPを拒否する。形式修正は1回までとし、再失敗時は`next-action: review`へ戻して`information_attempt`を増やさない。
 
 Evidenceの範囲超過、範囲外、存在しないpath、件数超過、packet超過、根拠不足は意味上の選択不足であり、repairへ渡さない。`next_action: supplement`に従い、欠落claimだけを新しい検証済みJSONで調査する。step上限到達時に出力契約が不正なら`step_limit_exhausted`としてrepairを拒否する。
 
@@ -133,7 +135,7 @@ bash [skills_root]/worker/delegate.sh <mode> \
 | failure class | 処理 |
 |---|---|
 | 接続失敗、DNS・TLS、reset、rate limit、5xx、timeout、`missing_report`、`malformed_report`、`partial_report` | 同じ依頼を新task-idと`--retry-of`で1回だけ再試行する。合計2回失敗したら上位モデルが引き継ぐ |
-| `survey` / `research`の`invalid_output` | Evidenceのpath・行・件数を変えず、新task-idと`--repair-of`で形式修正を1回だけ行う |
+| `survey` / `research`の`invalid_output` | runnerの決定的な安全正規化で直らない場合だけ、Evidenceのpath・行・件数を変えず、新task-idと`--repair-of`で形式修正を1回行う。再失敗時は`review`へ戻す |
 | `implement` / `errand`の`invalid_output`または`incomplete_outcome` | `next-action: review`に従い、実パッチを上位モデルが許可path・evidence・要求に照らして採否する。`--repair-of`を使わない |
 | `evidence_missing`、`evidence_range_too_wide`、`evidence_out_of_bounds`、`evidence_unsafe_path`、`evidence_reference_limit`、`evidence_packet_limit`、`survey` / `research`の`incomplete_outcome`、`step_limit_exhausted` | 欠落claimだけの検証済みJSONを新task-idと`--supplement-of`で渡す。前回の未検証結論を事実として渡さない |
 | API key未設定、HTTP 401、invalid API key、authentication failed | 再試行せず直ちに上位モデルへ切り替える |

@@ -16,6 +16,7 @@
       "Bash(jq:*)",
       "Bash(bash -n:*)",
       "Bash(command -v:*)",
+      "Bash(zat:*)",
       "Bash(ps -p:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
