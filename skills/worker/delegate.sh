@@ -108,6 +108,9 @@ STEP_LIMIT_REACHED=false
 FAILURE_REASON=""
 NEXT_ACTION="none"
 OUTLINE_TOOL=""
+TOOL_CALL_COUNT="0"
+TOOL_CALLS_BY_NAME_JSON='{}'
+DENIED_TOOL_CALL_COUNT="0"
 
 fail() {
   FAILURE_REASON="$1"
@@ -131,6 +134,50 @@ extract_report() {
       | select(type == "string" and test("[^[:space:]]"));
     ([.[] | nonempty_text] | last // $missing)
   ' "$1"
+}
+
+collect_tool_call_metrics() {
+  local output_path="$1"
+  local metrics
+
+  [ -f "$output_path" ] || return 0
+  metrics=$(jq -Rrs '
+    [
+      split("\n")[]
+      | select(length > 0)
+      | (try fromjson catch null)
+      | select(type == "object" and .type == "tool_use")
+      | .part as $part
+      | select($part | type == "object")
+      | ($part.tool // "") as $tool
+      | ($part.state // null) as $state
+      | select(($tool | type) == "string" and ($tool | length) > 0)
+      | select(($state | type) == "object" and ($state.status | type) == "string")
+      | ($state.input // null) as $input
+      | select(($input | type) == "object")
+      | {
+          name: (if $tool == "bash" and (($input.command // "") | type) == "string" and (($input.command // "") | startswith("zat ")) then "zat" else $tool end),
+          status: $state.status
+        }
+    ]
+    | {
+        tool_call_count: length,
+        tool_calls_by_name: (group_by(.name) | map({key: .[0].name, value: length}) | from_entries),
+        denied_tool_call_count: (map(select(.status == "denied" or .status == "error")) | length)
+      }
+  ' "$output_path" 2>/dev/null) || return 0
+
+  if ! jq -e '
+    (.tool_call_count | type == "number")
+    and (.tool_calls_by_name | type == "object")
+    and (.denied_tool_call_count | type == "number")
+  ' <<<"$metrics" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  TOOL_CALL_COUNT=$(jq -er '.tool_call_count' <<<"$metrics") || return 0
+  TOOL_CALLS_BY_NAME_JSON=$(jq -c '.tool_calls_by_name' <<<"$metrics") || return 0
+  DENIED_TOOL_CALL_COUNT=$(jq -er '.denied_tool_call_count' <<<"$metrics") || return 0
 }
 
 report_status() {
@@ -1345,6 +1392,8 @@ if [ "$MODE" = "smoke" ]; then
   exit 0
 fi
 
+collect_tool_call_metrics "$OPENCODE_OUTPUT"
+
 if [ -d "$WORKTREE/.delegate-request" ]; then
   rm -rf "$WORKTREE/.delegate-request"
 fi
@@ -1493,6 +1542,9 @@ jq -n \
   --arg model "$MODEL" \
   --arg model_variant "$MODEL_VARIANT" \
   --arg outline_tool "$OUTLINE_TOOL" \
+  --argjson tool_call_count "$TOOL_CALL_COUNT" \
+  --argjson tool_calls_by_name "$TOOL_CALLS_BY_NAME_JSON" \
+  --argjson denied_tool_call_count "$DENIED_TOOL_CALL_COUNT" \
   --arg request_digest "$REQUEST_DIGEST" \
   --arg report_file "report.md" \
   --arg report_status "$REPORT_STATUS" \
@@ -1531,7 +1583,7 @@ jq -n \
   --argjson observed_output_bytes "$OBSERVED_OUTPUT_BYTES" \
   --argjson observed_survey_steps "$OBSERVED_SURVEY_STEPS" \
   --argjson step_limit_reached "$STEP_LIMIT_REACHED" \
-  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),outline_tool:(if $outline_tool == "" then null else $outline_tool end),request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,report_normalized:$report_normalized,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),outline_tool:(if $outline_tool == "" then null else $outline_tool end),tool_call_count:$tool_call_count,tool_calls_by_name:$tool_calls_by_name,denied_tool_call_count:$denied_tool_call_count,request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,report_normalized:$report_normalized,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
