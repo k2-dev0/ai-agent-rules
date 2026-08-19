@@ -11,7 +11,7 @@ cowlick はこの文書を全文読み、次の形式を崩さない。
 | `.prompt.md` | 実装順の`- [ ] branch-<機能名>-prompt.md`だけを並べるindex |
 | `branch-<機能名>-prompt.md` | 1機能の自己完結した設計書 |
 
-機能名はbranch名に使えるASCII kebab-caseとする。全項目を未完了で作り、`[x]`への変更は`tdd`の`from-prompt` modeだけが行う。依存される機能を先に並べる。
+機能名はbranch名に使えるASCII kebab-caseとする。全項目を未完了で作り、`[x]`への変更は引数なしの`tdd`だけが行う。依存される機能を先に並べる。
 
 1設計書はおおむね1 branch、squash後の1 commitとする。APIとvalidation schema、migrationとschema変更、helper・定数とその利用箇所、テストと対象実装は同じ設計書へ置く。UI componentはcomponent単位で分ける。
 

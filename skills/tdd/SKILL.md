@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: ユーザーが `$tdd from-prompt` または `$tdd <承認済み設計書path>` を明示し、設計書1枚をworkerによる調査・初回実装、上位モデルのシナリオ承認・テスト・レビュー・修正、polishまで実行するときに使う。from-promptだけ実装順indexを更新する。
+description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚をworkerによる調査・初回実装、上位モデルのシナリオ承認・テスト・レビュー・修正、polishまで実行するときに使う。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 hooks:
@@ -13,18 +13,13 @@ hooks:
 
 ## 目的
 
-承認済み設計書1枚を`survey → scenario → red → delegated-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、worker初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
+`.prompt.md`の先頭未完了設計書1枚を`survey → scenario → red → delegated-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、worker初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
 
-## 入力mode
+## 対象の選択
 
-先頭引数を次のどちらかに限定する。引数なし、追加引数、存在しないpathでは変更せず`invalid_scope`を返す。
+`$tdd` は引数を受け取らない。`@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけを対象にし、他の設計書は読まない。引数がある、indexがない、未完了項目がない、または参照先がない場合は変更せず停止する。
 
-| mode | 対象 | 完了時のindex更新 |
-|---|---|---|
-| `from-prompt` | `@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけ。他の設計書は読まない | 同じ行だけを`[x]`へ変更する |
-| `<承認済み設計書path>` | 指定された既存Markdown 1枚だけ | indexを探索・変更しない |
-
-`from-prompt`でindexがない、空、参照先がない場合は変更せず停止する。未完了項目がなければ全設計書が完了済みと報告する。どちらのmodeも設計書1枚を1 branch・1 PRの単位として扱い、次の設計書へ自動で進まない。
+未完了項目がなければ全設計書が完了済みと報告する。対象設計書は1 branch・1 PRの単位として扱い、次の設計書へ自動で進まない。
 
 ## 権限境界
 
@@ -32,7 +27,7 @@ hooks:
 |---|---|---|
 | テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 |
 | テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
-| 設計資産の変更 | cowlickの承認後だけ可 | 禁止 |
+| 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 |
 | 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 可 |
 | 許可された本体コードと`schema.prisma`の初回実装 | workerの2回連続応答失敗または認証失敗後だけ可 | 可 |
 | worker候補反映後の本体コード修正 | 可 | 禁止 |
@@ -44,7 +39,7 @@ hooks:
 
 設計書を選んでから共通フローでworkerの初回実装候補を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
 
-- 対象設計書1枚と`from-prompt`で必要なindex 1枚
+- 対象設計書1枚とindex 1枚
 - 今回変更するテスト資産そのもの
 - workerが返した`result.json`、`report.md`、`evidence.md`、`candidate.patch`、`opencode.jsonl`
 - [agent_name]自身がこの実行で作成したファイル
@@ -66,7 +61,7 @@ report内の矛盾、evidence欠落、claimと抽出コードの不一致、snap
 
 選んだ設計書の対象ファイルを、テスト資産、workerへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。委任対象pathまたは変更予定のテスト資産に未コミット変更があれば停止する。
 
-機能名と、今回変更する本体コードおよび`schema.prisma`の相対pathを承認済み設計書または検証済みsurveyから確定し、変更前に次を1回実行する。pathを得るためにproduction fileを読まない。新規pathはまだ存在しなくてよい。設計書path modeの機能名は`branch-<機能名>-prompt.md`から得る。
+機能名と、今回変更する本体コードおよび`schema.prisma`の相対pathを現在の設計書または検証済みsurveyから確定し、変更前に次を1回実行する。pathを得るためにproduction fileを読まない。新規pathはまだ存在しなくてよい。機能名は`branch-<機能名>-prompt.md`から得る。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
@@ -88,13 +83,13 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
 
 設計書の完了条件、共通フローのGreenまたはtest除外、レビュー、追跡対象のコミットを確認してから、`bash [skills_root]/polish/capture-scope.sh list-changed <機能名>`を実行する。開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`を実変更pathだけへ適用し、最後のscope path検査で入力の完全一致とtracked・cleanを確認する。formatterの自動修正は必要範囲だけ再確認し、上位モデルがコードを判断して修正した場合は全品質ゲートを先頭から再実行する。
 
-`from-prompt`では、実装差分、scopeへ帰属した検証結果、`unrelated`・`uncertain`・`not run`を先にユーザーへ報告し、完了マークを付けるか明示的に確認する。検証の成否から[agent_name]が自動判定しない。ユーザーが付けると回答した場合だけ次を単独実行する。
+実装差分、scopeへ帰属した検証結果、`unrelated`・`uncertain`・`not run`を先にユーザーへ報告し、完了マークを付けるか明示的に確認する。検証の成否から[agent_name]が自動判定しない。ユーザーが付けると回答した場合だけ次を単独実行する。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ```
 
-設計書path modeでは`mark-prompt-done.sh`を使わず、indexへ触れない。開始receiptを使うscope path検査は両modeで実行する。
+開始receiptを使うscope path検査を実行する。
 
 ## 例外停止
 
@@ -111,6 +106,6 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - [agent_name]が差分をレビュー済み
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミット理由を完了報告へ含めた
-- `from-prompt`では検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
+- 検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
 
-対象設計書、承認シナリオ、Red、Green、workerの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミットを完了報告へ含める。`from-prompt`ではindexの残件数も含める。
+対象設計書、承認シナリオ、Red、Green、workerの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミット、indexの残件数を完了報告へ含める。

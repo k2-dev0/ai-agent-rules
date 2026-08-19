@@ -1,8 +1,7 @@
 #!/bin/bash
-# mark-prompt-done: tdd from-prompt が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
+# mark-prompt-done: 引数なしのtdd が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
 # 実装順リスト上で [ ] から [x] へ倒す。
-# .[agent_name]/ は sandbox の denyWrite で保護されておりエージェントは直接書き込めないため、
-# 進捗の記録もこの固定処理へ閉じ込める。本スクリプトにできるのは「対象 1 行のチェックボックスを
+# 本スクリプトにできるのは「対象 1 行のチェックボックスを
 # [ ] から [x] にする」ことだけで、任意の内容の書き込みもファイルの削除もできない。
 # 使い方: bash mark-prompt-done.sh <機能名>   例) bash mark-prompt-done.sh user-address
 # 失敗の扱い: 対象が無い・既に [x] は exit 1（握りつぶし禁止）。実装済みの取り違えを黙って通さない。
