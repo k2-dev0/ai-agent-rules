@@ -13,7 +13,12 @@ RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 
 validate_path() {
   case "$1" in
-    ""|.|/*|../*|*/../*|*/..|*"$(printf '\t')"*|*[*?\[\]:]*) die "不正な個別file path: $1" ;;
+    ""|.|/*|../*|*/../*|*/..|*"$(printf '\t')"*) die "不正な個別file path: $1" ;;
+  esac
+  # Git 呼び出しはすべて :(literal) でpathspec解釈を止める。角括弧は実在pathに使えるため、
+  # wildcard・magic signatureになり得る文字だけを拒否する。
+  case "$1" in
+    *'*'*|*'?'*|*':'*) die "不正な個別file path: $1" ;;
   esac
   case "$1" in
     *$'\n'*|*$'\r'*) die "改行を含むpathは扱えない" ;;

@@ -365,6 +365,19 @@ git commit -qm "test: scope path fixtureを追加"
 if bash "$CS" billing -- src/rules.ts src/untouched.ts src/planned.ts > quality-begin.out 2>&1; then ok "polish-scope: 基準commitと候補pathを固定"; else ng "polish-scope: 変更前scopeを記録できない"; cat quality-begin.out; fi
 if bash "$CS" directory-scope -- src > quality-directory.out 2>&1; then ng "polish-scope: directory指定を通した"; else ok "polish-scope: 個別file以外を拒否"; fi
 if bash "$CS" glob-scope -- 'src/*.ts' > quality-glob.out 2>&1; then ng "polish-scope: pathspec globを通した"; else ok "polish-scope: pathspec globを拒否"; fi
+mkdir -p front/features/mypage/routes/contract/pages
+BRACKET_PATH='front/features/mypage/routes/contract/pages/-.[number]._index.tsx'
+printf 'export const page = 1\n' > "$BRACKET_PATH"
+git add "$BRACKET_PATH"
+git commit -qm "test: literal pathspec fixtureを追加"
+if bash "$CS" literal-brackets -- "$BRACKET_PATH" > literal-brackets-begin.out 2>&1; then
+  printf 'export const page = 2\n' > "$BRACKET_PATH"
+  git add "$BRACKET_PATH"
+  git commit -qm "test: literal pathspec fixtureを更新"
+  [ "$(bash "$CS" list-changed literal-brackets)" = "$BRACKET_PATH" ] && ok "polish-scope: 角括弧を含むliteral pathを固定・列挙" || ng "polish-scope: 角括弧を含むliteral pathを列挙できない"
+else
+  ng "polish-scope: 角括弧を含むliteral pathを固定できない"; cat literal-brackets-begin.out
+fi
 if bash "$CS" untracked -- src/untracked.ts > quality-untracked-begin.out 2>&1; then
   printf 'export const untracked = true\n' > src/untracked.ts
   if bash "$QG" untracked -- src/untracked.ts > quality-untracked.out 2>&1; then ng "polish-paths: 未追跡の新規fileを通した"; else ok "polish-paths: 未追跡の新規fileを拒否"; fi
