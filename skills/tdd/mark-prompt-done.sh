@@ -10,7 +10,7 @@ set -u
 
 NAME="${1:?usage: mark-prompt-done.sh <機能名>}"
 INDEX=".[agent_name]/prompt/.prompt.md"
-# 機能名の文字集合は apply-prompt.sh と同一（ASCII kebab-case）。
+# 機能名は設計書のファイル名と同じASCII kebab-caseに限定する。
 NAME_RE='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
 
 die(){ echo "ERROR: $1" >&2; exit 1; }

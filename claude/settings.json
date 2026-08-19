@@ -26,6 +26,10 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-config.sh"
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-env.sh"
           },
           {
@@ -77,8 +81,6 @@
     "excludedCommands": [
       "bash .claude/skills/bootstrap/init-agent.sh",
       "bash .claude/skills/bootstrap/init-agent.sh *",
-      "bash .claude/skills/cowlick/apply-prompt.sh",
-      "bash .claude/skills/cowlick/apply-prompt.sh *",
       "bash .claude/skills/tdd/mark-prompt-done.sh",
       "bash .claude/skills/tdd/mark-prompt-done.sh *",
       "bash .claude/skills/polish/quality-gate.sh",
@@ -95,7 +97,7 @@
       "./base/scripts/run-unit.sh *"
     ],
     "filesystem": {
-      "denyWrite": [".git/hooks", ".git/config", ".env", ".env.*", ".claude"]
+      "denyWrite": [".git/hooks", ".git/config", ".env", ".env.*"]
     },
     "network": {
       "allowLocalBinding": false,

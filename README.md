@@ -22,7 +22,7 @@ ai-agent-rules/
 │   ├── bootstrap/          # placeholder と [NOTE] を解決し、成功後に配置先から自己削除
 │   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
-│   ├── cowlick/            # 機能ごとの未承認設計ドラフトを作成
+│   ├── cowlick/            # 機能ごとの設計書を prompt/ へ直接作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── worker/             # 下位モデルを隔離実行するprovider非依存の共通基盤
 │   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
@@ -147,14 +147,14 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 - 本リポジトリはテンプレートなので、`bootstrap` 実行時にここのファイルを書き換えてはいけない。コピー先で置換する。
 - placeholder の dot は placeholder の外側に置く規約（例: `.[agent_name]/...`）。置換漏れ検証は `init-agent.sh` 内で完結させる。
 - Claude Code は `AGENTS.md` を自動読み込みしない（`CLAUDE.md` のみ）。そのため `claude/CLAUDE.md`（中身は `@AGENTS.md`）を配置時にプロジェクトルートへ展開して読ませる。codex は `AGENTS.md` を直読みするため不要。
-- Codex は `distributed` permission profile で通常の workspace 書き込みを許可し、`.git` / `.codex` / `.agents` を保護する。レビュー対象パスは、配布rulesが毎回確認する承認コマンドと1回限りのhook tokenで保護する。設定更新は限定allowした固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
+- Codex は `distributed` permission profile で通常の workspace 書き込みを許可する。`.claude` / `.codex` / `.agents` の設定・skillはhookで保護するが、設計書の正本である `.[agent_name]/prompt/` はユーザーとエージェントが直接編集できる。レビュー対象パスは、配布rulesが毎回確認する承認コマンドと1回限りのhook tokenで保護する。設定更新は限定allowした固定スクリプトだけを使い、汎用の `cp` / `sed` に例外を与えない。
 - Codex の hook は**配置しただけでは実行されない**。`/hooks` で現在の定義をレビューして信頼すること。未信頼のhookはスキップされる（検証用の一時迂回フラグは `--dangerously-bypass-hook-trust`）。
 
 ## 承認の挙動
 
 承認の有無は「書き込みかどうか」だけで決めない。workspace sandbox内で完結し、既存内容を失わない可逆操作は自動化する。既存ファイルの上書き・metadata変更・削除、保護対象への変更、外部通信は確認または禁止へ倒す。
 
-このため、通常ファイルへの構造化された Edit / `apply_patch`、新規ファイルの Write、空ディレクトリを作る `mkdir` は自動実行する。一方、既存ファイルの全面Writeと、対象や上書きをcommand文字列だけから完全には判定できない汎用shell writerは確認する。`mkdir -p draft-prompt`もcowlick固有の特例ではなく、この共通原則で承認不要になる。
+このため、通常ファイルと `.[agent_name]/prompt/` への構造化された Edit / `apply_patch`、新規ファイルの Write、空ディレクトリを作る `mkdir` は自動実行する。一方、既存ファイルの全面Writeと、対象や上書きをcommand文字列だけから完全には判定できない汎用shell writerは確認する。
 
 両エージェントで共通化している主な挙動:
 
@@ -202,7 +202,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
 | testの有無によるコード書き込み判定 | `hooks/shell/require-test.sh`。Claude Codeはtddのfrontmatter、Codexは常時配線と`session.sh`のmarkerでtdd中だけ執行 |
 | 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
-| `.claude` / `.codex` / `.agents`の自己改変防止 | `hooks/shell/protect-config.sh` |
+| `.claude` / `.codex` / `.agents`の設定・skill自己改変防止（`prompt/`は直接編集可） | `hooks/shell/protect-config.sh` |
 | `.env` / `.env.*`の書き込み・削除防止 | `hooks/shell/protect-env.sh`。sandbox / permission profileとの二重層 |
 | lockfileの編集tool・Bash直接変更の拒否 | `hooks/shell/protect-locks.sh`。permission設定との二重層 |
 | Prisma migrationとDB直接反映commandの拒否 | `hooks/shell/deny-migration.sh` |

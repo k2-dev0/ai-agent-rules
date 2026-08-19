@@ -1,17 +1,12 @@
 # <repo>/.codex/rules/default.rules として配置する。
 # 可逆でも未コミット内容を失う操作は都度確認し、共有履歴を変える操作は拒否する。
 
-# distributed permission profile が保護する .codex / .agents へ書けるのは、宛先と処理を固定した
-# レビュー済みスクリプトだけ。汎用の shell / cp / sed には例外を与えない。
+# distributed permission profile は通常のworkspace書き込みを許可し、hookが設定・skillを保護する。
+# `.[agent_name]/prompt/` は設計書の正本として直接更新できる。汎用の shell / cp / sed には例外を与えない。
 prefix_rule(
     pattern = ["bash", ".agents/skills/bootstrap/init-agent.sh", "codex"],
     decision = "allow",
     justification = "配置済みCodex設定のplaceholderを決定的スクリプトで解決します。",
-)
-prefix_rule(
-    pattern = ["bash", ".agents/skills/cowlick/apply-prompt.sh"],
-    decision = "allow",
-    justification = "確認済みドラフトをdraft-prompt/から固定の.codex/prompt/へ移します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/tdd/mark-prompt-done.sh"],

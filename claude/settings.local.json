@@ -27,8 +27,6 @@
       "Bash(mkdir:*)",
       "Bash(bash .claude/skills/bootstrap/init-agent.sh)",
       "Bash(bash .claude/skills/bootstrap/init-agent.sh:*)",
-      "Bash(bash .claude/skills/cowlick/apply-prompt.sh)",
-      "Bash(bash .claude/skills/cowlick/apply-prompt.sh:*)",
       "Bash(bash .claude/skills/tdd/mark-prompt-done.sh)",
       "Bash(bash .claude/skills/tdd/mark-prompt-done.sh:*)",
       "Bash(bash .claude/skills/polish/quality-gate.sh)",

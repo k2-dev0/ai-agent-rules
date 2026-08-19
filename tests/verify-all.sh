@@ -165,7 +165,7 @@ for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAI
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
 grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq 'ユーザーが `$meeting` を明示して' "$MEETING_SKILL" && grep -Fq '`$meeting` の明示呼び出しでだけ起動する' "$MEETING_SKILL" && grep -Fq '通常の自然言語による軽微な修正・追加依頼では起動しない' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(cowlick *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && grep -Fq '  - Bash' "$MEETING_SKILL" && ok "meetingを明示起動だけに限定する" || ng "meetingの起動境界・skill境界が不正"
-grep -q 'preflight → cowlick draft → ponytail' "$MEETING_SKILL" && ok "meetingの基本順序" || ng "meetingの基本順序が不正"
+grep -q 'preflight → cowlick → ponytail' "$MEETING_SKILL" && ! grep -q 'cowlick apply\|最終承認を得る' "$MEETING_SKILL" && ok "meetingは承認・反映phaseなしで設計する" || ng "meetingの基本順序または承認gateが不正"
 for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
   if grep -q '^disable-model-invocation: true$' "$INTERNAL_SKILL"; then
@@ -179,10 +179,10 @@ if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edi
 else
   ok "preflightは読み取り専用"
 fi
-if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edit|AskUserQuestion)'; then
-  ng "ponytailが広域書き込み・質問toolを事前許可"
+if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*Write' && sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*Edit' && ! sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*AskUserQuestion'; then
+  ok "ponytailはprompt設計書だけを直接更新できる"
 else
-  ok "ponytailは調査toolだけを事前許可"
+  ng "ponytailの設計書更新toolまたは質問境界が不正"
 fi
 grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$MEETING_SKILL" && grep -Fq '各内部skillで`prepare`を繰り返さない' "$MEETING_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh research' "$COWLICK_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PONYTAIL_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PONYTAIL_SKILL" && grep -Fq 'worker/DELEGATION.md' "$REQUIRED_READING_HOOK" && ok "meetingが一度prepareして設計調査を固定実行器へ接続" || ng "meetingのprepareまたは設計調査の固定実行器が不正"
 grep -Fq '同じ仕事を並行委任しない' "$WORKER_CONTRACT" && grep -Fq '候補を受け取った後のレビュー、修正、test failureの診断をworkerへ戻さない' "$WORKER_CONTRACT" && grep -Fq '一つの変更判断に必要な最小の事実だけを聞く' "$WORKER_CONTRACT" && grep -Fq '初回を含め三回で止める' "$WORKER_CONTRACT" && grep -Fq 'smokeはユーザーが明示許可した時だけ実行する' "$WORKER_CONTRACT" && ok "worker共通契約は上位モデルの判断境界へ限定" || ng "worker共通契約の判断境界が不足"
@@ -206,8 +206,8 @@ grep -Fq '同一file内の呼び出しを外部consumerに数えず' "$PONYTAIL_
 grep -Fq '一つのfindingはIDを付けて一度だけ説明' "$PONYTAIL_SKILL" && grep -Fq '同じ要件・原因・判断・置換先を持つ要素は一行へまとめる' "$PONYTAIL_SKILL" && grep -Fq '同じtopologyや根拠を別fieldで言い換えない' "$PONYTAIL_SKILL" && ok "ponytailの監査正本は重複せず簡潔" || ng "ponytailの監査成果物が重複可能"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -Fq '`ponytail_audit`の必須field' "$MEETING_SKILL" && grep -Fq '空の`unresolved`' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
 grep -Fq 'topologyが入口から副作用まで繋がる' "$MEETING_SKILL" && grep -Fq '対応要件と直接の外部consumer' "$MEETING_SKILL" && grep -Fq '具体値の反例' "$MEETING_SKILL" && ok "meetingがponytailの主要成果物を独立検証" || ng "meetingのponytail独立検証が不足"
-grep -Fq '`ponytail`の最後の設計レビューを下位モデルへ渡してはならない' "$MEETING_SKILL" && grep -Fq '設計判断、横断比較、採否、ドラフト修正は[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
-grep -q 'draft_ready.*停止' "$COWLICK_SKILL" && grep -q '^## apply' "$COWLICK_SKILL" && grep -q '`draft_conflict`' "$COWLICK_SKILL" && ok "cowlickのdraft/applyと既存draft境界" || ng "cowlickのmode・draft境界が不正"
+grep -Fq '`ponytail`の最後の設計レビューを下位モデルへ渡してはならない' "$MEETING_SKILL" && grep -Fq '設計判断、横断比較、採否、設計書の修正は[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
+grep -q 'design_ready.*停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/` へ直接作成・更新する' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "cowlickとponytailはprompt正本を直接更新" || ng "cowlick/ponytailのprompt直接更新境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
   [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
@@ -341,48 +341,22 @@ LEFT=$(command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude 2>/d
 [ "$LEFT" = "0" ] && ok "置換漏れゼロ(claude)" || { ng "置換漏れ $LEFT 件(claude)"; command grep -rlE '\[agent_name\]|\[skills_root\]' AGENTS.md .claude | grep -v '/bootstrap/'; }
 
 echo "== 2.5 cowlick / tdd の設計書フロー（claude 配置） =="
-AP=".claude/skills/cowlick/apply-prompt.sh"
 MD=".claude/skills/tdd/mark-prompt-done.sh"
 QG=".claude/skills/polish/quality-gate.sh"
 CS=".claude/skills/polish/capture-scope.sh"
-mkdir -p draft-prompt
-printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > draft-prompt/.prompt.md
-echo api > draft-prompt/branch-user-api-prompt.md
-echo form > draft-prompt/branch-user-form-prompt.md
-bash "$AP" > apply.out 2>&1
+mkdir -p .claude/prompt
+printf '# 実装順\n\n- [ ] branch-user-api-prompt.md\n- [ ] branch-user-form-prompt.md\n' > .claude/prompt/.prompt.md
+echo api > .claude/prompt/branch-user-api-prompt.md
+echo form > .claude/prompt/branch-user-form-prompt.md
 if [ -f .claude/prompt/.prompt.md ] && [ -f .claude/prompt/branch-user-api-prompt.md ] && [ -f .claude/prompt/branch-user-form-prompt.md ]; then
-  ok "apply-prompt: index と設計書を固定宛先へ反映"
+  ok "cowlick: 設計書をprompt正本へ直接作成"
 else
-  ng "apply-prompt: 固定宛先への反映漏れ"; cat apply.out
+  ng "cowlick: prompt正本への作成漏れ"
 fi
-[ ! -d draft-prompt ] && ok "apply-prompt: 反映後に draft-prompt/ を畳む" || ng "apply-prompt: draft-prompt/ が残った"
-# 引数を受け取らない = 削除先を外から動かせない、が安全性の根拠。引数追加の再発を検知する
-grep -q 'SRC_DIR="draft-prompt"' "$AP" && ok "apply-prompt: 移動元がスクリプト内に固定" || ng "apply-prompt: 移動元が固定されていない"
-
-mkdir -p draft-prompt
-printf -- '- [ ] branch-billing-prompt.md\n' > draft-prompt/.prompt.md
-echo billing > draft-prompt/branch-billing-prompt.md
-bash "$AP" > apply2.out 2>&1
-if [ -f .claude/prompt/branch-billing-prompt.md ] && [ ! -e .claude/prompt/branch-user-api-prompt.md ] && [ ! -e .claude/prompt/branch-user-form-prompt.md ]; then
-  ok "apply-prompt: 前タスクの設計書を残さない"
-else
-  ng "apply-prompt: 前タスクの設計書が残った"; cat apply2.out
-fi
-
-mkdir -p draft-prompt
-printf -- '- [ ] branch-a-prompt.md\n' > draft-prompt/.prompt.md
-echo a > draft-prompt/branch-a-prompt.md
-echo memo > draft-prompt/memo.txt
-if bash "$AP" > apply3.out 2>&1; then ng "apply-prompt: 想定外ファイルを通した"; else ok "apply-prompt: 想定外ファイルを拒否"; fi
-[ -d draft-prompt ] && ok "apply-prompt: 失敗時は draft-prompt/ を畳まない" || ng "apply-prompt: 失敗時に draft-prompt/ を消した"
-rm -f draft-prompt/memo.txt
-
-printf -- '- [ ] branch-a-prompt.md\n- [ ] branch-b-prompt.md\n' > draft-prompt/.prompt.md
-if bash "$AP" > apply4.out 2>&1; then ng "apply-prompt: index と実体の食い違いを通した"; else ok "apply-prompt: index と実体の食い違いを拒否"; fi
-
-printf -- '- [ ] branch-a-prompt.md\n- [ ] ../evil.md\n' > draft-prompt/.prompt.md
-if bash "$AP" > apply5.out 2>&1; then ng "apply-prompt: 不正な index 行を通した"; else ok "apply-prompt: 不正な index 行を拒否"; fi
-rm -rf draft-prompt
+[ ! -e .claude/skills/cowlick/apply-prompt.sh ] && ok "cowlick: 旧設計反映scriptを配布しない" || ng "cowlick: 旧設計反映scriptが残存"
+printf -- '- [ ] branch-billing-prompt.md\n' > .claude/prompt/.prompt.md
+echo billing > .claude/prompt/branch-billing-prompt.md
+rm -f .claude/prompt/branch-user-api-prompt.md .claude/prompt/branch-user-form-prompt.md
 
 mkdir -p src
 printf 'export function legacyNumber() { return 99 }\n' > src/rules.ts
@@ -1221,7 +1195,7 @@ if command -v codex >/dev/null 2>&1; then
     [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] || append_group_failure "$WRITER_COMMAND: $OUT"
   done
   report_group "rules: filesystem writerをprompt" "$GROUP_FAILURES"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- mkdir -p draft-prompt 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- mkdir -p prompt-work 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: sandbox内mkdirは承認対象外" || ng "rules: mkdirが承認対象 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
@@ -1247,9 +1221,6 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: bootstrap の固定経路を allow" || ng "rules: bootstrap 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
-  # 引数なしで呼ぶ apply-prompt.sh が rules に一致するか（引数前提の書き方だと取りこぼす）
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/cowlick/apply-prompt.sh 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引数なし apply-prompt を allow" || ng "rules: apply-prompt 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/tdd/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh user-api -- src/example.ts 2>/dev/null)
@@ -1290,10 +1261,10 @@ echo "$UPE2" | bash $H/session.sh
 [ ! -f .codex/tmp/session.errand.ERR9 ] && ok "session: \$ 無しのerrand言及では発火しない" || ng "session: errand誤発火"
 UPM=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"MEET1",cwd:$cwd,prompt:"$meeting 新機能を設計して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPM" | bash $H/session.sh
-COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"MEET1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: draft-prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
+COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"MEET1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: .codex/prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
 COWLICK_LOAD=$(echo "$COWLICK_PATCH" | bash $H/load-required-contract.sh)
 if [ "$(echo "$COWLICK_LOAD" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && echo "$COWLICK_LOAD" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '## Changes'; then
-  ok "required-reading: Codex meetingの初回draft編集で設計形式を注入"
+  ok "required-reading: Codex meetingの初回prompt編集で設計形式を注入"
 else
   ng "required-reading: Codex meetingで設計形式を注入できない"
 fi
@@ -1351,6 +1322,8 @@ PRISMA_EDIT=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"ap
 [ -z "$(echo "$PRISMA_EDIT" | bash $H/protect-review.sh)" ] && ok "protect-review: schema.prisma編集は承認不要" || ng "protect-review: schema.prismaを誤拒否"
 PAC=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/config.toml\n+x\n*** End Patch"}}')
 [ "$(echo "$PAC" | bash $H/protect-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-config: .codex patch を deny" || ng "protect-config: .codex patch 素通し"
+PROMPT_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .codex/prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
+[ -z "$(echo "$PROMPT_PATCH" | bash $H/protect-config.sh)" ] && ok "protect-config: .codex/prompt patch は許可" || ng "protect-config: .codex/prompt patch を誤拒否"
 PAC2=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: .agents/skills/e2e/SKILL.md\n+x\n*** End Patch"}}')
 [ "$(echo "$PAC2" | bash $H/protect-config.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "protect-config: .agents patch を deny" || ng "protect-config: .agents patch 素通し"
 echo x > codex-untracked.txt
@@ -1408,7 +1381,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in bootstrap/init-agent.sh cowlick/apply-prompt.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh worker/delegate.sh e2e/apply-e2e-plan.sh; do
+for SC in bootstrap/init-agent.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh worker/delegate.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }

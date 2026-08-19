@@ -1,6 +1,6 @@
 ---
 name: meeting
-description: "ユーザーが `$meeting` を明示して、複数ファイル・新規機能・設計判断を伴う要件監査を求めたときだけ使う。preflight、cowlick、ponytail を呼び分け、最小設計の承認・正式反映までを統括する。通常の自然言語による軽微な修正・追加依頼では起動しない。"
+description: "ユーザーが `$meeting` を明示して、複数ファイル・新規機能・設計判断を伴う要件監査を求めたときだけ使う。preflight、cowlick、ponytail を呼び分け、最小設計を prompt/ へ直接作成・更新する。通常の自然言語による軽微な修正・追加依頼では起動しない。"
 allowed-tools:
   - Skill(preflight)
   - Skill(cowlick *)
@@ -26,17 +26,16 @@ disable-model-invocation: true
 基本順序は次とする:
 
 ```
-preflight → cowlick draft → ponytail → ユーザー承認 → cowlick apply
+preflight → cowlick → ponytail
 ```
 
 | phase | 責務 |
 |---|---|
 | **preflight** | 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す |
-| **cowlick draft** | 確定した要件から未承認の設計ドラフトを作り、下位モデルのコードベース調査を反映する |
-| **ponytail** | ドラフトから不要な機能、重複実装、不要な依存、過剰な表現を削る |
-| **cowlick apply** | 最終承認済みのドラフトだけを正式反映する |
+| **cowlick** | 確定した要件から `.[agent_name]/prompt/` の設計書を作り、下位モデルのコードベース調査を反映する |
+| **ponytail** | 設計書から不要な機能、重複実装、不要な依存、過剰な表現を削る |
 
-workerと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、ドラフトの採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
+workerと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、設計書の採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
 
 このpipelineで初めて外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。同一sessionのpreflight、cowlick、ponytailはこの一回の準備を共有し、各内部skillで`prepare`を繰り返さない。
 
@@ -60,11 +59,10 @@ workerと調査subagentはコードベースの探索と根拠収集だけを担
 | 状態 | 内容 |
 |---|---|
 | 要件 revision | 目的、対象範囲、要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用 |
-| draft revision | cowlick が最後に作成・更新したドラフト |
-| ponytail revision | ponytail が監査成果物とready gateで最小と確認した draft revision |
-| 最終承認 | ユーザーが承認した ponytail revision |
+| design revision | cowlick が `.[agent_name]/prompt/` に最後に作成・更新した設計書 |
+| ponytail revision | ponytail が監査成果物とready gateで最小と確認した design revision |
 
-古い revision の調査結果、単純化結果、承認を新しい revision に流用しない。
+古い revision の調査結果と単純化結果を新しい revision に流用しない。
 
 ## 実行フロー
 
@@ -80,29 +78,29 @@ workerと調査subagentはコードベースの探索と根拠収集だけを担
 
 preflight が未決定事項を返した場合は、最も影響の大きい一件だけをユーザーへ質問する。回答を新しい制約として preflight を再実行し、新しい穴や矛盾がないか確認する。要件由来、既存の実行方式、境界を新設しない基準案が揃い、重大な未決定事項がなくなるまで cowlick へ進まない。
 
-### Step 3: cowlick draft を実行する
+### Step 3: cowlick を実行する
 
-preflight の要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用、未確認事項、コード根拠を入力として、cowlick の `draft` mode を実行する。
+preflight の要件由来、既存の実行方式、境界を新設しない基準案、受け入れた副作用、未確認事項、コード根拠を入力として cowlick を実行する。cowlick は `.[agent_name]/prompt/` を正本として直接作成・更新する。
 
 - 要件の前提が崩れた場合は Step 2 へ戻す
-- 設計上の判断が必要なら、一件だけユーザーへ質問して `draft` mode を再実行する
-- `draft_ready` が返るまで ponytail へ進まない
+- 設計上の判断が必要なら、一件だけユーザーへ質問して cowlick を再実行する
+- `design_ready` が返るまで ponytail へ進まない
 
 ### Step 4: ponytail を収束させる
 
-現在の draft revision に ponytail を実行する。
+現在の design revision に ponytail を実行する。
 
-- 挙動を変えない単純化はドラフトへ反映させる
+- 挙動を変えない単純化は設計書へ反映させる
 - 機能、公開契約、data、security、互換性を変える候補は、一件だけユーザーへ質問する
 - 回答で目的または対象範囲が変われば Step 2 へ戻す
 - 回答で設計または完了条件が変われば Step 3 へ戻す
 - ponytail が新しい実装要素を加えた場合は Step 3 のコードベース調査からやり直す
 
-`ponytail_ready`の文字列だけでは通過させない。`ponytail_audit`の必須field、現在のdraftと同じrevision、空の`unresolved`、`not_applicable`の理由を確認する。さらに、topologyが入口から副作用まで繋がること、残した各要素に対応要件と直接の外部consumerがあること、数値・順序・選択規則に具体値の反例があることを独立に確認する。不一致ならStep 4を再実行する。
+`ponytail_ready`の文字列だけでは通過させない。`ponytail_audit`の必須field、現在のdesignと同じrevision、空の`unresolved`、`not_applicable`の理由を確認する。さらに、topologyが入口から副作用まで繋がること、残した各要素に対応要件と直接の外部consumerがあること、数値・順序・選択規則に具体値の反例があることを独立に確認する。不一致ならStep 4を再実行する。
 
-### Step 5: 最終承認を得る
+### Step 5: 設計書を報告する
 
-現在のドラフト一式と次をユーザーへ示す:
+現在の `.[agent_name]/prompt/` の設計書と次を報告する:
 
 - 確定した設計の範囲
 - preflight で受け入れた副作用
@@ -111,16 +109,12 @@ preflight の要件由来、既存の実行方式、境界を新設しない基�
 - 意図的な簡素化に残る既知の上限と、再検討する測定可能な条件
 - 未確認のまま残すとユーザーが明示した事項
 
-ユーザーが現在の ponytail revision を承認するまで正式反映しない。フィードバックがあれば影響範囲に応じて Step 2、3、4 のいずれかへ戻す。
+この報告は承認待ちのgateではない。修正が必要なら、ユーザーもエージェントも `.[agent_name]/prompt/` の該当設計書を直接更新する。更新後は影響範囲に応じて Step 2、3、4 を再実行する。
 
-### Step 6: cowlick apply を実行する
-
-最終承認後だけ cowlick の `apply` mode を実行する。`apply` mode が確認する draft revision と、ユーザーが承認した ponytail revision が一致しなければ反映させない。
-
-完了時は、ユーザーが行った重要な判断、ponytail で省略した事項、正式反映した設計書を報告する。内部の全 tool call や調査ログは列挙しない。
+完了時は、ユーザーが行った重要な判断、ponytail で省略した事項、直接更新した設計書を報告する。内部の全 tool call や調査ログは列挙しない。
 
 ## 失敗時の扱い
 
 - 各内部skillが外部ワーカーの再試行と上位モデルへの調査引き継ぎを尽くしても調査できない場合は、失敗した範囲を示し、推測で先へ進まない
-- 内部 skill が見つからない、ドラフトが壊れている、固定反映に失敗した場合は、その phase で停止する
+- 内部 skill が見つからない、設計書が壊れている場合は、その phase で停止する
 - ユーザーが未確認事項を明示的に受け入れた場合だけ、制約として保持して続行する

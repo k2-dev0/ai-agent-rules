@@ -67,7 +67,7 @@ if [ "$TOOL" = "Bash" ]; then
 fi
 
 # Claudeはcowlickのfrontmatterからmodeを渡す。Codexはmeeting/cowlickのsession markerで
-# 適用範囲を限定し、最初のdraft編集前に設計形式を注入する。
+# 適用範囲を限定し、最初のprompt設計書編集前に設計形式を注入する。
 REQUIRE_COWLICK_FORMAT=false
 if [ "$MODE" = "cowlick-design" ]; then
   REQUIRE_COWLICK_FORMAT=true

@@ -79,7 +79,7 @@ check "require-test: Bash は棄権"             empty require-test.sh '{"tool_n
 # --- load-required-contract ---
 READING_CWD=$PWD
 rm -f .claude/tmp/required-reading.*.READ1 .claude/tmp/required-reading.*.READ2
-COWLICK_EDIT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:"draft-prompt/branch-sample-prompt.md"}}')
+COWLICK_EDIT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:".claude/prompt/branch-sample-prompt.md"}}')
 COWLICK_FIRST=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh" cowlick-design)
 if matches_expected deny "$COWLICK_FIRST" && echo "$COWLICK_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '## Changes'; then
   PASS=$((PASS+1)); echo "ok   required-reading: cowlick形式を初回編集前に全文注入"
@@ -112,6 +112,7 @@ check "protect-git: git status は棄権"    empty protect-git.sh '{"tool_name":
 
 # --- protect-config ---
 check "config: Edit .claude は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
+check "config: Edit .claude/prompt は許可" empty protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/prompt/branch-sample-prompt.md"}}'
 check "config: Edit .agents は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
 check "config: rm .claude は deny"      deny  protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
 check "config: 設定読み取りは棄権"      empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
