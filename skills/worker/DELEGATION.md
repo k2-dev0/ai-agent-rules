@@ -2,7 +2,7 @@
 
 session最初の委任前に`bash [skills_root]/worker/delegate.sh prepare`を実行する。初回はhookがこの文書を注入して停止する。内容を反映して再実行し、後続委任では繰り返さない。
 
-既定モデルはrunnerが選ぶ。`DELEGATE_MODEL=openrouter/minimax/minimax-m3`を**絶対に付けず**、裸の`bash [skills_root]/worker/delegate.sh`で呼ぶ。hookは冗長な指定を除去するが、通常手順にしない。別モデルを明示する時だけ環境変数を使う。
+通常の委任では、モデル選択用の`DELEGATE_MODEL` / `DELEGATE_MODEL_VARIANT`を**絶対に付けず**、裸の`bash [skills_root]/worker/delegate.sh`で呼ぶ。モデル変更をユーザーが明示した時だけ環境変数を使う。
 
 ## 上位モデルとworkerの境界
 
