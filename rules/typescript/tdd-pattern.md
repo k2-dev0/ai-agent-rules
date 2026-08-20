@@ -23,7 +23,7 @@
 ## ファイル配置
 
 1. 既存リポジトリのtest配置規約を使う。集中配置の`tests/`と隣接`[ファイル名].test.ts`のどちらも許可し、隣接配置を一律に強制しない
-2. Redに使ったtestの正確な相対pathをimplementation requestの`test_paths`へ入れ、実装前に追跡済みであることをvalidatorで確認する
+2. Redに使ったtestの正確な相対pathをimplementation requestの`test_paths`へ入れ、実装前に追跡済みまたはignore規則に一致するローカルtestであることをvalidatorで確認する
 3. `.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外とする。画面挙動は必要な場合だけ既存のintegration / E2E境界で検証する
 4. `schema.prisma`、`constants.ts`、`constants.js`、`constants/`配下は対応test/specの作成・実行対象外とする。これらだけの変更でRed / Greenを要求しない
 

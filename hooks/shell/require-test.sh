@@ -14,7 +14,9 @@ request_allows_test_mapping() {
   jq -e '.test_exemption != null' "$ACTIVE_REQUEST" >/dev/null 2>&1 && return 0
   while IFS= read -r test_path; do
     [ -f "$REPOSITORY/$test_path" ] || return 1
-    git -C "$REPOSITORY" ls-files --error-unmatch -- ":(literal)$test_path" >/dev/null 2>&1 || return 1
+    if ! git -C "$REPOSITORY" ls-files --error-unmatch -- ":(literal)$test_path" >/dev/null 2>&1; then
+      git -C "$REPOSITORY" check-ignore -q -- "$test_path" || return 1
+    fi
   done < <(jq -r '.test_paths[]' "$ACTIVE_REQUEST")
   [ "$(jq '.test_paths | length' "$ACTIVE_REQUEST")" -gt 0 ]
 }
@@ -99,7 +101,7 @@ if
 
     request_allows_test_mapping "$RELATIVE_FILE" && continue
     tracked_test_with_same_basename_exists "$BASE" "$EXT" && continue
-    hook_deny "承認済みimplementation requestのtest_paths、または同じbasenameの追跡済みtest/specが無い状態でのコード実装は禁止です。隣接配置は必須ではありません。ignored・未追跡testはRedの根拠にできません。"
+    hook_deny "承認済みimplementation requestのtest_paths、または同じbasenameの追跡済みtest/specが無い状態でのコード実装は禁止です。隣接配置は必須ではありません。ignore規則に一致するローカルtestはtest_pathsで明示すれば使用できます。"
   done < <(hook_file_paths)
 
   # 対応テストがあるコード本体 = 棄権して settings の permission 層に委ねる。

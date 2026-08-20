@@ -115,7 +115,7 @@ $bootstrap codex
 コードベースの事実確認は共通の外部workerへ、初回実装は上位モデルが起動する専用implementerへ委任する。Claude Codeは`claude-sonnet-5` / `max`、Codexは`gpt-5.6-luna` / `max`を固定する。Codexはfresh contextで起動し、親会話の分類・レビュー依頼を継承させない。上位モデルは設計判断、差分採否、レビュー、修正、テスト、Gitを担当する。workerの共通契約は`skills/worker/DELEGATION.md`を読む。
 
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → subagent-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、検証済みJSONへ分ける。implementerには設計または短い実装指示、Evidence、承認済みシナリオID、Red要約、許可pathを必須入力とする。初回実装後のレビューや修正は上位モデルが行う。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → subagent-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、検証済みJSONへ分ける。implementerには全要件を保持した設計または実装指示、Evidence、test_scenarios、Red要約、許可pathを必須入力とする。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
 
 上位モデルの判断境界は圧縮した`skills/worker/DELEGATION.md`、CLI、時間、claim-evidence、結果判定、再試行の機械的制約は`delegate.sh`を正本とする。session最初の委任前にhookが前者を一度注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
@@ -139,11 +139,11 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
 
-implementerは親とworktreeを共有する。親はworker artifact、scenario、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。その後`capture-scope.sh activate`で個別file scopeを有効化してから一体だけ起動し、終了後に`deactivate`する。active中はhookがshellを拒否し、Claude CodeのEdit / WriteとCodexのapply_patchを許可path完全一致で検査する。implementerはtest、設定、migration、Gitを変更せず、親が差分をレビューしてGreen・commitまで完了する。
+implementerは親とworktreeを共有する。親はworker artifact、全要件を保持した実装指示、test_scenarios、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。その後`capture-scope.sh activate`で個別file scopeを有効化してから一体だけ起動し、終了後に`deactivate`する。active中はhookがshellを拒否し、Claude CodeのEdit / WriteとCodexのapply_patchを許可path完全一致で検査する。implementerはtest、設定、migration、Gitを変更せず、親が差分をレビューしてGreen・commitまで完了する。
 
 隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
-テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みシナリオから一意に解決できない場合だけ、ユーザーへシナリオ承認を求め直す。
+テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みtest_scenariosからテスト内容を一意に解決できない場合だけ、ユーザーへテストシナリオ承認を求め直す。実装範囲は設計書またはユーザー依頼を正とする。
 
 ## 注意
 

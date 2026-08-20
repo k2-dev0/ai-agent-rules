@@ -15,8 +15,8 @@ RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 
 printf '%s' "$REQUEST" | jq -e '
   type == "object" and
-  (keys | sort) == ["action", "allowed_paths", "approved_scenarios", "implementation_instruction", "red", "scope", "spec", "test_exemption", "test_paths", "version", "worker_tasks"] and
-  .version == 2 and
+  (keys | sort) == ["action", "allowed_paths", "implementation_instruction", "red", "scope", "spec", "test_exemption", "test_paths", "test_scenarios", "version", "worker_tasks"] and
+  .version == 3 and
   .action == "implement" and
   (.scope | type == "string" and test("^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$")) and
   (.implementation_instruction | type == "string" and test("[^[:space:]]")) and
@@ -36,7 +36,7 @@ printf '%s' "$REQUEST" | jq -e '
         type == "string" and test("^[^/].*") and (contains("..") | not) and
         test("(^|/)(test|tests|__tests__)/|\\.(test|spec)\\.|(^|/)(test_|spec_).+\\.|(_test|_spec)\\.[^/]+$"))) and
       (.test_paths | unique | length) == (.test_paths | length) and
-      (.approved_scenarios | type == "array" and length > 0 and all(.[];
+      (.test_scenarios | type == "array" and length > 0 and all(.[];
         type == "object" and
         (keys | sort) == ["contract", "id"] and
         (.id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) and
@@ -46,7 +46,7 @@ printf '%s' "$REQUEST" | jq -e '
         (.status | type == "number" and floor == . and . > 0) and
         (.reason | type == "string" and test("[^[:space:]]"))))
     or
-    (.red == null and .approved_scenarios == [] and .test_paths == [] and
+    (.red == null and .test_scenarios == [] and .test_paths == [] and
       (.test_exemption | type == "object" and (keys | sort) == ["paths", "reason"] and
         (.paths | type == "array" and length > 0 and all(.[];
           type == "string" and test("(^|/)schema\\.prisma$|(^|/)constants\\.(ts|js)$|(^|/)constants/"))) and
@@ -69,8 +69,11 @@ fi
 
 while IFS= read -r TEST_PATH; do
   [ -f "$TEST_PATH" ] || die "承認済みtestが無い: $TEST_PATH"
-  git ls-files --error-unmatch -- ":(literal)$TEST_PATH" >/dev/null 2>&1 || \
-    die "承認済みtestが未追跡またはignored: $TEST_PATH"
+  if git ls-files --error-unmatch -- ":(literal)$TEST_PATH" >/dev/null 2>&1; then
+    continue
+  fi
+  git check-ignore -q -- "$TEST_PATH" || \
+    die "承認済みtestが追跡済みでもignore対象でもない: $TEST_PATH"
 done < <(printf '%s' "$REQUEST" | jq -r '.test_paths[]')
 
 REQUEST_PATHS=$(printf '%s' "$REQUEST" | jq -r '.allowed_paths[]')

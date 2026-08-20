@@ -7,7 +7,7 @@
 | 入力 | `tdd` | `errand` |
 |---|---|---|
 | 要求根拠 | 承認済み設計書とsurvey | ユーザー依頼とsurvey |
-| 実装subagentへの入力 | 設計書、Evidence、承認済みシナリオ、Redの要約、許可path | 承認済みシナリオを含む短い実装指示、Evidence、Redの要約、許可path |
+| 実装subagentへの入力 | 全要件を含む設計書と実装指示、Evidence、test_scenarios、Redの要約、許可path | 全要件を含む実装指示、Evidence、test_scenarios、Redの要約、許可path |
 | scope名 | 設計書の機能名 | 呼び出し元が固定するASCII kebab-case名 |
 | 実装後の追加処理 | polishと必要ならindex更新 | 呼び出し元が定めた限定検証と完了報告 |
 
@@ -27,17 +27,19 @@
 
 初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 
-## 1. シナリオを一括承認する
+## 1. テストシナリオを一括承認する
 
-[agent_name]が要求根拠と調査パケットから、今回の公開挙動に必要な正常系、境界値、異常系、副作用、回帰リスクを選び、各シナリオの前提・操作・期待結果を一括提示する。既存テストを正解として盲目的に模倣しない。ユーザーが明示的に承認するまでファイルを変更しない。
+[agent_name]が要求根拠と調査パケットから、今回テストする正常系、境界値、異常系、副作用、回帰リスクを選び、各テストシナリオの前提・操作・期待結果だけを一括提示する。実装要件や実装要否を提案・再分類しない。既存テストを正解として盲目的に模倣せず、ユーザーが明示的に承認するまでファイルを変更しない。
 
-次はシナリオ変更なので再承認する。
+ユーザーがシナリオを「不要」とした場合、それはそのテストを作らないという意味だけに限定する。承認されなかった、削除された、または統合されたテストシナリオを、設計書・ユーザー依頼・`implementation_instruction`にある実装要件を省略する根拠にしてはならない。実装範囲を変えるには設計書またはユーザー依頼自体の明示的な変更が必要である。
+
+次はテストシナリオ変更なので再承認する。
 
 - 期待結果または前提条件を変える
 - シナリオを追加、削除、統合する
 - 検証対象の責務や公開挙動を変える
 
-承認済みシナリオを忠実に表すためのimport、型、構文、テスト構造の修正は再承認しない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
+承認済みtest_scenariosを忠実に表すためのimport、型、構文、テスト構造の修正は再承認しない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
 次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、シナリオ承認も省略する。実装subagentへの入力には除外pathと理由を明記する。
 
@@ -49,7 +51,7 @@
 
 ## 2. [agent_name]がテストを書く
 
-承認済みシナリオと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。承認済みtestが`.gitignore`や`.git/info/exclude`でignoredなら、作業ツリー上だけのRedを続行理由にしない。`git add -f`や`git add --force`で回避せず、実装requestを作る前に停止してignore規約の解消をユーザーへ求める。
+承認済みtest_scenariosと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。`.gitignore`や`.git/info/exclude`で意図的にignoredなtestはローカルのRedとして使い、追跡を求めない。`git add -f`や`git add --force`でignore規約を迂回しない。追跡済みでもignore対象でもない野良の未追跡testだけを不正として停止する。
 
 `.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない。画面挙動は既存のintegration / E2E境界で検証する。
 
@@ -64,11 +66,11 @@
 
 ## 4. 専用subagentへ初回実装を委任する
 
-まず次のschemaで実装request JSONを作る。自然文だけで引き渡さず、worker task、artifact、scenario、Red、scope、許可pathを機械検証できる形にする。
+まず次のschemaで実装request JSONを作る。自然文だけで引き渡さず、worker task、artifact、test_scenarios、Red、scope、許可pathを機械検証できる形にする。
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "action": "implement",
   "scope": "機能名",
   "spec": ".codex/prompt/branch-example-prompt.md。errandではnull",
@@ -76,15 +78,15 @@
   "worker_tasks": [
     {"task_id": "task-id", "result": "result.jsonの相対path", "report": "report.mdの相対path", "evidence": "evidence.mdの相対path"}
   ],
-  "approved_scenarios": [{"id": "S1", "contract": "前提、操作、期待結果の短い契約"}],
-  "test_paths": ["Redに使った追跡済みtestの相対path"],
+  "test_scenarios": [{"id": "S1", "contract": "テストの前提、操作、期待結果"}],
+  "test_paths": ["Redに使った追跡済みまたはignore対象testの相対path"],
   "red": {"command": "実行command", "status": 1, "reason": "期待した理由での失敗要約"},
   "test_exemption": null,
   "allowed_paths": ["変更を許可する個別file path"]
 }
 ```
 
-`action`は常に`implement`とし、承認済みIDだけでなく各シナリオの短い契約を`approved_scenarios`へ入れる。`test_paths`は配置場所を推測せず、Redに使った追跡済みtestを列挙する。test除外時だけ`approved_scenarios`と`test_paths`を空配列、`red`を`null`とし、`test_exemption`を`{"paths":[...],"reason":"..."}`にする。次を実行し、成功時にstdoutへ返る正規化済みJSONをそのまま保持する。失敗したrequestを自然文で補ってsubagentを起動しない。
+`action`は常に`implement`とする。`spec`と`implementation_instruction`にはテスト採否にかかわらず実装する全要件を保持し、承認されたテストだけを`test_scenarios`へ入れる。`test_scenarios`を実装範囲の定義に使わない。`test_paths`は配置場所を推測せず、Redに使った追跡済みtestまたはignore規則に一致するローカルtestを列挙する。test除外時だけ`test_scenarios`と`test_paths`を空配列、`red`を`null`とし、`test_exemption`を`{"paths":[...],"reason":"..."}`にする。次を実行し、成功時にstdoutへ返る正規化済みJSONをそのまま保持する。失敗したrequestを自然文で補ってsubagentを起動しない。
 
 ```bash
 bash [skills_root]/tdd/validate-implementation-request.sh '<request-json>'
@@ -110,7 +112,7 @@ bash [skills_root]/polish/capture-scope.sh deactivate <scope名>
 
 - 許可pathがすべてcleanで、追加surveyにより一意に解決できる: 必要なsurvey後に同じJSONをvalidatorへ再度通し、activateから一度だけ再実行する。deactivate済みのrequest receiptは再利用できない
 - 非ブロッキングな改善案: 記録して続行する
-- 新しい設計判断またはシナリオ変更が必要: Step 1へ戻す
+- 新しい設計判断が必要: 呼び出し元の設計・要件確認へ戻す。test_scenariosだけの変更が必要: Step 1へ戻す
 
 `Outcome: implemented`でも許可pathの実差分が0なら実装失敗として扱う。`Outcome: consultation_required`または説明・分類だけを返した場合は相談として処理し、実装成功に数えない。実装subagentが一部でも変更した後は再委任しない。テスト・設計の編集権と決定権は与えない。
 
@@ -121,7 +123,7 @@ subagentの自己申告ではなく、共有worktreeの実際の差分を正と�
 - 変更が許可path内だけである
 - テスト資産、設計、設定、Gitを変更していない
 - テスト環境検出、値のハードコード、assertion攻略がない
-- 承認済みシナリオと、`tdd`では承認済み設計にも一致する
+- 設計書またはユーザー依頼と`implementation_instruction`の全要件に一致し、test_scenariosの採否を実装省略へ流用していない
 
 正しい処理であることに加え、半年後に負債にならないかを必ずレビューする。短さや抽象度の高さを品質とみなさず、次を確認する。
 
@@ -141,19 +143,19 @@ subagentの自己申告ではなく、共有worktreeの実際の差分を正と�
 
 | 条件 | 実行 |
 |---|---|
-| 承認済みシナリオから作ったtest | 全件 |
+| 承認済みtest_scenariosから作ったtest | 全件 |
 | surveyが`direct-regression`として返した既存test | 全件 |
 | TypeScript / JavaScriptを変更 | 所属packageの既存typecheck。なければ`tsc -p <tsconfig> --noEmit` |
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-承認済みシナリオから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、承認済み範囲へ合わせる本体コード修正を直接行う。通常の修正をworkerまたは実装subagentへ再委任しない。テストまたはシナリオを変える必要が出た場合だけStep 1へ戻る。
+承認済みtest_scenariosから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、設計書またはユーザー依頼の全要件へ合わせる本体コード修正を直接行う。通常の修正をworkerまたは実装subagentへ再委任しない。テストシナリオを変える必要が出た場合だけStep 1へ戻る。
 
 ## 8. 失敗をscopeに帰属させる
 
 test、typecheck、lint、Prisma検証の終了codeだけで今回の成否を決めず、各diagnosticを次へ分類する。
 
-- `scope-related`: 承認済みシナリオの対象test、実変更path自体のdiagnostic、または変更した公開型・export・契約が原因と確認できるcallerの失敗
+- `scope-related`: 承認済みtest_scenariosの対象test、実変更path自体のdiagnostic、または変更した公開型・export・契約が原因と確認できるcallerの失敗
 - `unrelated`: 実変更pathと因果関係がない既存失敗、今回作成・変更していないignored / untracked test、checkout前のbranchの残留testが消えた実装を参照する失敗
 - `uncertain`: 診断情報だけで因果関係を確定できない失敗
 

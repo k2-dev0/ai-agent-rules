@@ -21,7 +21,7 @@ hooks:
 
 - 初回実装とは、このerrandで依頼された挙動について許可pathへ最初に加える本体コード変更を指す
 - 初回実装は専用`implementer` subagentがactive scope内へ直接作る。上位モデルが最初の応答前にstub、雛形、部分実装、手作業の代替実装を作らない
-- implementerの初回実装後は、上位モデルが承認済みシナリオ、テスト、型検査、lintの結果に基づいて直接修正する。修正をworkerまたはimplementerへ再委任しない
+- implementerの初回実装後は、上位モデルがユーザー依頼の全要件、test_scenarios、テスト、型検査、lintの結果に基づいて直接修正する。修正をworkerまたはimplementerへ再委任しない
 - implementerが未変更のまま中断・無応答なら、cleanな許可pathに限り一度だけ再起動する。再実行も失敗した場合だけ上位モデルが初回実装を引き継ぐ
 - 修正する／しない、部分採用、全体拒否の判断は上位モデルが行う
 
@@ -54,7 +54,7 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
    ```bash
    bash [skills_root]/polish/capture-scope.sh <scope名> -- <相対path>...
    ```
-5. 依頼、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、survey結果から短い実装指示を作る。許可pathは検証済みsurveyが返したcleanな本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルだけにする。
+5. ユーザー依頼の全要件、Redのcommandと期待した理由での失敗要約、survey結果から短い実装指示を作る。test_scenariosの採否で実装指示を削らない。許可pathは検証済みsurveyが返したcleanな本体コードと`schema.prisma`、または既存の親directory内で同型実装から名前・内容を一意に決められる新規本体ファイルだけにする。
 6. 共通フローのStep 4〜8を完了する。implementerへ判断に使った検証済みsurvey task-idとartifact pathを全件渡し、列名、型幅、relationなどを短い指示だけから再推測させない。implementerにテスト、設定、migration、Git、設計資産を変更させない。
 7. 共通フローのGreenに加え、path指定可能な既存lintを実行する。利用可能なcommandがなければ発明せず、未実行として報告する。test除外pathだけの依頼でtestを探索・実行せず、検証失敗は共通フローどおりscopeへ帰属させる。
 
@@ -62,4 +62,4 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
 
 ## 完了報告
 
-依頼、承認シナリオ、Red、Green、workerのsurvey task-id、implementerの結果、許可path、実装差分の採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。
+依頼、承認済みtest_scenarios、Red、Green、workerのsurvey task-id、implementerの結果、許可path、実装差分の採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。

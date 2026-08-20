@@ -26,7 +26,7 @@ hooks:
 | 対象 | [agent_name] | worker | implementer |
 |---|---|---|---|
 | テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 | 禁止 |
-| テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 | 禁止 |
+| テスト資産の変更 | 承認済みtest_scenarios内だけ可 | 禁止 | 禁止 |
 | 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 | 禁止 |
 | 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 読み取り専用で可 | 許可pathと明示された根拠だけ可 |
 | 許可された本体コードと`schema.prisma`の初回実装 | subagentが利用不能またはcleanな再実行も失敗した場合だけ可 | 禁止 | 可 |
@@ -77,7 +77,7 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
 
 ### 3. 共通のシナリオ駆動実装フローを完了する
 
-共通フローのStep 1〜8を順に実行する。要求根拠は承認済み設計書とsurvey、implementerへの入力は共通フローのvalidatorを通した実装request JSONとする。設計書、Evidence、承認済みシナリオ、Redの要約、許可pathをJSONから省略しない。test除外pathだけの変更、component・React hookのテスト境界、シナリオ再承認、相談、差分採否、Green、失敗のscope帰属はすべて共通フローに従う。
+共通フローのStep 1〜8を順に実行する。要求根拠は承認済み設計書とsurvey、implementerへの入力は共通フローのvalidatorを通した実装request JSONとする。設計書、全要件を保持した実装指示、Evidence、test_scenarios、Redの要約、許可pathをJSONから省略しない。test_scenariosはテスト範囲だけを表し、設計書の実装範囲を狭めない。test除外pathだけの変更、component・React hookのテスト境界、シナリオ再承認、相談、差分採否、Green、失敗のscope帰属はすべて共通フローに従う。
 
 ### 4. polishと完了処理を行う
 
@@ -101,11 +101,11 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 
 ## 完了報告
 
-- 承認済みシナリオのGreen / `scope fail`、またはtest除外を報告済み
+- 承認済みtest_scenariosのGreen / `scope fail`、またはtest除外を報告済み
 - 共通フローとpolishの各結果がscopeへ帰属済み
 - [agent_name]が差分をレビュー済み
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミット理由を完了報告へ含めた
 - 検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
 
-対象設計書、承認シナリオ、Red、Green、workerのsurvey / nesting task-id、implementerの相談・差分採否理由、polish結果、コミット、indexの残件数を完了報告へ含める。
+対象設計書、承認済みtest_scenarios、Red、Green、workerのsurvey / nesting task-id、implementerの相談・差分採否理由、polish結果、コミット、indexの残件数を完了報告へ含める。
