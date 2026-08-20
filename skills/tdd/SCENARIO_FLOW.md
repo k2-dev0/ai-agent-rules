@@ -146,7 +146,15 @@ subagentが中断・無応答で、cleanな許可pathへの再実行も一度失
 bash [skills_root]/polish/capture-scope.sh handoff-to-parent <scope名>
 ```
 
-親は同じrequestの許可pathだけを実装し、完了後にdeactivateする。active中の読み取りは`implementer-read.sh`を使う。追跡対象の本体変更は1ファイルずつ即コミットする。
+親は同じrequestの許可pathだけを実装し、完了後にdeactivateする。active中の読み取りは`implementer-read.sh`を使う。
+
+実装者差分の検証と必要な上位モデル修正またはfallback実装を終えた直後、Green、formatter、lint、polish、本体コードのcommitより先に、次の3項目だけを簡潔に報告する。
+
+- 採用: 実装者が変更した内容と、要件・設計・既存コードに照らして問題ない理由
+- 問題: 問題箇所、影響、採用・修正・拒否の判断
+- 上位修正: 上位モデルが変更した内容と理由
+
+元差分と上位修正を区別し、重要な判断は落とさない。問題や上位修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。新しい設計判断がなければ承認待ちにはせず、報告後に検証と後続処理を続ける。追跡対象の本体変更は、この報告後に1ファイルずつコミットする。
 
 ## 7. Green・レビュー・修正を完了する
 
