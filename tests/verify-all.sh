@@ -34,7 +34,6 @@ CLAUDE_UNAVAILABLE_SERENA_TOOLS=(
   find_file
   search_for_pattern
 )
-CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS=(search_for_pattern)
 FILESYSTEM_WRITER_COMMANDS=(cp install rsync touch chmod chown chgrp ln patch)
 CLAUDE_SAFE_READ_PERMISSIONS=(
   'Bash(find:*)'
@@ -83,6 +82,14 @@ mcp_server_prompts_by_default(){
     $0 == header { in_server = 1; next }
     in_server && /^\[/ { exit !found }
     in_server && $0 == "default_tools_approval_mode = \"prompt\"" { found = 1 }
+    END { exit !found }
+  ' "$2"
+}
+mcp_server_approves_by_default(){
+  awk -v header="[mcp_servers.$1]" '
+    $0 == header { in_server = 1; next }
+    in_server && /^\[/ { exit !found }
+    in_server && $0 == "default_tools_approval_mode = \"approve\"" { found = 1 }
     END { exit !found }
   ' "$2"
 }
@@ -1387,18 +1394,19 @@ report_group "serena: code変更toolを全件無効化" "$GROUP_FAILURES"
 grep -q '"replace_regex"' .codex/config.toml && ng "serena: 廃止済みreplace_regexが残存" || ok "serena: 廃止済みtool名なし"
 for MCP_SERVER in serena chrome-devtools; do
   GROUP_FAILURES=
+  if [ "$MCP_SERVER" = "serena" ]; then
+    mcp_server_approves_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "全toolの既定値がapproveではない"
+    CONFIGURED_COUNT=$(awk -v prefix="[mcp_servers.$MCP_SERVER.tools." 'index($0, prefix) == 1 { count++ } END { print count + 0 }' .codex/config.toml)
+    [ "$CONFIGURED_COUNT" = "0" ] || append_group_failure "不要なper-tool approveが残存"
+    report_group "$MCP_SERVER: 全有効toolを自動承認" "$GROUP_FAILURES"
+    continue
+  fi
   mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "未登録toolの既定値がpromptではない"
   APPROVED_COUNT=0
   while IFS= read -r MCP_TOOL; do
     APPROVED_COUNT=$((APPROVED_COUNT+1))
     mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml || append_group_failure "approve漏れ: $MCP_TOOL"
   done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
-  if [ "$MCP_SERVER" = "serena" ]; then
-    for MCP_TOOL in "${CODEX_CONTEXT_EXTRA_APPROVED_SERENA_TOOLS[@]}"; do
-      APPROVED_COUNT=$((APPROVED_COUNT+1))
-      mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml || append_group_failure "context固有approve漏れ: $MCP_TOOL"
-    done
-  fi
   CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
   [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] || append_group_failure "allow一覧外のapprove混入"
   report_group "$MCP_SERVER: approval境界" "$GROUP_FAILURES"

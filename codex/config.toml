@@ -80,7 +80,7 @@ args = [
   "--project-from-cwd",
 ]
 startup_timeout_sec = 30
-default_tools_approval_mode = "prompt"
+default_tools_approval_mode = "approve"
 disabled_tools = [
   "execute_shell_command",
   "create_text_file",
@@ -94,30 +94,6 @@ disabled_tools = [
   "insert_before_symbol",
   "rename_symbol",
 ]
-
-[mcp_servers.serena.tools.onboarding]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.list_memories]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.write_memory]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.read_memory]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.find_symbol]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.get_symbols_overview]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.search_for_pattern]
-approval_mode = "approve"
-
-[mcp_servers.serena.tools.initial_instructions]
-approval_mode = "approve"
 
 [mcp_servers.context-dictionary]
 command = "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx"
