@@ -189,6 +189,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | rulesのpromptで1回限りの変更tokenを発行 |
 | 既存ファイルの全面Write | `overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
+| local ESLint（`yarn eslint`） | 既定確認 | rulesの固定prefixで自動 |
 | MCPの未登録tool | Claudeの既定確認 | `default_tools_approval_mode = "prompt"` |
 
 挙動を決めている実体（想定外の動きをしたらここを見る）:

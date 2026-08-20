@@ -37,6 +37,14 @@ prefix_rule(
     justification = "承認済みTDDシナリオの対象unit testを既存runner経由で実行します。",
 )
 
+# repository内のlocal ESLintを対象pathへ繰り返し実行する検証command。
+# projectで管理されたlint入口として、対象pathが変わっても追加承認を不要にする。
+prefix_rule(
+    pattern = ["yarn", "eslint"],
+    decision = "allow",
+    justification = "repository内のlocal ESLintで対象ファイルを検証します。",
+)
+
 # delegate.sh が長時間実行になった場合の完了確認。ps -p は指定PIDの状態を読むだけで
 # filesystemやprocessへ変更を加えないため、動的PIDでも追加承認を不要にする。
 prefix_rule(
