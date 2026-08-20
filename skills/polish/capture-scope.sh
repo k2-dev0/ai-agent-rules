@@ -12,6 +12,7 @@ REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
 RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 ACTIVE_DIR="$RECEIPT_DIR/implementation.active"
 ACTIVE_SCOPE="$ACTIVE_DIR/scope"
+ACTIVE_MODE="$ACTIVE_DIR/mode"
 OWNER_FILE="$RECEIPT_DIR/implementation.owner"
 
 validate_path() {
@@ -81,12 +82,34 @@ if [ "${1:-}" = "activate" ]; then
     rmdir "$ACTIVE_DIR" 2>/dev/null || true
     die "実装subagentのactive scopeを作れない"
   fi
-  if ! mv "$REQUEST_RECEIPT" "$ACTIVE_DIR/request.json"; then
+  if ! printf 'subagent\n' > "$ACTIVE_MODE"; then
     rm -f "$ACTIVE_SCOPE"
+    rmdir "$ACTIVE_DIR" 2>/dev/null || true
+    die "実装scopeのmodeを記録できない"
+  fi
+  if ! mv "$REQUEST_RECEIPT" "$ACTIVE_DIR/request.json"; then
+    rm -f "$ACTIVE_MODE" "$ACTIVE_SCOPE"
     rmdir "$ACTIVE_DIR" 2>/dev/null || true
     die "検証済みimplementation requestをactive scopeへ移せない"
   fi
   echo "activated: $FEATURE"
+  exit 0
+fi
+
+if [ "${1:-}" = "handoff-to-parent" ]; then
+  [ "$#" -eq 2 ] || die "usage: capture-scope.sh handoff-to-parent <機能名>"
+  FEATURE=$2
+  [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
+  [ -f "$ACTIVE_SCOPE" ] || die "activeな実装scopeが無い"
+  [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmodeが無い"
+  [ -f "$ACTIVE_DIR/request.json" ] || die "activeなimplementation requestが無い"
+  [ "$(sed -n '1p' "$ACTIVE_SCOPE")" = "$REPOSITORY" ] || die "active scopeのリポジトリが一致しない"
+  [ "$(sed -n '2p' "$ACTIVE_SCOPE")" = "$FEATURE" ] || die "active scopeの機能名が一致しない"
+  [ "$(sed -n '1p' "$ACTIVE_MODE")" = "subagent" ] || die "parent fallbackへhandoffできるのはsubagent modeだけ"
+  TEMP_MODE="$ACTIVE_MODE.tmp.$$"
+  printf 'parent-fallback\n' > "$TEMP_MODE" || die "parent fallback modeを書けない"
+  mv "$TEMP_MODE" "$ACTIVE_MODE" || die "parent fallback modeを確定できない"
+  echo "handed-off: $FEATURE parent-fallback"
   exit 0
 fi
 
@@ -95,9 +118,12 @@ if [ "${1:-}" = "deactivate" ]; then
   FEATURE=$2
   [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
   [ -f "$ACTIVE_SCOPE" ] || die "activeな実装subagent scopeが無い"
+  [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmodeが無い"
   [ "$(sed -n '1p' "$ACTIVE_SCOPE")" = "$REPOSITORY" ] || die "active scopeのリポジトリが一致しない"
   [ "$(sed -n '2p' "$ACTIVE_SCOPE")" = "$FEATURE" ] || die "active scopeの機能名が一致しない"
+  case "$(sed -n '1p' "$ACTIVE_MODE")" in subagent|parent-fallback) ;; *) die "active scopeのmodeが不正" ;; esac
   rm -f "$ACTIVE_DIR/request.json"
+  rm "$ACTIVE_MODE" || die "active scopeのmodeを解除できない"
   rm "$ACTIVE_SCOPE" || die "active scopeを解除できない"
   rmdir "$ACTIVE_DIR" || die "active scope directoryを解除できない"
   rm -f "$OWNER_FILE"

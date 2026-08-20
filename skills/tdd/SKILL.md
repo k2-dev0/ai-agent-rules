@@ -96,7 +96,7 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - 共通委任契約が停止対象とする予算、ZDR、依存commandの問題がある
 - implementerの起動中にscope hookが不完全または無効だった
 - ユーザーの未コミット変更と対象pathが衝突する
-- implementerのcleanな再実行後も上位モデルの実装経路を利用できない
+- handoff後も親sessionが許可pathを変更できない、またはactive requestを維持できない
 - DB、依存関係、公開APIなど承認範囲外の変更が必要になる
 
 ## 完了報告

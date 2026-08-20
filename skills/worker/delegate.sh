@@ -221,6 +221,7 @@ normalize_report_format() {
   local report_path="$1"
   local normalized_path="$TEMP_ROOT/report.normalized"
   local relative_evidence_path="$TEMP_ROOT/report.relative-evidence"
+  local bounded_evidence_path="$TEMP_ROOT/report.bounded-evidence"
   local absence_anchors
 
   if [ "$MODE" = "survey" ] && [ "$SURVEY_CLAIM_KIND" = "test_absence" ]; then
@@ -281,12 +282,53 @@ normalize_report_format() {
   ' "$normalized_path" > "$relative_evidence_path" || fail "cannot normalize delegated evidence paths"
   mv "$relative_evidence_path" "$normalized_path" || fail "cannot publish normalized evidence paths"
 
+  awk -v maximum="$MAX_EVIDENCE_LINES_PER_REFERENCE" '
+    /^- `[^`]+:[1-9][0-9]*-[1-9][0-9]*`[[:space:]]*$/ {
+      value = $0
+      sub(/^- `/, "", value)
+      sub(/`[[:space:]]*$/, "", value)
+      if (!match(value, /:[1-9][0-9]*-[1-9][0-9]*$/)) {
+        print
+        next
+      }
+      path = substr(value, 1, RSTART - 1)
+      range = substr(value, RSTART + 1)
+      split(range, bounds, "-")
+      start = bounds[1] + 0
+      finish = bounds[2] + 0
+      if (start > finish) {
+        print
+        next
+      }
+      while (start <= finish) {
+        chunk_end = start + maximum - 1
+        if (chunk_end > finish) chunk_end = finish
+        print "- `" path ":" start "-" chunk_end "`"
+        start = chunk_end + 1
+      }
+      next
+    }
+    { print }
+  ' "$normalized_path" > "$bounded_evidence_path" || fail "cannot split delegated evidence ranges"
+  mv "$bounded_evidence_path" "$normalized_path" || fail "cannot publish bounded evidence ranges"
+
   if cmp -s "$report_path" "$normalized_path"; then
     rm -f "$normalized_path"
   else
     mv "$normalized_path" "$report_path" || fail "cannot publish normalized delegated report"
     REPORT_NORMALIZED=true
   fi
+}
+
+evidence_packet_matches_report() {
+  local report_path="$1"
+  local evidence_path="$2"
+  local expected_path="$TEMP_ROOT/evidence.expected"
+  local actual_path="$TEMP_ROOT/evidence.actual"
+
+  sed -nE 's/^- `([^`]+):([1-9][0-9]*)-([1-9][0-9]*)`[[:space:]]*$/\1|\2|\3/p' "$report_path" | sort -u > "$expected_path"
+  sed -nE 's/^## E[0-9]+ `([^`]+):([1-9][0-9]*)-([1-9][0-9]*)`$/\1|\2|\3/p' "$evidence_path" > "$actual_path"
+  cmp -s "$expected_path" "$actual_path"
 }
 
 claims_follow_contract() {
@@ -1436,6 +1478,10 @@ if [ "$REPORT_STATUS" = "complete" ]; then
   grep -Eq '^- `[^`]+:[[:space:]]*[1-9][0-9]*-[1-9][0-9]*`' "$RESULT_STAGING/report.md" && REPORT_HAS_REPAIRABLE_EVIDENCE=true
   classify_output_contract "$RESULT_STAGING/report.md"
   build_evidence_packet "$RESULT_STAGING/report.md" "$RESULT_STAGING/evidence.md" "$TEMP_ROOT/evidence.references"
+  if [ "$EVIDENCE_STATUS" = "verified" ] && ! evidence_packet_matches_report "$RESULT_STAGING/report.md" "$RESULT_STAGING/evidence.md"; then
+    EVIDENCE_STATUS="invalid"
+    EVIDENCE_FAILURE_KIND="packet_mismatch"
+  fi
   if [ "$OUTPUT_CONTRACT_STATUS" != "valid" ]; then
     [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INVALID_OUTPUT_STATUS"
   elif [ "$EVIDENCE_STATUS" = "missing" ] || [ "$EVIDENCE_STATUS" = "invalid" ]; then

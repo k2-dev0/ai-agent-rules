@@ -94,15 +94,16 @@
 bash [skills_root]/tdd/validate-implementation-request.sh '<request-json>'
 ```
 
-検証済みJSONを得たら次を実行して許可pathをactiveにし、`implementer` subagentを一体だけforegroundで起動して完了まで待つ。別の実装subagentを並行起動しない。
+検証済みJSONを得たら専用implementerをpreflightし、成功後だけscopeをactivateする。
 
 ```bash
+bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 bash [skills_root]/polish/capture-scope.sh activate <scope名>
 ```
 
-Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動し、`.codex/agents/implementer.toml`を最初に読ませる。full-history forkは禁止する。generic agentへ「named implementer」と名乗らせて代用しない。spawnが返したchild agent IDを保持し、IDが空、waitのreceiverが空、または起動表示が`gpt-5.6-luna max`でなければ実装成功にせず、直ちに中断してscopeを解除する。validatorのstdoutを改変せず渡し、先頭に「これは分類・レビューではなく初回実装である。必要なartifactを読んで許可pathを変更せよ」とだけ付ける。
+`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動し、最初に`bash .agents/skills/tdd/implementer-read.sh .codex/agents/implementer.toml`を実行させる。以後のCodexの読み取りも同scriptへ一回一pathで渡す。full-history forkとgeneric agentによる代用は禁止する。child agent IDが空、wait先が空、または起動表示が`gpt-5.6-luna max`でなければ中断してdeactivateする。validatorのstdoutを改変せず渡し、先頭に「これは分類・レビューではなく初回実装である。必要なartifactを読んで許可pathを変更せよ」とだけ付ける。
 
-subagentの完了・中断を確認したら、成功失敗にかかわらず、親が次を実行してscopeを解除する。active中に親がコード変更やshell実行を並行しない。
+subagentが実変更を完了したら親がscopeを解除する。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh deactivate <scope名>
@@ -112,7 +113,7 @@ bash [skills_root]/polish/capture-scope.sh deactivate <scope名>
 
 実装subagentがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告した場合は[agent_name]が処理する。
 
-- 許可pathがすべてcleanで、追加surveyにより一意に解決できる: 必要なsurvey後に同じJSONをvalidatorへ再度通し、activateから一度だけ再実行する。deactivate済みのrequest receiptは再利用できない
+- 許可pathがすべてcleanで、追加surveyにより一意に解決できる: scopeをdeactivateし、必要なsurvey後に同じJSONをvalidatorへ再度通し、preflightとactivateから一度だけ再実行する。deactivate済みのrequest receiptは再利用できない
 - 非ブロッキングな改善案: 記録して続行する
 - 新しい設計判断が必要: 呼び出し元の設計・要件確認へ戻す。test_scenariosだけの変更が必要: Step 1へ戻す
 
@@ -137,7 +138,15 @@ subagentの自己申告ではなく、共有worktreeの実際の差分を正と�
 
 この保守性レビューに通らない差分は、そのまま採用しない。上位モデルが承認済み範囲内で読みやすく直し、Greenと品質ゲートを再実行する。
 
-採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。差分全体を拒否してもsubagentへレビュー・修正を戻さず、承認済み範囲を[agent_name]が完成させる。subagentが中断・無応答で、cleanな許可pathへの再実行も一度失敗した場合は[agent_name]が初回実装を引き継ぐ。追跡対象の本体変更は1ファイルずつ即コミットする。
+採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。差分全体を拒否してもsubagentへレビュー・修正を戻さず、承認済み範囲を[agent_name]が完成させる。
+
+subagentが中断・無応答で、cleanな許可pathへの再実行も一度失敗した場合は親へhandoffする。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh handoff-to-parent <scope名>
+```
+
+親は同じrequestの許可pathだけを実装し、完了後にdeactivateする。active中の読み取りは`implementer-read.sh`を使う。追跡対象の本体変更は1ファイルずつ即コミットする。
 
 ## 7. Green・レビュー・修正を完了する
 

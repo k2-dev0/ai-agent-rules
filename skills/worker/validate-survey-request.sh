@@ -60,28 +60,34 @@ printf '%s' "$REQUEST_JSON" | jq -e '
 ' >/dev/null 2>&1 || \
   fail "claim ids must be unique and contiguous in C1..C${CLAIM_COUNT} order"
 
-printf '%s' "$REQUEST_JSON" | jq -e \
-  --argjson max_subject "$MAX_SUBJECT_CHARACTERS" \
-  --argjson max_question "$MAX_QUESTION_CHARACTERS" \
-  --argjson max_question_enumerators "$MAX_QUESTION_ENUMERATORS" \
-  --argjson max_anchors "$MAX_ANCHORS" \
-  --argjson max_anchor "$MAX_ANCHOR_CHARACTERS" \
-  --argjson max_done_when "$MAX_DONE_WHEN_CHARACTERS" \
-  --argjson max_excludes "$MAX_EXCLUDES" \
-  --argjson max_exclude "$MAX_EXCLUDE_CHARACTERS" '
-  all(.claims[];
-    (.subject | length <= $max_subject)
-    and (.question | length <= $max_question)
-    and (([.question | scan("[、,;；]")] | length) <= $max_question_enumerators)
-    and ([.subject, .question, .done_when, .anchors[], .exclude[]] | all(test("[\\n\\r\\t]") | not))
-    and (.anchors | length <= $max_anchors and length == (unique | length))
-    and (all(.anchors[]; type == "string" and length > 0 and length <= $max_anchor))
-    and (.done_when | length <= $max_done_when)
-    and (.exclude | length <= $max_excludes and length == (unique | length))
-    and (all(.exclude[]; type == "string" and length > 0 and length <= $max_exclude))
-  )
-' >/dev/null 2>&1 || \
-  fail "claim text, enumeration, or list limits exceeded, or values contain controls, empties, or duplicates"
+CLAIM_INDEX=0
+while [ "$CLAIM_INDEX" -lt "$CLAIM_COUNT" ]; do
+  CLAIM_ID=$(printf '%s' "$REQUEST_JSON" | jq -r ".claims[$CLAIM_INDEX].id") || fail "cannot read claim id"
+  SUBJECT_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].subject | length") || fail "cannot read $CLAIM_ID.subject"
+  [ "$SUBJECT_LENGTH" -le "$MAX_SUBJECT_CHARACTERS" ] || fail "$CLAIM_ID.subject exceeds $MAX_SUBJECT_CHARACTERS characters (actual $SUBJECT_LENGTH)"
+
+  QUESTION_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].question | length") || fail "cannot read $CLAIM_ID.question"
+  [ "$QUESTION_LENGTH" -le "$MAX_QUESTION_CHARACTERS" ] || fail "$CLAIM_ID.question exceeds $MAX_QUESTION_CHARACTERS characters (actual $QUESTION_LENGTH)"
+  QUESTION_ENUMERATORS=$(printf '%s' "$REQUEST_JSON" | jq "[.claims[$CLAIM_INDEX].question | scan(\"[、,;；]\")] | length") || fail "cannot inspect $CLAIM_ID.question"
+  [ "$QUESTION_ENUMERATORS" -le "$MAX_QUESTION_ENUMERATORS" ] || fail "$CLAIM_ID.question has $QUESTION_ENUMERATORS enumerators (maximum $MAX_QUESTION_ENUMERATORS)"
+
+  printf '%s' "$REQUEST_JSON" | jq -e "[.claims[$CLAIM_INDEX].subject, .claims[$CLAIM_INDEX].question, .claims[$CLAIM_INDEX].done_when, .claims[$CLAIM_INDEX].anchors[], .claims[$CLAIM_INDEX].exclude[]] | all(type == \"string\" and length > 0)" >/dev/null 2>&1 || fail "$CLAIM_ID contains a non-string or empty text/list value"
+  printf '%s' "$REQUEST_JSON" | jq -e "[.claims[$CLAIM_INDEX].subject, .claims[$CLAIM_INDEX].question, .claims[$CLAIM_INDEX].done_when, .claims[$CLAIM_INDEX].anchors[], .claims[$CLAIM_INDEX].exclude[]] | all(test(\"[\\\\n\\\\r\\\\t]\") | not)" >/dev/null 2>&1 || fail "$CLAIM_ID contains a newline, carriage return, or tab"
+
+  ANCHOR_COUNT=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].anchors | length") || fail "cannot count $CLAIM_ID.anchors"
+  [ "$ANCHOR_COUNT" -le "$MAX_ANCHORS" ] || fail "$CLAIM_ID.anchors has $ANCHOR_COUNT items (maximum $MAX_ANCHORS)"
+  printf '%s' "$REQUEST_JSON" | jq -e ".claims[$CLAIM_INDEX].anchors | length == (unique | length)" >/dev/null 2>&1 || fail "$CLAIM_ID.anchors contains duplicates"
+  printf '%s' "$REQUEST_JSON" | jq -e --argjson maximum "$MAX_ANCHOR_CHARACTERS" ".claims[$CLAIM_INDEX].anchors | all(length <= \$maximum)" >/dev/null 2>&1 || fail "$CLAIM_ID.anchors item exceeds $MAX_ANCHOR_CHARACTERS characters"
+
+  DONE_WHEN_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].done_when | length") || fail "cannot read $CLAIM_ID.done_when"
+  [ "$DONE_WHEN_LENGTH" -le "$MAX_DONE_WHEN_CHARACTERS" ] || fail "$CLAIM_ID.done_when exceeds $MAX_DONE_WHEN_CHARACTERS characters (actual $DONE_WHEN_LENGTH)"
+
+  EXCLUDE_COUNT=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].exclude | length") || fail "cannot count $CLAIM_ID.exclude"
+  [ "$EXCLUDE_COUNT" -le "$MAX_EXCLUDES" ] || fail "$CLAIM_ID.exclude has $EXCLUDE_COUNT items (maximum $MAX_EXCLUDES)"
+  printf '%s' "$REQUEST_JSON" | jq -e ".claims[$CLAIM_INDEX].exclude | length == (unique | length)" >/dev/null 2>&1 || fail "$CLAIM_ID.exclude contains duplicates"
+  printf '%s' "$REQUEST_JSON" | jq -e --argjson maximum "$MAX_EXCLUDE_CHARACTERS" ".claims[$CLAIM_INDEX].exclude | all(length <= \$maximum)" >/dev/null 2>&1 || fail "$CLAIM_ID.exclude item exceeds $MAX_EXCLUDE_CHARACTERS characters"
+  CLAIM_INDEX=$((CLAIM_INDEX + 1))
+done
 
 # key順と空白を正規化し、同じ意味の依頼が同じdigestになるようにする。
 printf '%s' "$REQUEST_JSON" | jq -cS . || fail "cannot normalize request"

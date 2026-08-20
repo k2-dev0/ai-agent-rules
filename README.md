@@ -139,7 +139,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
 
-implementerは親とworktreeを共有する。親はworker artifact、全要件を保持した実装指示、test_scenarios、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。その後`capture-scope.sh activate`で個別file scopeを有効化してから一体だけ起動し、終了後に`deactivate`する。active中はhookがshellを拒否し、Claude CodeのEdit / WriteとCodexのapply_patchを許可path完全一致で検査する。implementerはtest、設定、migration、Gitを変更せず、親が差分をレビューしてGreen・commitまで完了する。
+implementerは親とworktreeを共有する。親はworker artifact、全要件を保持した実装指示、test_scenarios、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。専用agent設定をpreflightしてから`capture-scope.sh activate`で`subagent` modeを有効にし、一体だけ起動する。active中の読み取りは`implementer-read.sh`へ限定し、書き込みはmodeとsession ownerを組み合わせて許可path完全一致で検査する。cleanな再実行も失敗した場合はrequestとtest_pathsを残したまま`parent-fallback`へhandoffし、親だけが許可pathを実装できる。実装完了後にだけ`deactivate`する。
 
 隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 

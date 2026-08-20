@@ -9,6 +9,7 @@ REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
 RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 ACTIVE_DIR="$RECEIPT_DIR/implementation.active"
 ACTIVE_SCOPE="$ACTIVE_DIR/scope"
+ACTIVE_MODE="$ACTIVE_DIR/mode"
 OWNER_FILE="$RECEIPT_DIR/implementation.owner"
 TOOL=$(hook_tool_name)
 
@@ -25,23 +26,51 @@ fi
 
 [ -d "$ACTIVE_DIR" ] || exit 0
 [ -f "$ACTIVE_SCOPE" ] || hook_deny "実装scopeのactive markerが不完全です。親が復旧してください。"
+[ -f "$ACTIVE_MODE" ] || hook_deny "実装scopeのmode markerが不完全です。親が復旧してください。"
 
 EXPECTED_REPOSITORY=$(sed -n '1p' "$ACTIVE_SCOPE")
 FEATURE=$(sed -n '2p' "$ACTIVE_SCOPE")
 [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || hook_deny "実装scopeのリポジトリが一致しません。"
 [ -n "$FEATURE" ] || hook_deny "実装scopeの機能名が空です。"
+MODE=$(sed -n '1p' "$ACTIVE_MODE")
+case "$MODE" in
+  subagent|parent-fallback) ;;
+  *) hook_deny "実装scopeのmodeが不正です。親が復旧してください。" ;;
+esac
+
+[ -f "$OWNER_FILE" ] || hook_deny "実装scopeをactivateした親sessionを確認できません。"
+OWNER=$(sed -n '1p' "$OWNER_FILE")
+SESSION=$(hook_session_id)
+[ -n "$SESSION" ] || hook_deny "実装scopeのsessionを取得できません。"
+
+is_implementer_read_command() {
+  case "$1" in
+    "bash .claude/skills/tdd/implementer-read.sh "*|\
+    "bash .agents/skills/tdd/implementer-read.sh "*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *$'\n'*|*$'\r'*|*$'\t'*|*' '*[\;\&\|\`\<\>\(\)\{\}\$\\\"\']*) return 1 ;;
+  esac
+  [ "$(printf '%s\n' "$1" | awk '{ print NF }')" -eq 3 ]
+}
 
 if [ "$TOOL" = "Bash" ]; then
   COMMAND=$(hook_command)
   case "$COMMAND" in
     "bash .claude/skills/polish/capture-scope.sh deactivate $FEATURE"|\
     "bash .agents/skills/polish/capture-scope.sh deactivate $FEATURE")
-      [ -f "$OWNER_FILE" ] || hook_deny "実装scopeをactivateした親sessionを確認できません。"
-      [ "$(sed -n '1p' "$OWNER_FILE")" = "$(hook_session_id)" ] || \
+      [ "$OWNER" = "$SESSION" ] || \
         hook_deny "実装subagentはscopeをdeactivateできません。"
       exit 0 ;;
+    "bash .claude/skills/polish/capture-scope.sh handoff-to-parent $FEATURE"|\
+    "bash .agents/skills/polish/capture-scope.sh handoff-to-parent $FEATURE")
+      [ "$OWNER" = "$SESSION" ] || hook_deny "実装subagentはparent fallbackへhandoffできません。"
+      [ "$MODE" = "subagent" ] || hook_deny "parent fallbackへのhandoffはsubagent modeから一度だけ実行できます。"
+      exit 0 ;;
   esac
-  hook_deny "実装subagentのscopeがactiveな間はshellを実行できません。subagent完了後に親がscopeをdeactivateしてください。"
+  is_implementer_read_command "$COMMAND" && exit 0
+  hook_deny "実装scopeがactiveな間のshellはimplementer-read.shと親のhandoff/deactivateだけ実行できます。"
 fi
 
 case "$TOOL" in
@@ -49,9 +78,13 @@ case "$TOOL" in
   *) exit 0 ;;
 esac
 
-[ -f "$OWNER_FILE" ] || hook_deny "実装scopeをactivateした親sessionを確認できません。"
-[ "$(sed -n '1p' "$OWNER_FILE")" != "$(hook_session_id)" ] || \
-  hook_deny "実装scopeがactiveな間は親sessionもコードを変更できません。専用implementerの完了後にdeactivateしてください。"
+if [ "$MODE" = "subagent" ]; then
+  [ "$OWNER" != "$SESSION" ] || \
+    hook_deny "subagent modeでは親sessionはコードを変更できません。失敗時はhandoff-to-parentを実行してください。"
+else
+  [ "$OWNER" = "$SESSION" ] || \
+    hook_deny "parent-fallback modeでは実装subagentはコードを変更できません。"
+fi
 
 FOUND=false
 while IFS= read -r FILE; do
@@ -77,7 +110,7 @@ while IFS= read -r FILE; do
     [ -n "$SCOPE_PATH" ] || continue
     [ "$RELATIVE_PATH" = "$SCOPE_PATH" ] && ALLOWED=true
   done < <(sed -n '4,$p' "$ACTIVE_SCOPE")
-  [ "$ALLOWED" = true ] || hook_deny "実装subagentは許可path外を変更できません: $RELATIVE_PATH"
+  [ "$ALLOWED" = true ] || hook_deny "実装scopeの許可path外を変更できません: $RELATIVE_PATH"
 done < <(hook_file_paths)
 
 [ "$FOUND" = true ] || hook_deny "実装scope中の書き込み対象pathを取得できません。"
