@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚をworkerによる調査・初回実装、上位モデルのシナリオ承認・テスト・レビュー・修正、polishまで実行するときに使う。
+description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚をworkerによる調査、専用subagentによる初回実装、上位モデルのシナリオ承認・テスト・レビュー・修正、polishまで実行するときに使う。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 hooks:
@@ -13,7 +13,7 @@ hooks:
 
 ## 目的
 
-`.prompt.md`の先頭未完了設計書1枚を`survey → scenario → red → delegated-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、worker初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
+`.prompt.md`の先頭未完了設計書1枚を`survey → scenario → red → subagent-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、専用subagentの初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
 
 ## 対象の選択
 
@@ -23,25 +23,25 @@ hooks:
 
 ## 権限境界
 
-| 対象 | [agent_name] | worker |
-|---|---|---|
-| テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 |
-| テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 |
-| 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 |
-| 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 可 |
-| 許可された本体コードと`schema.prisma`の初回実装 | workerの2回連続応答失敗または認証失敗後だけ可 | 可 |
-| worker候補反映後の本体コード修正 | 可 | 禁止 |
-| テスト実行・レビュー・Git | 可 | 禁止 |
+| 対象 | [agent_name] | worker | implementer |
+|---|---|---|---|
+| テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 | 禁止 |
+| テスト資産の変更 | 承認済みシナリオ内だけ可 | 禁止 | 禁止 |
+| 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 | 禁止 |
+| 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 読み取り専用で可 | 許可pathと明示された根拠だけ可 |
+| 許可された本体コードと`schema.prisma`の初回実装 | subagentが利用不能またはcleanな再実行も失敗した場合だけ可 | 禁止 | 可 |
+| 初回実装後の本体コード修正 | 可 | 禁止 | 禁止 |
+| テスト実行・レビュー・Git | 可 | 禁止 | 禁止 |
 
 テスト資産にはtest/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。
 
 ## 探索禁止区間
 
-設計書を選んでから共通フローでworkerの初回実装候補を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
+設計書を選んでから共通フローでimplementerの初回実装を受領するまで、[agent_name]が直接読めるリポジトリ内ファイルを次に限定する。
 
 - 対象設計書1枚とindex 1枚
 - 今回変更するテスト資産そのもの
-- workerが返した`result.json`、`report.md`、`evidence.md`、`candidate.patch`、`opencode.jsonl`
+- workerが返した`result.json`、`report.md`、`evidence.md`、`opencode.jsonl`
 - [agent_name]自身がこの実行で作成したファイル
 
 この区間では、本体コード、`schema.prisma`、rules、package・test設定、既存helper・fixture・seed、同型実装をRead / Grep / Glob / Explorer / `rg` / `grep` / `sed` / `cat` / `git show`などで通常調査しない。`evidence_status: verified`のコードがclaimを直接支え、blobが現在も一致する場合は同じ箇所を再読しない。import、型、列名、fixture形式、実行commandが足りなければ、推測や直接確認をせず欠落IDの限定surveyへ戻す。テスト実行のdiagnosticと、[agent_name]が変更するテスト資産の読み直しは探索に含めない。
@@ -59,7 +59,7 @@ report内の矛盾、evidence欠落、claimと抽出コードの不一致、snap
 
 ### 1. 対象と変更範囲を確定する
 
-選んだ設計書の対象ファイルを、テスト資産、workerへ渡す本体コードと`schema.prisma`、その他の保護対象へ分類する。委任対象pathまたは変更予定のテスト資産に未コミット変更があれば停止する。
+選んだ設計書の対象ファイルを、テスト資産、implementerへ許可する本体コードと`schema.prisma`、その他の保護対象へ分類する。許可pathまたは変更予定のテスト資産に未コミット変更があれば停止する。
 
 機能名と、今回変更する本体コードおよび`schema.prisma`の相対pathを現在の設計書または検証済みsurveyから確定し、変更前に次を1回実行する。pathを得るためにproduction fileを読まない。新規pathはまだ存在しなくてよい。機能名は`branch-<機能名>-prompt.md`から得る。
 
@@ -71,13 +71,13 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 
 ### 2. 調査を委任する
 
-workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`と`implement`は必ず`bash [skills_root]/worker/delegate.sh <mode>`で実行する。
+workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
 
 設計書を要求根拠としてworkerの`survey`へ委任し、共通契約のvalidatorを通る`C1` 1件だけのJSONを事実ごとの別task-idへ渡す。旧revisionは`--source-ref`で現在HEADと分ける。[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。共通契約の成功条件を満たし、残件が空で、指定した単一claimが揃った場合だけ進む。不足は`next-action: supplement`に従って同じ事実の欠落境界だけを補完し、`next-action: repair`の場合だけEvidenceのpath・行・件数を変えず形式修正する。
 
 ### 3. 共通のシナリオ駆動実装フローを完了する
 
-共通フローのStep 1〜8を順に実行する。要求根拠は承認済み設計書とsurvey、worker modeは`implement`、workerへの入力は設計書、Redの要約、許可pathとする。test除外pathだけの変更、component・React hookのテスト境界、シナリオ再承認、相談、候補採否、Green、失敗のscope帰属はすべて共通フローに従う。
+共通フローのStep 1〜8を順に実行する。要求根拠は承認済み設計書とsurvey、implementerへの入力は共通フローのvalidatorを通した実装request JSONとする。設計書、Evidence、承認済みシナリオ、Redの要約、許可pathをJSONから省略しない。test除外pathだけの変更、component・React hookのテスト境界、シナリオ再承認、相談、差分採否、Green、失敗のscope帰属はすべて共通フローに従う。
 
 ### 4. polishと完了処理を行う
 
@@ -94,9 +94,9 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ## 例外停止
 
 - 共通委任契約が停止対象とする予算、ZDR、依存commandの問題がある
-- workerが許可外pathを変更した
+- implementerの起動中にscope hookが不完全または無効だった
 - ユーザーの未コミット変更と対象pathが衝突する
-- 2回の応答失敗後も上位モデルの実装経路を利用できない
+- implementerのcleanな再実行後も上位モデルの実装経路を利用できない
 - DB、依存関係、公開APIなど承認範囲外の変更が必要になる
 
 ## 完了報告
@@ -108,4 +108,4 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - 無視された対象変更は作業ツリー上で検証済みで、未コミット理由を完了報告へ含めた
 - 検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
 
-対象設計書、承認シナリオ、Red、Green、workerの相談・採否理由・survey / implement / nestingのtask-id、polish結果、コミット、indexの残件数を完了報告へ含める。
+対象設計書、承認シナリオ、Red、Green、workerのsurvey / nesting task-id、implementerの相談・差分採否理由、polish結果、コミット、indexの残件数を完了報告へ含める。

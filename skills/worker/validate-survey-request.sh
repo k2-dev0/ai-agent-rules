@@ -45,7 +45,7 @@ printf '%s' "$REQUEST_JSON" | jq -e '
     type == "object"
     and (keys | sort) == ["anchors", "done_when", "exclude", "id", "kind", "question", "subject"]
     and (.id | type == "string")
-    and (.kind | type == "string" and IN("behavior", "control_flow", "integration", "contract", "test", "absence"))
+    and (.kind | type == "string" and IN("behavior", "control_flow", "integration", "contract", "test", "test_absence"))
     and (.subject | type == "string" and length > 0)
     and (.question | type == "string" and length > 0)
     and (.anchors | type == "array" and length > 0)
@@ -53,7 +53,7 @@ printf '%s' "$REQUEST_JSON" | jq -e '
     and (.exclude | type == "array" and length > 0)
   )
 ' >/dev/null 2>&1 || \
-  fail "each claim requires only id, kind, subject, question, anchors, done_when, and exclude; kind must be behavior, control_flow, integration, contract, test, or absence"
+  fail "each claim requires only id, kind, subject, question, anchors, done_when, and exclude; kind must be behavior, control_flow, integration, contract, test, or test_absence"
 
 printf '%s' "$REQUEST_JSON" | jq -e '
   [.claims[].id] == [range(1; (.claims | length) + 1) | "C\(.)"]

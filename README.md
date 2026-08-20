@@ -36,8 +36,8 @@ ai-agent-rules/
 │   └── shell/              # PreToolUse hook 本体（圧縮した必須契約の注入を含む）
 ├── prompt/             # 実装順 index（.prompt.md）と設計書の配置先シード（cowlick / tdd が使用）
 ├── e2e/                # .e2e.md の配置先シード（e2e スキルが使用）
-├── claude/             # Claude Code 用の設定（settings.json, CLAUDE.md 等）
-├── codex/              # Codex 用の設定（config.toml, hooks.json, rules/）
+├── claude/             # Claude Code 用の設定（settings、agents、CLAUDE.md 等）
+├── codex/              # Codex 用の設定（config、hooks、agents、rules）
 └── tests/              # テンプレート自体の回帰テスト（配布対象外）
 ```
 
@@ -53,6 +53,7 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 | `codex/config.toml` | `<repo>/.codex/config.toml` |
 | `codex/hooks.json` | `<repo>/.codex/hooks.json` |
 | `codex/.gitignore` | `<repo>/.codex/.gitignore` |
+| `codex/agents/` | `<repo>/.codex/agents/` |
 | `codex/rules/default.rules` | `<repo>/.codex/rules/default.rules` |
 | `hooks/` | `<repo>/.codex/hooks/` |
 | `rules/` | `<repo>/.codex/rules/` |
@@ -80,6 +81,7 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 | `claude/settings.json` | `<repo>/.claude/settings.json` |
 | `claude/settings.local.json` | `<repo>/.claude/settings.local.json` |
 | `claude/.gitignore` | `<repo>/.claude/.gitignore` |
+| `claude/agents/` | `<repo>/.claude/agents/` |
 | `hooks/` | `<repo>/.claude/hooks/` |
 | `rules/` | `<repo>/.claude/rules/` |
 | `prompt/` | `<repo>/.claude/prompt/` |
@@ -98,7 +100,7 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $bootstrap codex
 ```
 
-### workerへの調査・実装委任
+### worker調査とsubagent実装
 
 役割分担は次で固定する。
 
@@ -106,20 +108,20 @@ $bootstrap codex
 |---|---|---|
 | 設計に必要なコードベース探索・根拠収集 | worker | `delegate.sh`を最優先。設計判断はしない |
 | 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行い、外部ワーカーや調査subagentへ渡さない |
-| 承認済み範囲の初回実装 | worker | 本体コードと`schema.prisma`だけを隔離worktreeで変更する |
-| 候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 候補返却後は外部ワーカーへ戻さない |
+| 承認済み範囲の初回実装 | implementer subagent | active scope内の本体コードと`schema.prisma`だけを変更する |
+| 差分の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 初回実装後はworker・implementerへ戻さない |
 | ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認と初回実装候補の作成は共通の外部workerへ委任する。上位モデルは設計判断、候補採否、レビュー、修正、テスト、Gitを担当する。個別skillは対象と必須成果だけを定め、共通契約の詳細は`skills/worker/DELEGATION.md`を読む。
+コードベースの事実確認は共通の外部workerへ、初回実装は上位モデルが起動する専用implementerへ委任する。Claude Codeは`claude-sonnet-5` / `max`、Codexは`gpt-5.6-luna` / `max`をproject agent定義で固定する。上位モデルは設計判断、差分採否、レビュー、修正、テスト、Gitを担当する。workerの共通契約は`skills/worker/DELEGATION.md`を読む。
 
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → delegated-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、最大4 claimの検証済みJSONへ分ける。`implement`は設計書、承認済みシナリオID、`--red-summary`、許可pathを必須入力とする。候補返却後のレビューや修正はworkerへ戻さない。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → subagent-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、検証済みJSONへ分ける。implementerには設計または短い実装指示、Evidence、承認済みシナリオID、Red要約、許可pathを必須入力とする。初回実装後のレビューや修正は上位モデルが行う。
 
 上位モデルの判断境界は圧縮した`skills/worker/DELEGATION.md`、CLI、時間、claim-evidence、結果判定、再試行の機械的制約は`delegate.sh`を正本とする。session最初の委任前にhookが前者を一度注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
-上位モデルのfamily、性能tier、effortが変わっても、workerへの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。差が出てよいのは検証済み証拠からの推論と採否だけとする。
+上位モデルのfamily、性能tier、effortが変わっても、workerへの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。implementerのmodelとeffortはproject agent定義を正とし、検証済み証拠からの初回実装だけを担当する。
 
-timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`、最終回答がある場合だけそのreport、許可pathの候補patchをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
+timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`と最終回答がある場合だけそのreportをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
 task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
 
@@ -135,7 +137,9 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
-通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeで候補パッチを作り、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
+通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
+
+implementerは親とworktreeを共有する。親はworker artifact、scenario、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。その後`capture-scope.sh activate`で個別file scopeを有効化してから一体だけ起動し、終了後に`deactivate`する。active中はhookがshellを拒否し、Claude CodeのEdit / WriteとCodexのapply_patchを許可path完全一致で検査する。implementerはtest、設定、migration、Gitを変更せず、親が差分をレビューしてGreen・commitまで完了する。
 
 隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 

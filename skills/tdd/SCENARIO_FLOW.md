@@ -7,11 +7,11 @@
 | 入力 | `tdd` | `errand` |
 |---|---|---|
 | 要求根拠 | 承認済み設計書とsurvey | ユーザー依頼とsurvey |
-| worker mode | `implement` | `errand` |
-| workerへの実装入力 | 設計書、Redの要約、許可path | 承認済みシナリオを含む短い実装指示、Redの要約、許可path |
+| 実装subagentへの入力 | 設計書、Evidence、承認済みシナリオ、Redの要約、許可path | 承認済みシナリオを含む短い実装指示、Evidence、Redの要約、許可path |
+| scope名 | 設計書の機能名 | 呼び出し元が固定するASCII kebab-case名 |
 | 実装後の追加処理 | polishと必要ならindex更新 | 呼び出し元が定めた限定検証と完了報告 |
 
-workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする。test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、Markdown、設定、依存関係、migration、Git管理ファイルは渡さない。
+実装subagentへ許可できる変更先はcleanな本体コードと`schema.prisma`だけとする。test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、Markdown、設定、依存関係、migration、Git管理ファイルは許可pathに含めない。
 
 ## 必須の調査パケット
 
@@ -39,7 +39,7 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 
 承認済みシナリオを忠実に表すためのimport、型、構文、テスト構造の修正は再承認しない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
-次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、シナリオ承認も省略する。workerのRed要約には除外pathと理由を明記する。
+次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、シナリオ承認も省略する。実装subagentへの入力には除外pathと理由を明記する。
 
 - `schema.prisma`
 - basenameが`constants.ts`または`constants.js`のfile
@@ -62,30 +62,75 @@ workerへ渡せるのはcleanな本体コードと`schema.prisma`だけとする
 - 最初からGreenなら、テストが要求を検出できるか確認する
 - シナリオの変更が必要ならStep 1へ戻して再承認する
 
-## 4. workerへ初回実装を委任する
+## 4. 専用subagentへ初回実装を委任する
 
-呼び出し元が指定したmodeへ、実装判断に使った検証済みtask-id全件を`--evidence-from`で渡し、実装入力、承認済みシナリオID、Redのcommandと期待した理由での失敗要約、許可pathを渡す。`implement`は`--red-summary`を省略しない。workerにはshell、Git、外部通信、テスト・設計・設定の編集を許可しない。
+まず次のschemaで実装request JSONを作る。自然文だけで引き渡さず、worker task、artifact、scenario、Red、scope、許可pathを機械検証できる形にする。
+
+```json
+{
+  "version": 1,
+  "scope": "機能名",
+  "instruction": "設計書または承認済みシナリオを含む短い実装指示",
+  "worker_tasks": [
+    {"task_id": "task-id", "result": "result.jsonの相対path", "report": "report.mdの相対path", "evidence": "evidence.mdの相対path"}
+  ],
+  "scenarios": ["S1"],
+  "red": {"command": "実行command", "status": 1, "reason": "期待した理由での失敗要約"},
+  "test_exemption": null,
+  "allowed_paths": ["変更を許可する個別file path"]
+}
+```
+
+test除外時だけ`scenarios`を空配列、`red`を`null`とし、`test_exemption`を`{"paths":[...],"reason":"..."}`にする。次を実行し、成功時にstdoutへ返る正規化済みJSONをそのまま保持する。失敗したrequestを自然文で補ってsubagentを起動しない。
+
+```bash
+bash [skills_root]/tdd/validate-implementation-request.sh '<request-json>'
+```
+
+検証済みJSONを得たら次を実行して許可pathをactiveにし、`implementer` subagentを一体だけforegroundで起動して完了まで待つ。別の実装subagentを並行起動しない。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh activate <scope名>
+```
+
+Claude Codeではproject agent `implementer`、Codexではnamed project agent `implementer`を明示して起動する。generic agentへ置き換えない。validatorのstdoutを改変せず渡し、権限・停止条件は各implementer定義を正とする。
+
+subagentの完了・中断を確認したら、成功失敗にかかわらず、親が次を実行してscopeを解除する。active中に親がコード変更やshell実行を並行しない。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh deactivate <scope名>
+```
 
 ## 5. 相談を処理する
 
-workerがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告した場合は[agent_name]が処理する。
+実装subagentがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告した場合は[agent_name]が処理する。
 
-- 承認済み内容から一意に解決できる: 回答し、新しいtask-idで再委任する
+- 許可pathがすべてcleanで、追加surveyにより一意に解決できる: 必要なsurvey後にStep 4を一度だけ再実行する
 - 非ブロッキングな改善案: 記録して続行する
 - 新しい設計判断またはシナリオ変更が必要: Step 1へ戻す
 
-workerには発言権だけを認め、テスト・設計の編集権と決定権は与えない。
+実装subagentが一部でも変更した後は再委任しない。テスト・設計の編集権と決定権は与えない。
 
-## 6. 候補パッチを検証して反映する
+## 6. 実装差分を検証する
 
-`result.json`、`opencode.jsonl`、`candidate.patch`を読み、自己申告ではなく実際のパッチを正とする。次を確認する。
+subagentの自己申告ではなく、共有worktreeの実際の差分を正として次を確認する。scope hookの許可判定だけで内容を採用しない。
 
 - 変更が許可path内だけである
 - テスト資産、設計、設定、Gitを変更していない
 - テスト環境検出、値のハードコード、assertion攻略がない
 - 承認済みシナリオと、`tdd`では承認済み設計にも一致する
 
-採否は上位モデルのレビュー責務とする。安全に修正できる問題は候補を土台に[agent_name]が直接直す。パッチ全体を拒否してもworkerへレビュー・修正を戻さず、承認済み範囲を[agent_name]が完成させる。追跡対象の本体変更は1ファイルずつ即コミットする。
+正しい処理であることに加え、半年後に負債にならないかを必ずレビューする。短さや抽象度の高さを品質とみなさず、次を確認する。
+
+- 独立した業務責務を持たないhelperや薄いwrapperにより、処理を追うための関数ジャンプが増えていない
+- 現在の要件に不要な共通化、汎用化、設定可能性、将来用の拡張点を作らず、YAGNIに従っている
+- 制御フローとデータ変換を上から自然に追え、賢すぎる式、暗黙の状態、過長なmethod chainへ畳み込んでいない
+- `filter().map()`など複数段に分けると意図が明確になる処理を、短さだけのために`reduce()`一つへ押し込んでいない
+- 重複排除や行数削減より、多少冗長でも局所的に理解できる名前と構造を選んでいる
+
+この保守性レビューに通らない差分は、そのまま採用しない。上位モデルが承認済み範囲内で読みやすく直し、Greenと品質ゲートを再実行する。
+
+採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。差分全体を拒否してもsubagentへレビュー・修正を戻さず、承認済み範囲を[agent_name]が完成させる。subagentが中断・無応答で、cleanな許可pathへの再実行も一度失敗した場合は[agent_name]が初回実装を引き継ぐ。追跡対象の本体変更は1ファイルずつ即コミットする。
 
 ## 7. Green・レビュー・修正を完了する
 
@@ -99,7 +144,7 @@ workerには発言権だけを認め、テスト・設計の編集権と決定�
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-承認済みシナリオから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。候補反映後は[agent_name]が差分をレビューし、承認済み範囲へ合わせる本体コード修正を直接行う。通常の修正をworkerへ再委任しない。テストまたはシナリオを変える必要が出た場合だけStep 1へ戻る。
+承認済みシナリオから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、承認済み範囲へ合わせる本体コード修正を直接行う。通常の修正をworkerまたは実装subagentへ再委任しない。テストまたはシナリオを変える必要が出た場合だけStep 1へ戻る。
 
 ## 8. 失敗をscopeに帰属させる
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenCode + OpenRouter の外部モデルを、読み取り専用調査または隔離実装として共通実行する。
+# OpenCode + OpenRouter の外部モデルを、読み取り専用調査として隔離実行する。
 set -u
 
 readonly SOFT_BUDGET_USD="38"
@@ -46,7 +46,6 @@ readonly MAX_EVIDENCE_TOTAL_LINES="400"
 readonly EVIDENCE_CONTEXT_LINES="8"
 readonly MAX_RENDERED_REPORT_LINES="300"
 readonly MAX_RENDERED_EVIDENCE_LINES="600"
-readonly MAX_RENDERED_PATCH_LINES="400"
 readonly MAX_INFORMATION_ATTEMPTS="3"
 readonly MAX_FORMAT_REPAIRS="1"
 readonly OPENROUTER_KEY_ENDPOINT="https://openrouter.ai/api/v1/key"
@@ -55,20 +54,18 @@ readonly TASK_ID_PATTERN='^[a-z0-9][a-z0-9-]{0,62}$'
 MODE="${1:-}"
 TASK_ID=""
 SPEC_PATH=""
-DIRECT_INSTRUCTION=""
 SURVEY_REQUEST_JSON=""
+SURVEY_REQUEST_RESULT_JSON='null'
+SURVEY_CLAIM_KIND=""
+DETERMINISTIC_ABSENCE=false
 SURVEY_CLAIM_COUNT="$MAX_SURVEY_REQUEST_CLAIMS"
 SURVEY_MAX_STEPS="$((MAX_SURVEY_REQUEST_CLAIMS * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"
-RED_SUMMARY=""
 RETRY_OF=""
 SUPPLEMENT_OF=""
 REPAIR_OF=""
 SOURCE_REF="HEAD"
 SOURCE_REF_SET=false
 SOURCE_COMMIT=""
-EVIDENCE_FROM=()
-EVIDENCE_FROM_JSON='[]'
-EVIDENCE_DIGEST_INPUT=""
 ATTEMPT="1"
 INFORMATION_ATTEMPT="1"
 REPAIR_ATTEMPT="0"
@@ -111,6 +108,7 @@ OUTLINE_TOOL=""
 TOOL_CALL_COUNT="0"
 TOOL_CALLS_BY_NAME_JSON='{}'
 DENIED_TOOL_CALL_COUNT="0"
+REPORT_HAS_REPAIRABLE_EVIDENCE=false
 
 fail() {
   FAILURE_REASON="$1"
@@ -203,17 +201,13 @@ classify_output_contract() {
 
   case "$MODE" in
     survey|research|nesting) outcome_count=$(grep -Ec '^Outcome: (fulfilled|partial|blocked)$' "$report_path" 2>/dev/null || true) ;;
-    implement|errand) outcome_count=$(grep -Ec '^Outcome: (fulfilled|partial|consultation_required|blocked)$' "$report_path" 2>/dev/null || true) ;;
   esac
   [ "$outcome_count" -eq 1 ] || { OUTPUT_CONTRACT_STATUS="invalid"; OUTCOME="unknown"; return; }
-  OUTCOME=$(sed -nE 's/^Outcome: (fulfilled|partial|consultation_required|blocked)$/\1/p' "$report_path")
+  OUTCOME=$(sed -nE 's/^Outcome: (fulfilled|partial|blocked)$/\1/p' "$report_path")
   [ "$(sed -n '1p' "$report_path")" = "Outcome: $OUTCOME" ] || { OUTPUT_CONTRACT_STATUS="invalid"; OUTCOME="unknown"; return; }
   case "$MODE" in
     survey|research|nesting)
       grep -Fxq '## Claims' "$report_path" && grep -Fxq '## Remaining' "$report_path" && claims_follow_contract "$report_path" || { OUTPUT_CONTRACT_STATUS="invalid"; return; }
-      ;;
-    implement|errand)
-      grep -Fxq '## Requirement mapping' "$report_path" && grep -Eq '^- (O|S)[0-9]+: ' "$report_path" && grep -Fxq '## Remaining' "$report_path" || { OUTPUT_CONTRACT_STATUS="invalid"; return; }
       ;;
   esac
   if [ "$MODE" = "survey" ] && ! survey_claim_ids_match_request "$report_path"; then
@@ -226,26 +220,66 @@ classify_output_contract() {
 normalize_report_format() {
   local report_path="$1"
   local normalized_path="$TEMP_ROOT/report.normalized"
+  local relative_evidence_path="$TEMP_ROOT/report.relative-evidence"
+  local absence_anchors
+
+  if [ "$MODE" = "survey" ] && [ "$SURVEY_CLAIM_KIND" = "test_absence" ]; then
+    absence_anchors=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq -r '.claims[0].anchors | map("`" + . + "`") | join(", ")') || fail "cannot render absence anchors"
+    printf 'Outcome: fulfilled\n## Claims\n### C1\nClaim: tracked test/spec paths contain none of the exact anchors %s\nEvidence:\n- `SEARCH:C1`\nInterpretation: the runner independently checks every exact anchor against tracked test/spec paths in the source snapshot\nLimitations: exact anchor absence only\n## Remaining\nnone\n' "$absence_anchors" > "$normalized_path" || fail "cannot normalize absence report"
+    if ! cmp -s "$report_path" "$normalized_path"; then
+      mv "$normalized_path" "$report_path" || fail "cannot publish normalized absence report"
+      REPORT_NORMALIZED=true
+    else
+      rm -f "$normalized_path"
+    fi
+    return
+  fi
 
   awk '
-    !first_line_seen && /^[[:space:]]*$/ { next }
     !first_line_seen {
+      if ($0 ~ /^[[:space:]]*(fulfilled|partial|blocked)[[:space:]]*$/) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+        print "Outcome: " $0
+        first_line_seen = 1
+        next
+      }
+      if ($0 !~ /^Outcome: (fulfilled|partial|blocked)/) next
       first_line_seen = 1
-      if ($0 ~ /^Outcome: (fulfilled|partial|consultation_required|blocked)## Claims$/) {
+      if ($0 ~ /^Outcome: (fulfilled|partial|blocked)## Claims$/) {
         sub(/## Claims$/, "")
         print
         print "## Claims"
-        next
-      }
-      if ($0 ~ /^Outcome: (fulfilled|partial|consultation_required|blocked)## Requirement mapping$/) {
-        sub(/## Requirement mapping$/, "")
-        print
-        print "## Requirement mapping"
+        claims_header_seen = 1
         next
       }
     }
+    first_line_seen && !claims_header_seen && /^## Claims$/ {
+      claims_header_seen = 1
+    }
+    first_line_seen && !claims_header_seen && /^### C1([: ]|$)/ {
+      print "## Claims"
+      claims_header_seen = 1
+    }
+    /^Interpretation: .*Limitations: / && $0 !~ /\\nLimitations: / {
+      marker = index($0, "Limitations: ")
+      print substr($0, 1, marker - 1)
+      print substr($0, marker)
+      next
+    }
     { print }
   ' "$report_path" > "$normalized_path" || fail "cannot normalize delegated report"
+
+  awk -v prefix="- \`$WORKTREE/" -v physical_prefix="- \`$WORKTREE_PHYSICAL/" '
+    {
+      if (index($0, prefix) == 1) {
+        $0 = "- `" substr($0, length(prefix) + 1)
+      } else if (physical_prefix != prefix && index($0, physical_prefix) == 1) {
+        $0 = "- `" substr($0, length(physical_prefix) + 1)
+      }
+      print
+    }
+  ' "$normalized_path" > "$relative_evidence_path" || fail "cannot normalize delegated evidence paths"
+  mv "$relative_evidence_path" "$normalized_path" || fail "cannot publish normalized evidence paths"
 
   if cmp -s "$report_path" "$normalized_path"; then
     rm -f "$normalized_path"
@@ -259,12 +293,14 @@ claims_follow_contract() {
   local max_claims="0"
   local max_evidence_per_claim="0"
   local min_evidence_per_claim="0"
+  local allow_search_evidence="0"
   if [ "$MODE" = "survey" ]; then
     max_claims="$MAX_SURVEY_CLAIMS"
     max_evidence_per_claim="$MAX_SURVEY_EVIDENCE_PER_CLAIM"
     [ "$OUTCOME" = "fulfilled" ] && min_evidence_per_claim="1"
+    [ "$SURVEY_CLAIM_KIND" = "test_absence" ] && allow_search_evidence="1"
   fi
-  awk -v max_claims="$max_claims" -v min_evidence_per_claim="$min_evidence_per_claim" -v max_evidence_per_claim="$max_evidence_per_claim" '
+  awk -v max_claims="$max_claims" -v min_evidence_per_claim="$min_evidence_per_claim" -v max_evidence_per_claim="$max_evidence_per_claim" -v allow_search_evidence="$allow_search_evidence" '
     /^## Claims$/ {
       if (section != 0) invalid = 1
       section = 1
@@ -301,6 +337,12 @@ claims_follow_contract() {
     }
     /^- `[^`]+:[1-9][0-9]*-[1-9][0-9]*`[[:space:]]*$/ {
       if (!claim_seen || phase != 2) invalid = 1
+      if (allow_search_evidence) invalid = 1
+      evidence_count += 1
+      next
+    }
+    /^- `SEARCH:C[0-9]+`[[:space:]]*$/ {
+      if (!claim_seen || phase != 2 || !allow_search_evidence) invalid = 1
       evidence_count += 1
       next
     }
@@ -314,6 +356,7 @@ claims_follow_contract() {
       phase = 4
       next
     }
+    section == 1 && /[^[:space:]]/ { invalid = 1 }
     END {
       if (claim_seen && phase != 4) invalid = 1
       if (claim_seen && max_evidence_per_claim > 0 && (evidence_count < min_evidence_per_claim || evidence_count > max_evidence_per_claim)) invalid = 1
@@ -368,12 +411,72 @@ claims_have_evidence() {
       next
     }
     /^- `[^`]+:[1-9][0-9]*-[1-9][0-9]*`[[:space:]]*$/ && claim_seen { evidence_seen = 1 }
+    /^- `SEARCH:C[0-9]+`[[:space:]]*$/ && claim_seen { evidence_seen = 1 }
     END {
       if (claim_seen && !evidence_seen) missing = 1
       if (claims == 0) missing = 1
       exit missing
     }
   ' "$1"
+}
+
+test_asset_path() {
+  case "$1" in
+    *.test.*|*.spec.*|*_test.*|*_spec.*|test_*.*|spec_*.*|test/*|tests/*|__tests__/*|*/test/*|*/tests/*|*/__tests__/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+build_absence_evidence() {
+  local report_path="$1"
+  local evidence_path="$2"
+  local anchor_count
+  local anchor_index=0
+  local anchor
+  local matches_path="$TEMP_ROOT/absence.matches"
+  local test_matches_path="$TEMP_ROOT/absence.test-matches"
+  local grep_status
+  local matched_path
+  local test_matches_json
+
+  grep -Fxq -- '- `SEARCH:C1`' "$report_path" || {
+    EVIDENCE_STATUS="missing"
+    EVIDENCE_FAILURE_KIND="missing"
+    printf '# Verified absence search\n\nThe required `SEARCH:C1` marker is missing.\n' > "$evidence_path"
+    return
+  }
+
+  anchor_count=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq '.claims[0].anchors | length') || fail "cannot count absence anchors"
+  EVIDENCE_JSON='[]'
+  EVIDENCE_COUNT="$anchor_count"
+  EVIDENCE_STATUS="verified"
+  EVIDENCE_FAILURE_KIND="none"
+  printf '# Verified absence search\n\nGenerated from tracked source snapshot `%s`.\n' "$SOURCE_HEAD" > "$evidence_path"
+
+  while [ "$anchor_index" -lt "$anchor_count" ]; do
+    anchor=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq -r ".claims[0].anchors[$anchor_index]") || fail "cannot read absence anchor"
+    : > "$matches_path"
+    : > "$test_matches_path"
+    if git -C "$WORKTREE" grep -l -F -- "$anchor" -- > "$matches_path" 2>/dev/null; then
+      grep_status=0
+    else
+      grep_status=$?
+      [ "$grep_status" -eq 1 ] || fail "cannot verify absence anchor: $anchor"
+    fi
+    while IFS= read -r matched_path; do
+      [ -n "$matched_path" ] || continue
+      test_asset_path "$matched_path" && printf '%s\n' "$matched_path" >> "$test_matches_path"
+    done < "$matches_path"
+    test_matches_json=$(jq -Rsc 'split("\n") | map(select(length > 0)) | unique' "$test_matches_path") || fail "cannot serialize absence matches"
+    EVIDENCE_JSON=$(printf '%s' "$EVIDENCE_JSON" | jq -c --arg id "A$((anchor_index + 1))" --arg pattern "$anchor" --arg revision "$SOURCE_HEAD" --argjson test_matches "$test_matches_json" '. + [{id:$id,source:"verified_absence_search",pattern:$pattern,revision:$revision,test_matches:$test_matches}]') || fail "cannot record absence evidence"
+    printf '\n## A%s `%s`\n\n- tracked test/spec matches: %s\n' "$((anchor_index + 1))" "$anchor" "$(printf '%s' "$test_matches_json" | jq 'length')" >> "$evidence_path"
+    if [ "$(printf '%s' "$test_matches_json" | jq 'length')" -gt 0 ]; then
+      EVIDENCE_STATUS="invalid"
+      EVIDENCE_FAILURE_KIND="absence_contradicted"
+      printf '%s' "$test_matches_json" | jq -r '.[] | "- `" + . + "`"' >> "$evidence_path"
+    fi
+    anchor_index=$((anchor_index + 1))
+  done
 }
 
 build_evidence_packet() {
@@ -396,9 +499,8 @@ build_evidence_packet() {
   local context_path
 
   : > "$evidence_path"
-  if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
-    EVIDENCE_STATUS="not_applicable"
-    printf '# Verified evidence\n\nImplementation modes are verified from candidate.patch.\n' > "$evidence_path"
+  if [ "$MODE" = "survey" ] && [ "$SURVEY_CLAIM_KIND" = "test_absence" ]; then
+    build_absence_evidence "$report_path" "$evidence_path"
     return
   fi
   sed -nE 's/^- `([^`]+):([1-9][0-9]*)-([1-9][0-9]*)`[[:space:]]*$/\1|\2|\3/p' "$report_path" | sort -u > "$references_path"
@@ -519,7 +621,6 @@ render_result() {
     "  supplement-of: \(.supplement_of // "none")",
     "  repair-of: \(.repair_of // "none")",
     "  source-ref: \(.source_ref // "HEAD")",
-    "  evidence-from: \((.evidence_from // []) | join(",") | if length == 0 then "none" else . end)",
     "  repair-attempt: \(.repair_attempt // 0)",
     "  execution-status: \(.status)",
     "  report: \(.report_status)",
@@ -535,9 +636,6 @@ render_result() {
   render_artifact "report" "$result_root/report.md" "$MAX_RENDERED_REPORT_LINES"
   if [ -s "$result_root/evidence.md" ]; then
     render_artifact "evidence" "$result_root/evidence.md" "$MAX_RENDERED_EVIDENCE_LINES"
-  fi
-  if [ -s "$result_root/candidate.patch" ]; then
-    render_artifact "candidate.patch" "$result_root/candidate.patch" "$MAX_RENDERED_PATCH_LINES"
   fi
 }
 
@@ -755,7 +853,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 case "$MODE" in
-  research|survey|implement|errand|nesting)
+  research|survey|nesting)
     [ "$#" -ge 8 ] || fail "$MODE mode requires explicit --hard-timeout-minutes, --idle-timeout-seconds, --poll-seconds, and --timeout-reason"
     [ "$1" = "--hard-timeout-minutes" ] || fail "$MODE mode requires --hard-timeout-minutes first"
     HARD_TIMEOUT_MINUTES="$2"
@@ -772,11 +870,6 @@ case "$MODE" in
           [ "$SOURCE_REF_SET" = false ] || fail "--source-ref may be specified only once"
           SOURCE_REF="$2"
           SOURCE_REF_SET=true
-          shift 2
-          ;;
-        --evidence-from)
-          [[ "$2" =~ $TASK_ID_PATTERN ]] || fail "--evidence-from must name a lowercase kebab-case task id"
-          EVIDENCE_FROM+=("$2")
           shift 2
           ;;
         --retry-of)
@@ -818,17 +911,6 @@ case "$MODE" in
       shift 2
     fi
     ;;
-  implement)
-    TASK_ID="${1:-}"
-    SPEC_PATH="${2:-}"
-    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -ge 6 ] || fail "implement mode requires task id, spec path, --red-summary, summary, --, and production paths"
-    [ "$3" = "--red-summary" ] || fail "implement mode requires --red-summary after spec path"
-    RED_SUMMARY="$4"
-    [ -n "$RED_SUMMARY" ] || fail "implement Red summary must not be empty"
-    [ "$5" = "--" ] || fail "implement mode requires -- before production paths"
-    shift 5
-    ;;
   survey)
     TASK_ID="${1:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
@@ -841,15 +923,6 @@ case "$MODE" in
       [ -n "$SURVEY_REQUEST_JSON" ] || fail "survey request JSON must not be empty"
       shift 2
     fi
-    ;;
-  errand)
-    TASK_ID="${1:-}"
-    DIRECT_INSTRUCTION="${2:-}"
-    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    [ "$#" -ge 4 ] || fail "errand mode requires task id, instruction, --, and production paths"
-    [ -n "$DIRECT_INSTRUCTION" ] || fail "errand instruction must not be empty"
-    [ "$3" = "--" ] || fail "errand mode requires -- before production paths"
-    shift 3
     ;;
   nesting)
     TASK_ID="${1:-}"
@@ -869,7 +942,7 @@ case "$MODE" in
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
     [ "$#" -eq 1 ] || fail "show mode requires task id"
     ;;
-  *) fail "mode must be research, survey, implement, errand, nesting, prepare, smoke, or show" ;;
+  *) fail "mode must be research, survey, nesting, prepare, smoke, or show" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
@@ -886,24 +959,16 @@ case "$MODE" in
 esac
 SOURCE_COMMIT=$(git rev-parse --verify "${SOURCE_REF}^{commit}" 2>/dev/null) || fail "--source-ref does not resolve to a commit: $SOURCE_REF"
 
-case "$MODE" in
-  implement|errand)
-    [ "${#EVIDENCE_FROM[@]}" -gt 0 ] || fail "$MODE mode requires at least one --evidence-from task id"
-    ;;
-  *) [ "${#EVIDENCE_FROM[@]}" -eq 0 ] || fail "--evidence-from is only valid for implement and errand" ;;
-esac
-
-if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
-  EVIDENCE_FROM_JSON=$(printf '%s\n' "${EVIDENCE_FROM[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot serialize evidence task ids"
-  [ "$(printf '%s' "$EVIDENCE_FROM_JSON" | jq 'length')" = "$(printf '%s' "$EVIDENCE_FROM_JSON" | jq 'unique | length')" ] || fail "--evidence-from task ids must be unique"
-fi
-
 if [ "$MODE" = "survey" ] && [ -z "$REPAIR_OF" ]; then
   [ -f "$SCRIPT_DIR/validate-survey-request.sh" ] || fail "survey request validator is missing"
   SURVEY_REQUEST_JSON=$(bash "$SCRIPT_DIR/validate-survey-request.sh" "$SURVEY_REQUEST_JSON") || \
     fail "survey request failed validation before external execution"
   SURVEY_CLAIM_COUNT=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq -r '.claims | length') || \
     fail "cannot count validated survey claims"
+  SURVEY_CLAIM_KIND=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq -r '.claims[0].kind') || \
+    fail "cannot read validated survey claim kind"
+  [ "$SURVEY_CLAIM_KIND" != "test_absence" ] || DETERMINISTIC_ABSENCE=true
+  SURVEY_REQUEST_RESULT_JSON="$SURVEY_REQUEST_JSON"
   [ "$SURVEY_CLAIM_COUNT" -le "$MAX_SURVEY_REQUEST_CLAIMS" ] || \
     fail "validated survey claims exceed runner maximum"
   SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"
@@ -942,36 +1007,34 @@ if [ "$MODE" = "show" ]; then
     exit 2
   fi
   [ -f "$RESULT_ROOT/result.json" ] || fail "task result and state not found for: $TASK_ID"
-  [ -f "$RESULT_ROOT/candidate.patch" ] || fail "candidate patch not found: $RESULT_ROOT/candidate.patch"
   if [ -f "$RESULT_ROOT/report.md" ]; then
     render_result "$RESULT_ROOT"
   else
     [ -f "$RESULT_ROOT/opencode.jsonl" ] || fail "result report source not found: $RESULT_ROOT/opencode.jsonl"
     printf '%s\n' 'worker-result:' "  task-id: $TASK_ID" '  report: legacy' 'report:'
     extract_report "$RESULT_ROOT/opencode.jsonl" || fail "cannot extract legacy result report"
-    if [ -s "$RESULT_ROOT/candidate.patch" ]; then
-      render_artifact "candidate.patch" "$RESULT_ROOT/candidate.patch" "$MAX_RENDERED_PATCH_LINES"
-    fi
   fi
   RESULT_STATUS=$(jq -er '.status' "$RESULT_ROOT/result.json") || fail "cannot read result status"
   [ "$RESULT_STATUS" -eq 0 ] || exit "$RESULT_STATUS"
   exit 0
 fi
 
-command -v curl >/dev/null 2>&1 || fail "curl is required"
-command -v opencode >/dev/null 2>&1 || fail "opencode is required"
-[ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
+if [ "$DETERMINISTIC_ABSENCE" = false ]; then
+  command -v curl >/dev/null 2>&1 || fail "curl is required"
+  command -v opencode >/dev/null 2>&1 || fail "opencode is required"
+  [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set"
+fi
 
 case "$MODE" in
   research|survey|nesting)
-    if [ -z "$REPAIR_OF" ] && command -v zat >/dev/null 2>&1; then
+    if [ "$DETERMINISTIC_ABSENCE" = false ] && [ -z "$REPAIR_OF" ] && command -v zat >/dev/null 2>&1; then
       OUTLINE_TOOL="zat"
       SURVEY_MAX_STEPS="$((SURVEY_MAX_STEPS + SURVEY_OUTLINE_EXTRA_STEPS))"
     fi
     ;;
 esac
 
-if { [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; } || [ "$MODE" = "implement" ]; then
+if [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; then
   validate_repo_path "$SPEC_PATH"
   [ -f "$SPEC_PATH" ] || fail "spec file not found: $SPEC_PATH"
 fi
@@ -980,15 +1043,17 @@ if [ "$MODE" = "nesting" ]; then
   for path in "${NESTING_PATHS[@]}"; do
     validate_repo_path "$path"
     case "$path" in
-      *.test.*|*.spec.*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be inspected for nesting: $path" ;;
+      *.test.*|*.spec.*|*_test.*|*_spec.*|test_*.*|spec_*.*|test/*|tests/*|__tests__/*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be inspected for nesting: $path" ;;
       AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*|*.prisma) fail "protected path cannot be inspected for nesting: $path" ;;
     esac
     git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || fail "nesting path must be tracked: $path"
   done
 fi
 
-TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/delegate-openrouter.XXXXXX") || fail "cannot create temporary directory"
+TEMP_PARENT=${TMPDIR:-/tmp}
+TEMP_ROOT=$(mktemp -d "${TEMP_PARENT%/}/delegate-openrouter.XXXXXX") || fail "cannot create temporary directory"
 WORKTREE="$TEMP_ROOT/worktree"
+WORKTREE_PHYSICAL=""
 CURL_CONFIG="$TEMP_ROOT/curl.conf"
 OPENCODE_XDG_DATA_HOME="$TEMP_ROOT/xdg-data"
 OPENCODE_XDG_STATE_HOME="$TEMP_ROOT/xdg-state"
@@ -1029,22 +1094,6 @@ if [ "$MODE" != "smoke" ]; then
   [ ! -e "$RESULT_ROOT" ] || fail "result already exists: $RESULT_ROOT"
   RESULT_PARENT=${RESULT_ROOT%/*}
   mkdir -p "$RESULT_PARENT" || fail "cannot create result parent directory"
-  if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
-    for evidence_task_id in "${EVIDENCE_FROM[@]}"; do
-      EVIDENCE_PARENT="$RESULT_PARENT/$evidence_task_id"
-      EVIDENCE_PARENT_RESULT="$EVIDENCE_PARENT/result.json"
-      [ -f "$EVIDENCE_PARENT_RESULT" ] || fail "evidence task result not found: $evidence_task_id"
-      case "$(jq -r '.mode' "$EVIDENCE_PARENT_RESULT")" in
-        survey|research) ;;
-        *) fail "evidence task must be survey or research: $evidence_task_id" ;;
-      esac
-      jq -e '(.status == 0) and (.report_status == "complete") and (.output_contract_status == "valid") and (.outcome == "fulfilled") and (.evidence_status == "verified")' "$EVIDENCE_PARENT_RESULT" >/dev/null 2>&1 || \
-        fail "evidence task is not a verified successful result: $evidence_task_id"
-      [ -f "$EVIDENCE_PARENT/report.md" ] || fail "evidence task report not found: $evidence_task_id"
-      [ -f "$EVIDENCE_PARENT/evidence.md" ] || fail "evidence task packet not found: $evidence_task_id"
-      EVIDENCE_DIGEST_INPUT=$(printf '%s\n%s:%s:%s:%s' "$EVIDENCE_DIGEST_INPUT" "$evidence_task_id" "$(git hash-object "$EVIDENCE_PARENT_RESULT")" "$(git hash-object "$EVIDENCE_PARENT/report.md")" "$(git hash-object "$EVIDENCE_PARENT/evidence.md")") || fail "cannot hash evidence task: $evidence_task_id"
-    done
-  fi
   if [ -n "$RETRY_OF" ]; then
     PARENT_RESULT="$RESULT_PARENT/$RETRY_OF/result.json"
     [ -f "$PARENT_RESULT" ] || fail "retry parent result not found: $RETRY_OF"
@@ -1073,11 +1122,17 @@ if [ "$MODE" != "smoke" ]; then
     [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$SOURCE_COMMIT" ] || fail "repair parent source snapshot does not match --source-ref: $REPAIR_OF"
     [ -f "$RESULT_PARENT/$REPAIR_OF/report.md" ] || fail "repair parent report not found: $REPAIR_OF"
     [ -f "$RESULT_PARENT/$REPAIR_OF/evidence.md" ] || fail "repair parent evidence not found: $REPAIR_OF"
+    grep -Eq '^- `[^`]+:[[:space:]]*[1-9][0-9]*-[1-9][0-9]*`' "$RESULT_PARENT/$REPAIR_OF/report.md" || \
+      fail "repair parent has no source range to preserve; use supplement with a narrower survey: $REPAIR_OF"
     ATTEMPT=$(jq -er '(.attempt // 1) + 1' "$PARENT_RESULT") || fail "cannot read repair parent attempt"
     INFORMATION_ATTEMPT=$(jq -er '.information_attempt // 1' "$PARENT_RESULT") || fail "cannot read repair parent information attempt"
     REPAIR_ATTEMPT=$(jq -er '(.repair_attempt // 0) + 1' "$PARENT_RESULT") || fail "cannot read repair parent format attempt"
     [ "$REPAIR_ATTEMPT" -le "$MAX_FORMAT_REPAIRS" ] || fail "format repair limit reached after $MAX_FORMAT_REPAIRS attempt: $REPAIR_OF"
     if [ "$MODE" = "survey" ]; then
+      SURVEY_REQUEST_JSON=$(jq -c '.survey_request // empty' "$PARENT_RESULT") || fail "cannot read repair parent survey request"
+      [ -n "$SURVEY_REQUEST_JSON" ] || fail "repair parent does not contain a survey request"
+      SURVEY_REQUEST_RESULT_JSON="$SURVEY_REQUEST_JSON"
+      SURVEY_CLAIM_KIND=$(printf '%s' "$SURVEY_REQUEST_JSON" | jq -r '.claims[0].kind') || fail "cannot read repair parent claim kind"
       SURVEY_CLAIM_COUNT=$(grep -Ec '^### C[0-9]+([: ]|$)' "$RESULT_PARENT/$REPAIR_OF/report.md" 2>/dev/null || true)
       [ "$SURVEY_CLAIM_COUNT" -gt 0 ] || SURVEY_CLAIM_COUNT="1"
       [ "$SURVEY_CLAIM_COUNT" -le "$MAX_SURVEY_REQUEST_CLAIMS" ] || SURVEY_CLAIM_COUNT="$MAX_SURVEY_REQUEST_CLAIMS"
@@ -1096,37 +1151,32 @@ if [ "$MODE" != "smoke" ]; then
 fi
 
 umask 077
-printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nfail\n' "$OPENROUTER_API_KEY" > "$CURL_CONFIG" || fail "cannot prepare budget request"
-KEY_INFO=$(curl --config "$CURL_CONFIG" "$OPENROUTER_KEY_ENDPOINT") || fail "cannot read OpenRouter key usage"
-USAGE_MONTHLY=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage_monthly') || fail "OpenRouter response has no monthly usage"
-KEY_LIMIT=$(printf '%s' "$KEY_INFO" | jq -er '.data.limit') || fail "OpenRouter API key must have a hard limit"
-KEY_RESET=$(printf '%s' "$KEY_INFO" | jq -r '.data.limit_reset // "none"') || fail "cannot read OpenRouter key reset period"
-case "$KEY_RESET" in
-  monthly) CURRENT_USAGE="$USAGE_MONTHLY" ;;
-  none) CURRENT_USAGE=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage') || fail "OpenRouter response has no total usage" ;;
-  *) fail "API key hard limit must reset monthly or never" ;;
-esac
-jq -ne --argjson usage "$CURRENT_USAGE" --argjson soft "$SOFT_BUDGET_USD" '$usage < $soft' >/dev/null || fail "soft budget exceeded: $CURRENT_USAGE USD"
-jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <= $hard' >/dev/null || fail "API key hard limit exceeds $HARD_BUDGET_USD USD"
+if [ "$DETERMINISTIC_ABSENCE" = true ]; then
+  CURRENT_USAGE="0"
+  KEY_RESET="not_used"
+else
+  printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nfail\n' "$OPENROUTER_API_KEY" > "$CURL_CONFIG" || fail "cannot prepare budget request"
+  KEY_INFO=$(curl --config "$CURL_CONFIG" "$OPENROUTER_KEY_ENDPOINT") || fail "cannot read OpenRouter key usage"
+  USAGE_MONTHLY=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage_monthly') || fail "OpenRouter response has no monthly usage"
+  KEY_LIMIT=$(printf '%s' "$KEY_INFO" | jq -er '.data.limit') || fail "OpenRouter API key must have a hard limit"
+  KEY_RESET=$(printf '%s' "$KEY_INFO" | jq -r '.data.limit_reset // "none"') || fail "cannot read OpenRouter key reset period"
+  case "$KEY_RESET" in
+    monthly) CURRENT_USAGE="$USAGE_MONTHLY" ;;
+    none) CURRENT_USAGE=$(printf '%s' "$KEY_INFO" | jq -er '.data.usage') || fail "OpenRouter response has no total usage" ;;
+    *) fail "API key hard limit must reset monthly or never" ;;
+  esac
+  jq -ne --argjson usage "$CURRENT_USAGE" --argjson soft "$SOFT_BUDGET_USD" '$usage < $soft' >/dev/null || fail "soft budget exceeded: $CURRENT_USAGE USD"
+  jq -ne --argjson limit "$KEY_LIMIT" --argjson hard "$HARD_BUDGET_USD" '$limit <= $hard' >/dev/null || fail "API key hard limit exceeds $HARD_BUDGET_USD USD"
+fi
 
 if [ "$MODE" != "smoke" ]; then
   git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT" >/dev/null || fail "cannot create isolated worktree"
   WORKTREE_ADDED=1
+  WORKTREE_PHYSICAL=$(cd "$WORKTREE" && pwd -P) || fail "cannot resolve isolated worktree path"
   snapshot_ignored_agent_context
 fi
 
-if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
-  mkdir -p "$WORKTREE/.delegate-request/evidence" || fail "cannot create delegated evidence directory"
-  for evidence_task_id in "${EVIDENCE_FROM[@]}"; do
-    EVIDENCE_TARGET="$WORKTREE/.delegate-request/evidence/$evidence_task_id"
-    mkdir "$EVIDENCE_TARGET" || fail "cannot create delegated evidence task directory: $evidence_task_id"
-    cp "$RESULT_PARENT/$evidence_task_id/result.json" "$EVIDENCE_TARGET/result.json" || fail "cannot copy evidence task metadata: $evidence_task_id"
-    cp "$RESULT_PARENT/$evidence_task_id/report.md" "$EVIDENCE_TARGET/report.md" || fail "cannot copy evidence task report: $evidence_task_id"
-    cp "$RESULT_PARENT/$evidence_task_id/evidence.md" "$EVIDENCE_TARGET/evidence.md" || fail "cannot copy evidence task packet: $evidence_task_id"
-  done
-fi
-
-if { [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; } || [ "$MODE" = "implement" ]; then
+if [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; then
   mkdir -p "$WORKTREE/.delegate-request" || fail "cannot create delegated request directory"
   cp "$REPO_ROOT/$SPEC_PATH" "$WORKTREE/.delegate-request/spec.md" || fail "cannot copy spec into isolated worktree"
 fi
@@ -1137,34 +1187,7 @@ if [ -n "$REPAIR_OF" ]; then
   cp "$RESULT_PARENT/$REPAIR_OF/evidence.md" "$WORKTREE/.delegate-request/parent-evidence.md" || fail "cannot copy repair parent evidence"
 fi
 
-ALLOWED_PATHS=()
-if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
-  [ "$#" -gt 0 ] || fail "$MODE mode requires at least one allowed production path"
-  for path in "$@"; do
-    validate_repo_path "$path"
-    case "$path" in
-      *.test.*|*.spec.*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*) fail "test assets cannot be delegated: $path" ;;
-      AGENTS.md|*/AGENTS.md|*.md|package.json|*/package.json|*lock*.json|*.lock|*.toml|*.yaml|*.yml|*.env|*.env.*|*/migrations/*) fail "protected path cannot be delegated: $path" ;;
-    esac
-    if [ -e "$REPO_ROOT/$path" ]; then
-      git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || fail "existing allowed path must be tracked: $path"
-    else
-      parent=${path%/*}
-      [ "$parent" != "$path" ] || parent="."
-      [ -d "$REPO_ROOT/$parent" ] || fail "new allowed path parent must exist: $path"
-      git check-ignore -q -- "$path" && fail "new allowed path must not be ignored: $path"
-    fi
-    [ -z "$(git status --porcelain -- "$path")" ] || fail "allowed path has uncommitted changes: $path"
-    ALLOWED_PATHS+=("$path")
-  done
-fi
-
 EDIT_RULES='{"*":"deny"}'
-if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
-  for path in "${ALLOWED_PATHS[@]}"; do
-    EDIT_RULES=$(printf '%s' "$EDIT_RULES" | jq -c --arg path "$path" '. + {($path): "allow"}') || fail "cannot build edit allowlist"
-  done
-fi
 
 jq -cn \
   --argjson permission_edit "$EDIT_RULES" \
@@ -1228,6 +1251,7 @@ jq -cn \
 ' > "$TEMP_ROOT/opencode.json" || fail "cannot create OpenCode config"
 
 READ_ONLY_OUTPUT_CONTRACT='最終回答は次の形式だけを使ってください。
+STRICT OUTPUT RULES: Start the final response with `Outcome:`. Do not write any preamble. Use exactly the claim IDs present in the request; if the request has only C1, never create C2. Keep a cross-file flow inside one claim with up to three Evidence ranges. If Evidence satisfies done_when and answers the question, return `Outcome: fulfilled` and `Remaining: none`. An unimplemented target is not a reason for partial when the requested existing pattern or fact was found.
 1行目は Outcome: fulfilled、Outcome: partial、Outcome: blocked のどれか一つにしてください。区切り記号は出力しないでください。
 ## Claims
 事実ごとに ### C1, ### C2 と分け、各claimを次の固定構造で完結させてください。Claim:、Evidence:、Interpretation:、Limitations:の省略、並べ替え、claim外へのまとめ書きは禁止です。
@@ -1239,27 +1263,17 @@ Interpretation: この範囲がclaimを直接支える理由
 Limitations: none
 Evidenceの形式は上の例と完全一致させ、コロンの後ろや行番号の前に空白を入れないでください。調査依頼にclaim IDがある場合は同じIDと順序を保持してください。各claimは1〜3範囲です。重複範囲を増やさず、主張と実行順序を判断できる最小範囲を指定してください。コード本文は貼らないでください。否定的主張では調べたscope、検索語、除外した候補をInterpretationへ書いてください。
 Evidenceの各範囲はClaimまたはInterpretationに書いた一つの事実と一対一に対応させ、その事実を直接支える行だけを選んでください。読んだだけの隣接fileを引用しないでください。
+巨大な関数全体を1範囲にせず、必要なら同じclaimの最大3範囲をsignature・対象branch/call・return/side effectに分けてください。
+For a `test_absence` claim, do not cite production source ranges as proof of absence. Write exactly `- `SEARCH:C1`` under Evidence. The runner will independently search every exact anchor across tracked test/spec paths and will reject a contradicted absence claim.
 ## Remaining
-未確認事項と理由を書き、無ければ none と書いてください。'
+未確認事項と理由を書き、無ければ none と書いてください。done_whenを直接支えるEvidenceが揃い、questionへの回答が完結したclaimはOutcome: fulfilledかつRemaining: noneにしてください。調査対象が未実装であること、変更や実装が今後必要なこと、excludeした範囲を確認していないことは、それ自体をpartialやRemainingの理由にしないでください。'
 READ_ONLY_OUTPUT_CONTRACT=$(printf '%s\nEvidenceは全claim合計で最大%s範囲、推奨%s範囲以下、1範囲あたり最大%s行です。実行器は各範囲の前後%s行を追加し、展開後のpacket全体を最大%s行に制限します。上限を超える広い範囲を指定せず、直接根拠となる行だけを選んでください。' \
   "$READ_ONLY_OUTPUT_CONTRACT" "$MAX_EVIDENCE_REFERENCES" "$RECOMMENDED_EVIDENCE_REFERENCES" "$MAX_EVIDENCE_LINES_PER_REFERENCE" "$EVIDENCE_CONTEXT_LINES" "$MAX_EVIDENCE_TOTAL_LINES")
-SURVEY_OUTPUT_LIMIT=$(printf 'surveyのclaimは検証済み依頼JSONの%s個以下に限定されています。各IDは一つのkindと変更判断だけを扱います。依頼された成果IDを細分化・統合せず、根拠不足はRemainingへ分離してください。' "$MAX_SURVEY_REQUEST_CLAIMS")
-IMPLEMENT_OUTPUT_CONTRACT='最終回答は次の形式だけを使ってください。
-1行目は Outcome: fulfilled、Outcome: partial、Outcome: consultation_required、Outcome: blocked のどれか一つにしてください。区切り記号は出力しないでください。
-## Requirement mapping
-設計・承認済みシナリオ・Redの各項目について、変更pathと対応内容を1行ずつ書いてください。
-## Remaining
-未実装、曖昧さ、許可外変更の必要性を書き、無ければ none と書いてください。'
-VERIFIED_EVIDENCE_INSTRUCTION=""
+SURVEY_OUTPUT_LIMIT=$(printf 'surveyのclaimは検証済み依頼JSONの%s個以下に限定されています。依頼JSONにC1だけがある場合、C2以降を絶対に作らないでください。cross-fileの制御フローや複数段階がdone_whenに必要でも、同じC1のClaim・Evidence・Interpretationへ最大3範囲でまとめます。各IDは一つのkindと変更判断だけを扱います。依頼された成果IDを細分化・統合せず、根拠不足はRemainingへ分離してください。' "$MAX_SURVEY_REQUEST_CLAIMS")
 OUTLINE_INSTRUCTION=""
 if [ "$OUTLINE_TOOL" = "zat" ]; then
-  OUTLINE_INSTRUCTION='Shellは、grep・Glob・LSPで特定済みの単一tracked fileに対する `zat <path>` だけです。最初のtoolはgrep・Glob・LSPにし、zatをdirectory・fileの探索、help・version確認、ls・pwd・wc・which・typeの代用にせず、zat以外のshell commandも試さないでください。zat対応の大きいfileごとに1回だけ署名と行番号を絞り、その後必要範囲を80行以下でReadしてください。zatのsymbol全rangeをEvidenceへ転記してはなりません。schema.prisma、constants.ts、constants/配下、testにはzatを使わないでください。zatが未対応または失敗したfileでは別のzat commandを試さず、従来のgrep・LSP・Readへ戻ってください。zat出力自体はEvidenceにしないでください。'
+  OUTLINE_INSTRUCTION='STRICT ZAT RULES: zat is already installed and available. Never run `which zat`, `zat --help`, `zat --version`, or bare `zat`. The only permitted shell form is `zat <repository-relative tracked file path>` after grep, Glob, or LSP has identified that exact file. Never pass an absolute path or a directory. If zat fails once, do not try another zat command for that file; use grep, LSP, or Read. Shellは、grep・Glob・LSPで特定済みの単一tracked fileに対する `zat <repository-relative-path>` だけです。最初のtoolはgrep・Glob・LSPにし、zatを探索やhelp・version確認に使わず、zat以外のshell commandも試さないでください。zat対応の大きいfileごとに1回だけ署名と行番号を絞り、その後必要範囲を80行以下でReadしてください。zatのsymbol全rangeをEvidenceへ転記してはなりません。schema.prisma、constants.ts、constants/配下、testにはzatを使わないでください。zat出力自体はEvidenceにしないでください。'
 fi
-if [ "${#EVIDENCE_FROM[@]}" -gt 0 ]; then
-  EVIDENCE_TASK_LIST=$(printf '%s\n' "${EVIDENCE_FROM[@]}" | awk '{ print "- .delegate-request/evidence/" $0 "/report.md"; print "- .delegate-request/evidence/" $0 "/evidence.md" }')
-  VERIFIED_EVIDENCE_INSTRUCTION="次の検証済みevidence packetを実装根拠として必ず読み、report.mdのclaim・解釈とevidence.mdの検証済みsource範囲を組で使ってください。識別子、列名、型幅、relation、制御フローを短い実装指示から再推測してはなりません。packetと指示が矛盾する、またはpacketが必須契約を直接支えない場合は変更せずconsultation_requiredを返してください。\n$EVIDENCE_TASK_LIST"
-fi
-
 if [ -n "$REPAIR_OF" ]; then
   PROMPT=".delegate-request/parent-report.mdを、事実や結論を追加せず出力契約へ整形し直してください。.delegate-request/parent-evidence.mdは前回の機械検証エラー確認にだけ使ってください。repository、production code、設定、test、schemaを再調査してはなりません。Claim、Interpretation、Limitationsを各claim内へ戻し、Evidenceの記号・空白・配置だけを固定形式へ直してください。Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません。行範囲の選び直しが必要なら修復せずOutcome: partialとしてRemainingへ書いてください。親reportにない事実を補完してはなりません。"
   EXECUTION_ROOT="$WORKTREE"
@@ -1286,23 +1300,12 @@ elif [ "$MODE" = "nesting" ]; then
   EXECUTION_ROOT="$WORKTREE"
   OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
   OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
-elif [ "$MODE" = "implement" ]; then
-  ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="承認済み設計 .delegate-request/spec.md と次のRed要約に従い、許可ファイルの初回実装候補を作成してください。テスト、設計、設定、Gitは変更禁止です。設計、シナリオ、Redが矛盾する、または許可外変更が必要なら変更せずOutcomeをconsultation_requiredとして理由を報告してください。$VERIFIED_EVIDENCE_INSTRUCTION\nRed要約:\n$RED_SUMMARY\n許可ファイル:\n$ALLOWED_LIST"
-  EXECUTION_ROOT="$WORKTREE"
-  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
-  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
 else
-  ALLOWED_LIST=$(printf '%s\n' "${ALLOWED_PATHS[@]}" | sed 's/^/- /')
-  PROMPT="次の短い実装指示に従い、許可ファイルの初回実装候補を作成してください。テスト、設定、Git、設計資産を変更させないでください。要件が曖昧、または許可外の変更が必要なら変更せず consultation_required として根拠を報告してください。$VERIFIED_EVIDENCE_INSTRUCTION\n実装指示:\n$DIRECT_INSTRUCTION\n許可ファイル:\n$ALLOWED_LIST"
-  EXECUTION_ROOT="$WORKTREE"
-  OPENCODE_OUTPUT="$RESULT_STAGING/opencode.jsonl"
-  OPENCODE_ERROR="$RESULT_STAGING/opencode.stderr"
+  fail "unsupported delegated mode: $MODE"
 fi
 
 case "$MODE" in
   research|survey|nesting) PROMPT=$(printf '%s\n\n%s\n\n%s' "$OUTLINE_INSTRUCTION" "$PROMPT" "$READ_ONLY_OUTPUT_CONTRACT") ;;
-  implement|errand) PROMPT=$(printf '%s\n\n%s' "$PROMPT" "$IMPLEMENT_OUTPUT_CONTRACT") ;;
 esac
 if [ "$MODE" != "smoke" ]; then
   SPEC_BLOB="none"
@@ -1311,7 +1314,7 @@ if [ "$MODE" != "smoke" ]; then
   elif [ -n "$SPEC_PATH" ]; then
     SPEC_BLOB=$(git hash-object "$REPO_ROOT/$SPEC_PATH") || fail "cannot hash delegated spec"
   fi
-  REQUEST_DIGEST=$(printf '%s\n%s\n%s\n%s' "$PROMPT" "$SPEC_BLOB" "$SOURCE_COMMIT" "$EVIDENCE_DIGEST_INPUT" | git hash-object --stdin) || fail "cannot hash effective request"
+  REQUEST_DIGEST=$(printf '%s\n%s\n%s' "$PROMPT" "$SPEC_BLOB" "$SOURCE_COMMIT" | git hash-object --stdin) || fail "cannot hash effective request"
   if [ -n "$RETRY_OF" ]; then
     PARENT_REQUEST_DIGEST=$(jq -r '.request_digest // ""' "$PARENT_RESULT") || fail "cannot read retry parent request digest"
     if [ "$REQUEST_DIGEST" = "$PARENT_REQUEST_DIGEST" ]; then
@@ -1334,40 +1337,47 @@ fi
 cd "$EXECUTION_ROOT" || fail "cannot enter execution root"
 set +e
 OPENCODE_STARTED_AT=$(date +%s)
-OPENCODE_COMMAND=(opencode --pure run --agent delegate --format json --model "$MODEL")
-if [ -n "$MODEL_VARIANT" ]; then
-  OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")
+if [ "$DETERMINISTIC_ABSENCE" = true ]; then
+  printf '%s\n' '{"type":"text","text":"Outcome: fulfilled"}' > "$OPENCODE_OUTPUT"
+  : > "$OPENCODE_ERROR"
+  OPENCODE_STATUS=0
+  write_task_state "running" || fail "cannot update task state"
+else
+  OPENCODE_COMMAND=(opencode --pure run --agent delegate --format json --model "$MODEL")
+  if [ -n "$MODEL_VARIANT" ]; then
+    OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")
+  fi
+  OPENCODE_COMMAND+=("$PROMPT")
+  set -m
+  env -i \
+    HOME="$HOME" \
+    XDG_DATA_HOME="$OPENCODE_XDG_DATA_HOME" \
+    XDG_STATE_HOME="$OPENCODE_XDG_STATE_HOME" \
+    XDG_CACHE_HOME="$OPENCODE_XDG_CACHE_HOME" \
+    XDG_CONFIG_HOME="$OPENCODE_XDG_CONFIG_HOME" \
+    TMPDIR="$OPENCODE_TMPDIR" \
+    PATH="$PATH" \
+    LANG="${LANG:-C.UTF-8}" \
+    TERM="${TERM:-dumb}" \
+    OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+    OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
+    OPENCODE_DISABLE_AUTOUPDATE=true \
+    "${OPENCODE_COMMAND[@]}" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
+  OPENCODE_PID=$!
+  set +m
+  write_task_state "running" || fail "cannot update task state"
+  monitor_opencode "$OPENCODE_PID" "$OPENCODE_OUTPUT" "$OPENCODE_STARTED_AT" &
+  TIMEOUT_MONITOR_PID=$!
+  wait "$OPENCODE_PID"
+  OPENCODE_STATUS=$?
+  kill "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+  wait "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
+  TIMEOUT_MONITOR_PID=""
+  if process_group_alive "$OPENCODE_PID"; then
+    terminate_process_group "$OPENCODE_PID"
+  fi
+  OPENCODE_PID=""
 fi
-OPENCODE_COMMAND+=("$PROMPT")
-set -m
-env -i \
-  HOME="$HOME" \
-  XDG_DATA_HOME="$OPENCODE_XDG_DATA_HOME" \
-  XDG_STATE_HOME="$OPENCODE_XDG_STATE_HOME" \
-  XDG_CACHE_HOME="$OPENCODE_XDG_CACHE_HOME" \
-  XDG_CONFIG_HOME="$OPENCODE_XDG_CONFIG_HOME" \
-  TMPDIR="$OPENCODE_TMPDIR" \
-  PATH="$PATH" \
-  LANG="${LANG:-C.UTF-8}" \
-  TERM="${TERM:-dumb}" \
-  OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
-  OPENCODE_CONFIG="$TEMP_ROOT/opencode.json" \
-  OPENCODE_DISABLE_AUTOUPDATE=true \
-  "${OPENCODE_COMMAND[@]}" > "$OPENCODE_OUTPUT" 2> "$OPENCODE_ERROR" &
-OPENCODE_PID=$!
-set +m
-write_task_state "running" || fail "cannot update task state"
-monitor_opencode "$OPENCODE_PID" "$OPENCODE_OUTPUT" "$OPENCODE_STARTED_AT" &
-TIMEOUT_MONITOR_PID=$!
-wait "$OPENCODE_PID"
-OPENCODE_STATUS=$?
-kill "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
-wait "$TIMEOUT_MONITOR_PID" 2>/dev/null || true
-TIMEOUT_MONITOR_PID=""
-if process_group_alive "$OPENCODE_PID"; then
-  terminate_process_group "$OPENCODE_PID"
-fi
-OPENCODE_PID=""
 OPENCODE_FINISHED_AT=$(date +%s)
 OPENCODE_ELAPSED_SECONDS="$((OPENCODE_FINISHED_AT - OPENCODE_STARTED_AT))"
 TIMED_OUT=false
@@ -1423,6 +1433,7 @@ esac
 
 if [ "$REPORT_STATUS" = "complete" ]; then
   normalize_report_format "$RESULT_STAGING/report.md"
+  grep -Eq '^- `[^`]+:[[:space:]]*[1-9][0-9]*-[1-9][0-9]*`' "$RESULT_STAGING/report.md" && REPORT_HAS_REPAIRABLE_EVIDENCE=true
   classify_output_contract "$RESULT_STAGING/report.md"
   build_evidence_packet "$RESULT_STAGING/report.md" "$RESULT_STAGING/evidence.md" "$TEMP_ROOT/evidence.references"
   if [ "$OUTPUT_CONTRACT_STATUS" != "valid" ]; then
@@ -1436,10 +1447,6 @@ else
   printf '# Verified evidence\n\nUnavailable because report status is `%s`.\n' "$REPORT_STATUS" > "$RESULT_STAGING/evidence.md"
   OUTPUT_CONTRACT_STATUS="not_checked"
   EVIDENCE_STATUS="not_checked"
-fi
-
-if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
-  git add -N -- "${ALLOWED_PATHS[@]}" >/dev/null 2>&1 || true
 fi
 
 CHANGED_PATHS=()
@@ -1461,16 +1468,7 @@ while IFS= read -r -d '' changed; do
   [ "$snapshot_path" = true ] || CHANGED_PATHS+=("$changed")
 done < <(git ls-files --others --exclude-standard -z)
 if [ "${#CHANGED_PATHS[@]}" -gt 0 ]; then
-  for changed in "${CHANGED_PATHS[@]}"; do
-    allowed=false
-    if [ "${#ALLOWED_PATHS[@]}" -gt 0 ]; then
-      for path in "${ALLOWED_PATHS[@]}"; do
-        [ "$changed" = "$path" ] && allowed=true
-      done
-    fi
-    [ "$allowed" = true ] || fail "delegated model changed a protected path: $changed"
-  done
-  CHANGED_PATHS_JSON=$(printf '%s\n' "${CHANGED_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))') || fail "cannot serialize changed paths"
+  fail "read-only delegated model changed a protected path: ${CHANGED_PATHS[0]}"
 else
   CHANGED_PATHS_JSON='[]'
 fi
@@ -1478,16 +1476,6 @@ if [ "${#CONTEXT_SNAPSHOT_PATHS[@]}" -gt 0 ]; then
   CONTEXT_SNAPSHOT_PATHS_JSON=$(printf '%s\n' "${CONTEXT_SNAPSHOT_PATHS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0)) | sort') || fail "cannot serialize ignored context paths"
 else
   CONTEXT_SNAPSHOT_PATHS_JSON='[]'
-fi
-
-if [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; then
-  git diff --binary -- "${ALLOWED_PATHS[@]}" > "$RESULT_STAGING/candidate.patch" || fail "cannot create candidate patch"
-else
-  : > "$RESULT_STAGING/candidate.patch"
-fi
-if { [ "$MODE" = "implement" ] || [ "$MODE" = "errand" ]; } && [ "$OUTCOME" = "fulfilled" ] && [ ! -s "$RESULT_STAGING/candidate.patch" ]; then
-  OUTPUT_CONTRACT_STATUS="invalid"
-  [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INVALID_OUTPUT_STATUS"
 fi
 
 FAILURE_CLASS="none"
@@ -1515,19 +1503,26 @@ case "$FAILURE_CLASS" in
   invalid_output)
     case "$MODE" in
       survey|research)
-        if [ "$REPAIR_ATTEMPT" -ge "$MAX_FORMAT_REPAIRS" ]; then NEXT_ACTION="review"; else NEXT_ACTION="repair"; fi
+        if [ "$REPORT_HAS_REPAIRABLE_EVIDENCE" = false ]; then
+          NEXT_ACTION="supplement"
+        elif [ "$REPAIR_ATTEMPT" -ge "$MAX_FORMAT_REPAIRS" ]; then
+          NEXT_ACTION="review"
+        else
+          NEXT_ACTION="repair"
+        fi
         ;;
-      implement|errand) NEXT_ACTION="review" ;;
       *) NEXT_ACTION="stop" ;;
     esac
     ;;
   incomplete_outcome)
-    case "$MODE" in survey|research) NEXT_ACTION="supplement" ;; implement|errand) NEXT_ACTION="review" ;; *) NEXT_ACTION="stop" ;; esac
+    case "$MODE" in survey|research) NEXT_ACTION="supplement" ;; *) NEXT_ACTION="stop" ;; esac
     ;;
   evidence_*|step_limit_exhausted) NEXT_ACTION="supplement" ;;
   *) NEXT_ACTION="stop" ;;
 esac
 
+REPORT_BLOB=$(git hash-object "$RESULT_STAGING/report.md") || fail "cannot hash delegated report"
+EVIDENCE_BLOB=$(git hash-object "$RESULT_STAGING/evidence.md") || fail "cannot hash delegated evidence"
 jq -n \
   --arg mode "$MODE" \
   --arg task_id "$TASK_ID" \
@@ -1546,12 +1541,15 @@ jq -n \
   --argjson tool_calls_by_name "$TOOL_CALLS_BY_NAME_JSON" \
   --argjson denied_tool_call_count "$DENIED_TOOL_CALL_COUNT" \
   --arg request_digest "$REQUEST_DIGEST" \
+  --argjson survey_request "$SURVEY_REQUEST_RESULT_JSON" \
   --arg report_file "report.md" \
+  --arg report_blob "$REPORT_BLOB" \
   --arg report_status "$REPORT_STATUS" \
   --argjson report_normalized "$REPORT_NORMALIZED" \
   --arg output_contract_status "$OUTPUT_CONTRACT_STATUS" \
   --arg outcome "$OUTCOME" \
   --arg evidence_file "evidence.md" \
+  --arg evidence_blob "$EVIDENCE_BLOB" \
   --arg evidence_status "$EVIDENCE_STATUS" \
   --arg evidence_failure_kind "$EVIDENCE_FAILURE_KIND" \
   --argjson evidence_count "$EVIDENCE_COUNT" \
@@ -1572,7 +1570,6 @@ jq -n \
   --arg timeout_reason "$TIMEOUT_REASON" \
   --arg source_ref "$SOURCE_REF" \
   --arg source_head "$SOURCE_HEAD" \
-  --argjson evidence_from "$EVIDENCE_FROM_JSON" \
   --argjson source_worktree_status "$SOURCE_WORKTREE_STATUS_JSON" \
   --argjson context_snapshot_paths "$CONTEXT_SNAPSHOT_PATHS_JSON" \
   --argjson usage_current "$CURRENT_USAGE" \
@@ -1583,7 +1580,7 @@ jq -n \
   --argjson observed_output_bytes "$OBSERVED_OUTPUT_BYTES" \
   --argjson observed_survey_steps "$OBSERVED_SURVEY_STEPS" \
   --argjson step_limit_reached "$STEP_LIMIT_REACHED" \
-  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),outline_tool:(if $outline_tool == "" then null else $outline_tool end),tool_call_count:$tool_call_count,tool_calls_by_name:$tool_calls_by_name,denied_tool_call_count:$denied_tool_call_count,request_digest:$request_digest,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,report_normalized:$report_normalized,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,evidence_from:$evidence_from,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
+  '{mode:$mode,task_id:$task_id,retry_of:(if $retry_of == "" then null else $retry_of end),supplement_of:(if $supplement_of == "" then null else $supplement_of end),repair_of:(if $repair_of == "" then null else $repair_of end),attempt:$attempt,information_attempt:$information_attempt,repair_attempt:$repair_attempt,retry_request_match:(if $retry_request_match == "" then null else ($retry_request_match == "true") end),supplement_request_changed:(if $supplement_request_changed == "" then null else ($supplement_request_changed == "true") end),model:$model,model_variant:(if $model_variant == "" then null else $model_variant end),outline_tool:(if $outline_tool == "" then null else $outline_tool end),tool_call_count:$tool_call_count,tool_calls_by_name:$tool_calls_by_name,denied_tool_call_count:$denied_tool_call_count,request_digest:$request_digest,survey_request:$survey_request,opencode_status:$opencode_status,status:$final_status,failure_class:$failure_class,next_action:$next_action,report_status:$report_status,report_normalized:$report_normalized,output_contract_status:$output_contract_status,outcome:$outcome,evidence_file:$evidence_file,evidence_blob:$evidence_blob,evidence_status:$evidence_status,evidence_failure_kind:$evidence_failure_kind,evidence_count:$evidence_count,evidence:$evidence,timed_out:$timed_out,timeout_kind:(if $timeout_kind == "" then null else $timeout_kind end),elapsed_seconds:$elapsed_seconds,idle_timeout_seconds:$idle_timeout_seconds,hard_timeout_seconds:$hard_timeout_seconds,poll_seconds:$poll_seconds,termination_grace_seconds:$termination_grace_seconds,timeout_policy_source:$timeout_policy_source,timeout_reason:$timeout_reason,last_event_type:(if $last_event_type == "" then null else $last_event_type end),valid_event_observed:$valid_event_observed,observed_output_bytes:$observed_output_bytes,observed_survey_steps:$observed_survey_steps,step_limit_reached:$step_limit_reached,source_ref:$source_ref,source_snapshot:(if $context_snapshot_paths | length > 0 then ($source_ref + "+ignored-agent-context") else $source_ref end),source_head:$source_head,source_worktree_dirty:($source_worktree_status | length > 0),source_worktree_status:$source_worktree_status,context_snapshot_paths:$context_snapshot_paths,usage_before:$usage_current,limit_reset:$limit_reset,changed_paths:$changed_paths,report_file:$report_file,report_blob:$report_blob,step_limit:(if $mode == "survey" then $survey_max_steps else null end)}' \
   > "$RESULT_STAGING/result.json" || fail "cannot create result metadata"
 
 mv "$RESULT_STAGING" "$RESULT_ROOT" || fail "cannot publish result directory"
