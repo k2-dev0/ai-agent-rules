@@ -62,10 +62,11 @@ check_bash_rewrite() { # name expected-command hook command
 }
 
 # --- require-test ---
-mkdir -p src/hooks src/constants && rm -f src/foo.ts src/foo.test.ts src/bar.tsx src/bar.jsx src/useDevice.ts src/hooks/use-device.ts src/data.hook.ts src/constants.ts src/constants/device.ts
+mkdir -p src/hooks src/constants centralized-tests && rm -f src/foo.ts src/foo.test.ts centralized-tests/foo.test.ts src/bar.tsx src/bar.jsx src/useDevice.ts src/hooks/use-device.ts src/data.hook.ts src/constants.ts src/constants/device.ts
 check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
-touch src/foo.test.ts
-check "require-test: テスト有り ts は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
+touch centralized-tests/foo.test.ts
+git add centralized-tests/foo.test.ts
+check "require-test: 別directoryの追跡済みtestは棄権" empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
 check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
 check "require-test: jsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.jsx"}}'
 check "require-test: useX hook は棄権"        empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/useDevice.ts"}}'

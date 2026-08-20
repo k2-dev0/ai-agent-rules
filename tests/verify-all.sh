@@ -244,6 +244,7 @@ ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/tdd/SCENARIO_FLOW.md"
 [ -f "$CLAUDE_IMPLEMENTER" ] && grep -q '^model: claude-sonnet-5$' "$CLAUDE_IMPLEMENTER" && grep -q '^effort: max$' "$CLAUDE_IMPLEMENTER" && grep -q '^tools: Read, Grep, Glob, Edit, Write$' "$CLAUDE_IMPLEMENTER" && ! grep -Eq '^tools:.*(Bash|Agent)' "$CLAUDE_IMPLEMENTER" && ok "Claude implementer: Sonnet 5 maxと非shell tool境界を固定" || ng "Claude implementerのmodel・effort・tool境界が不正"
 [ -f "$CODEX_IMPLEMENTER" ] && grep -q '^model = "gpt-5.6-luna"$' "$CODEX_IMPLEMENTER" && grep -q '^model_reasoning_effort = "max"$' "$CODEX_IMPLEMENTER" && grep -q '^sandbox_mode = "workspace-write"$' "$CODEX_IMPLEMENTER" && ok "Codex implementer: Luna maxとworkspace writeを固定" || ng "Codex implementerのmodel・effort・sandbox境界が不正"
+grep -Fq 'This is an implementation action, not a review, approval, or scenario-classification task' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Do not return only an explanation or classification' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Outcome: implemented' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && ok "implementer: 分類回答を実装成功にしない" || ng "implementerの実装action・出力契約が不足"
 grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: implementer定義の配布先が不足"
 for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
   if grep -Fq '半年後の保守者' "$IMPLEMENTER_FILE" && grep -Fq '不要なhelper分割、過度な抽象化、将来用の拡張点' "$IMPLEMENTER_FILE" && grep -Fq '`filter().map()`' "$IMPLEMENTER_FILE" && grep -Fq '`reduce()`' "$IMPLEMENTER_FILE" && grep -Fq '多少冗長でも読みやすい' "$IMPLEMENTER_FILE"; then
@@ -291,7 +292,7 @@ grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && 
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
 grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$TDD_SKILL" && grep -Fq 'subagentが利用不能またはcleanな再実行も失敗した場合だけ可' "$TDD_SKILL" && grep -Fq '初回実装後の本体コード修正 | 可 | 禁止 | 禁止' "$TDD_SKILL" && ok "tdd はworker調査・専用subagent初回実装・上位fallbackと修正へ固定" || ng "tdd の調査・実装・fallback・修正境界が不正"
 grep -Fq '設計書を選んでから共通フローでimplementerの初回実装を受領するまで' "$TDD_SKILL" && grep -Fq '`evidence_status: verified`のコードがclaimを直接支え' "$TDD_SKILL" && grep -Fq '`--supplement-of`で初回を含む合計3回まで限定survey' "$TDD_SKILL" && grep -Fq '3回目までは保存範囲の不足自体を直接確認の理由にしない' "$TDD_SKILL" && grep -Fq '全file Read、path発見のためのRead' "$TDD_SKILL" && ok "tdd は検証済みevidenceを標準根拠、直接探索を例外へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
-grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionを読むtaskには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq 'validatorのstdoutを改変せず渡し' "$SCENARIO_FLOW" && grep -Fq 'named project agent `implementer`' "$SCENARIO_FLOW" && ok "共通フローはシナリオ承認・単一claim調査・artifact handoffを固定" || ng "共通フローのシナリオ・テスト・artifact責務が不正"
+grep -Fq '## 1. シナリオを一括承認する' "$SCENARIO_FLOW" && grep -Fq 'ユーザーが明示的に承認するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionを読むtaskには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq 'validatorのstdoutを改変せず渡し' "$SCENARIO_FLOW" && grep -Fq '`fork_turns: "none"`' "$SCENARIO_FLOW" && grep -Fq '`reasoning_effort: "max"`' "$SCENARIO_FLOW" && grep -Fq 'generic agentへ「named implementer」と名乗らせて代用しない' "$SCENARIO_FLOW" && grep -Fq 'child agent IDを保持' "$SCENARIO_FLOW" && grep -Fq 'waitのreceiverが空' "$SCENARIO_FLOW" && ok "共通フローはfreshなLuna max実装・artifact handoffを固定" || ng "共通フローのsubagent起動またはartifact責務が不正"
 grep -Fq '半年後に負債にならないかを必ずレビュー' "$SCENARIO_FLOW" && grep -Fq '関数ジャンプ' "$SCENARIO_FLOW" && grep -Fq 'YAGNI' "$SCENARIO_FLOW" && grep -Fq '`filter().map()`' "$SCENARIO_FLOW" && grep -Fq '`reduce()`' "$SCENARIO_FLOW" && grep -Fq '多少冗長でも局所的に理解できる' "$SCENARIO_FLOW" && ok "上位モデルは半年後の負債と可読性を必須レビュー" || ng "上位モデルの保守性・可読性レビュー契約が不足"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない' "$SCENARIO_FLOW" && grep -Fq '`.jsx` / `.tsx` componentとReact hookは隣接unit testの必須対象外' "$REPO/rules/typescript/tdd-pattern.md" && grep -Fq '*/hooks/*|*/use[A-Z]*.ts' "$REPO/hooks/shell/require-test.sh" && ok "componentとReact hookはunit test必須対象外" || ng "componentまたはReact hookのtest除外が不正"
@@ -392,7 +393,11 @@ jq -n \
   --arg evidence_blob "$(git hash-object "$IMPLEMENTATION_TASK_DIR/evidence.md")" \
   '{mode:"survey",task_id:"implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
   > "$IMPLEMENTATION_TASK_DIR/result.json"
-IMPLEMENTATION_REQUEST=$(jq -cn '{version:1,scope:"implementation-check",instruction:"承認済みS1を実装する",worker_tasks:[{task_id:"implementation-survey",result:".claude/tmp/worker/implementation-survey/result.json",report:".claude/tmp/worker/implementation-survey/report.md",evidence:".claude/tmp/worker/implementation-survey/evidence.md"}],scenarios:["S1"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/rules.ts"]}')
+mkdir -p tests/approved
+printf 'test fixture\n' > tests/approved/implementation-flow.test.ts
+git add tests/approved/implementation-flow.test.ts
+git commit -qm "test: implementation requestのtest fixture"
+IMPLEMENTATION_REQUEST=$(jq -cn '{version:2,action:"implement",scope:"implementation-check",spec:null,implementation_instruction:"承認済みS1を初回実装する",worker_tasks:[{task_id:"implementation-survey",result:".claude/tmp/worker/implementation-survey/result.json",report:".claude/tmp/worker/implementation-survey/report.md",evidence:".claude/tmp/worker/implementation-survey/evidence.md"}],approved_scenarios:[{id:"S1",contract:"入力が有効な場合に期待値を返す"}],test_paths:["tests/approved/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/rules.ts"]}')
 if bash "$CS" implementation-check -- src/rules.ts > implementation-capture.out 2>&1 && \
    bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" > implementation-request.out 2>&1 && \
    jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh activate implementation-check"}}' | bash ".claude/hooks/shell/protect-implementation-scope.sh" >/dev/null && \
@@ -402,26 +407,37 @@ else
   ng "implementation-scope: activate失敗"; cat implementation-capture.out implementation-activate.out
 fi
 IMPLEMENTATION_HOOK=".claude/hooks/shell/protect-implementation-scope.sh"
+REQUIRE_TEST_HOOK=".claude/hooks/shell/require-test.sh"
 ALLOW_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
+ALLOW_NON_ADJACENT_TEST=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$REQUIRE_TEST_HOOK")
+DENY_PARENT_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/untouched.ts")}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_BASH=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"git status --short"}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_SUBAGENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh deactivate implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
 ALLOW_PARENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh deactivate implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
-if [ -z "$ALLOW_EDIT" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ]; then
-  ok "implementation-scope: 許可fileだけを書込可としshellを拒否"
+if [ -z "$ALLOW_EDIT" ] && [ -z "$ALLOW_NON_ADJACENT_TEST" ] && [ "$(echo "$DENY_PARENT_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ]; then
+  ok "implementation-scope: 許可file・非隣接test mappingだけを認めshellを拒否"
 else
-  ng "implementation-scope: Claude hookのpath・shell境界が不正"
+  ng "implementation-scope: Claude hookのpath・shell境界が不正"; printf 'allow-edit=[%s]\nallow-test=[%s]\ndeny-parent-edit=[%s]\ndeny-edit=[%s]\ndeny-bash=[%s]\ndeny-deactivate=[%s]\nallow-deactivate=[%s]\n' "$ALLOW_EDIT" "$ALLOW_NON_ADJACENT_TEST" "$DENY_PARENT_EDIT" "$DENY_EDIT" "$DENY_BASH" "$DENY_SUBAGENT_DEACTIVATE" "$ALLOW_PARENT_DEACTIVATE"
 fi
 if bash "$CS" deactivate implementation-check > implementation-deactivate.out 2>&1; then ok "implementation-scope: 親だけがscopeを解除"; else ng "implementation-scope: deactivate失敗"; cat implementation-deactivate.out; fi
 MISSING_RED_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c 'del(.red)')
-EXEMPT_SOURCE_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c '.scenarios=[] | .red=null | .test_exemption={paths:.allowed_paths,reason:"不正な免除"}')
+EXEMPT_SOURCE_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c '.approved_scenarios=[] | .test_paths=[] | .red=null | .test_exemption={paths:.allowed_paths,reason:"不正な免除"}')
+LEGACY_SCENARIO_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c 'del(.action, .approved_scenarios, .implementation_instruction, .spec, .test_paths) | .version=1 | .instruction="S1を分類する" | .scenarios=["S1"]')
+printf 'ignored test fixture\n' > src/untracked.test.ts
+UNTRACKED_TEST_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c '.test_paths=["src/untracked.test.ts"]')
 if bash "$IMPLEMENTATION_VALIDATOR" "$MISSING_RED_REQUEST" > implementation-missing-red.out 2>&1; then
   ng "implementation request: Red欠落を許可"
 elif bash "$IMPLEMENTATION_VALIDATOR" "$EXEMPT_SOURCE_REQUEST" > implementation-invalid-exemption.out 2>&1; then
   ng "implementation request: 本体コードのtest免除を許可"
+elif bash "$IMPLEMENTATION_VALIDATOR" "$LEGACY_SCENARIO_REQUEST" > implementation-legacy-scenario.out 2>&1; then
+  ng "implementation request: actionもscenario契約もない旧schemaを許可"
+elif bash "$IMPLEMENTATION_VALIDATOR" "$UNTRACKED_TEST_REQUEST" > implementation-untracked-test.out 2>&1; then
+  ng "implementation request: 未追跡testをRed根拠として許可"
 else
-  ok "implementation request: Red欠落と不正test免除を起動前に拒否"
+  ok "implementation request: Red欠落・不正免除・旧schema・未追跡testを起動前に拒否"
 fi
+rm -f src/untracked.test.ts
 printf 'stale patch\n' > "$IMPLEMENTATION_TASK_DIR/candidate.patch"
 if bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" > implementation-candidate-patch.out 2>&1; then
   ng "implementation request: worker candidate.patch混入を許可"
@@ -1176,6 +1192,7 @@ if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
 [ -f .codex/agents/implementer.toml ] && grep -q '^model = "gpt-5.6-luna"$' .codex/agents/implementer.toml && grep -q '^model_reasoning_effort = "max"$' .codex/agents/implementer.toml && ok "bootstrap codex はimplementer定義を保持" || ng "bootstrap codex のimplementer定義が不正"
+grep -q '^default_subagent_model = "gpt-5.6-luna"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "max"$' .codex/config.toml && ok "bootstrap codex はsubagent既定をLuna maxへ固定" || ng "bootstrap codex のsubagent既定model・effortが不正"
 git config user.email tester@example.com
 git config user.name tester
 mkdir -p src
@@ -1194,7 +1211,11 @@ jq -n \
   --arg evidence_blob "$(git hash-object "$CODEX_TASK_DIR/evidence.md")" \
   '{mode:"survey",task_id:"codex-implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
   > "$CODEX_TASK_DIR/result.json"
-CODEX_IMPLEMENTATION_REQUEST=$(jq -cn '{version:1,scope:"codex-implementation",instruction:"承認済みS1を実装する",worker_tasks:[{task_id:"codex-implementation-survey",result:".codex/tmp/worker/codex-implementation-survey/result.json",report:".codex/tmp/worker/codex-implementation-survey/report.md",evidence:".codex/tmp/worker/codex-implementation-survey/evidence.md"}],scenarios:["S1"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/codex-implementation.ts"]}')
+mkdir -p tests/codex
+printf 'test fixture\n' > tests/codex/implementation-flow.test.ts
+git add tests/codex/implementation-flow.test.ts
+git commit -qm "test: Codex implementation request fixture"
+CODEX_IMPLEMENTATION_REQUEST=$(jq -cn '{version:2,action:"implement",scope:"codex-implementation",spec:null,implementation_instruction:"承認済みS1を初回実装する",worker_tasks:[{task_id:"codex-implementation-survey",result:".codex/tmp/worker/codex-implementation-survey/result.json",report:".codex/tmp/worker/codex-implementation-survey/report.md",evidence:".codex/tmp/worker/codex-implementation-survey/evidence.md"}],approved_scenarios:[{id:"S1",contract:"対象値を期待値へ変更する"}],test_paths:["tests/codex/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/codex-implementation.ts"]}')
 CODEX_IMPLEMENTATION_HOOK=".codex/hooks/shell/protect-implementation-scope.sh"
 if bash "$CODEX_CAPTURE_SCOPE" codex-implementation -- src/codex-implementation.ts > codex-implementation-capture.out 2>&1 && \
    bash "$CODEX_IMPLEMENTATION_VALIDATOR" "$CODEX_IMPLEMENTATION_REQUEST" > codex-implementation-request.out 2>&1 && \
@@ -1205,10 +1226,11 @@ else
   ng "codex implementation-scope: activate失敗"; cat codex-implementation-capture.out codex-implementation-activate.out
 fi
 CODEX_ALLOW_PATCH=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CIMPL1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+CODEX_DENY_PARENT_PATCH=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CPARENT1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
 CODEX_DENY_PATCH=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-untouched.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CIMPL1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
 CODEX_DENY_SUBAGENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CIMPL1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh deactivate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
 CODEX_ALLOW_PARENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CPARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh deactivate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
-if [ -z "$CODEX_ALLOW_PATCH" ] && [ "$(echo "$CODEX_DENY_PATCH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$CODEX_DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$CODEX_ALLOW_PARENT_DEACTIVATE" ]; then
+if [ -z "$CODEX_ALLOW_PATCH" ] && [ "$(echo "$CODEX_DENY_PARENT_PATCH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$CODEX_DENY_PATCH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$CODEX_DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$CODEX_ALLOW_PARENT_DEACTIVATE" ]; then
   ok "codex implementation-scope: apply_patchを許可fileへ限定"
 else
   ng "codex implementation-scope: apply_patch境界が不正"

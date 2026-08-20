@@ -15,10 +15,12 @@ RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 
 printf '%s' "$REQUEST" | jq -e '
   type == "object" and
-  (keys | sort) == ["allowed_paths", "instruction", "red", "scenarios", "scope", "test_exemption", "version", "worker_tasks"] and
-  .version == 1 and
+  (keys | sort) == ["action", "allowed_paths", "approved_scenarios", "implementation_instruction", "red", "scope", "spec", "test_exemption", "test_paths", "version", "worker_tasks"] and
+  .version == 2 and
+  .action == "implement" and
   (.scope | type == "string" and test("^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$")) and
-  (.instruction | type == "string" and test("[^[:space:]]")) and
+  (.implementation_instruction | type == "string" and test("[^[:space:]]")) and
+  (.spec == null or (.spec | type == "string" and test("^[^/].*") and (contains("..") | not))) and
   (.worker_tasks | type == "array" and length > 0) and
   (all(.worker_tasks[];
     type == "object" and
@@ -30,13 +32,21 @@ printf '%s' "$REQUEST" | jq -e '
   (.allowed_paths | unique | length) == (.allowed_paths | length) and
   (
     (.test_exemption == null and
-      (.scenarios | type == "array" and length > 0 and all(.[]; type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*$"))) and
+      (.test_paths | type == "array" and length > 0 and all(.[];
+        type == "string" and test("^[^/].*") and (contains("..") | not) and
+        test("(^|/)(test|tests|__tests__)/|\\.(test|spec)\\.|(^|/)(test_|spec_).+\\.|(_test|_spec)\\.[^/]+$"))) and
+      (.test_paths | unique | length) == (.test_paths | length) and
+      (.approved_scenarios | type == "array" and length > 0 and all(.[];
+        type == "object" and
+        (keys | sort) == ["contract", "id"] and
+        (.id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) and
+        (.contract | type == "string" and test("[^[:space:]]")))) and
       (.red | type == "object" and (keys | sort) == ["command", "reason", "status"] and
         (.command | type == "string" and test("[^[:space:]]")) and
         (.status | type == "number" and floor == . and . > 0) and
         (.reason | type == "string" and test("[^[:space:]]"))))
     or
-    (.red == null and .scenarios == [] and
+    (.red == null and .approved_scenarios == [] and .test_paths == [] and
       (.test_exemption | type == "object" and (keys | sort) == ["paths", "reason"] and
         (.paths | type == "array" and length > 0 and all(.[];
           type == "string" and test("(^|/)schema\\.prisma$|(^|/)constants\\.(ts|js)$|(^|/)constants/"))) and
@@ -50,6 +60,18 @@ SCOPE_RECEIPT="$RECEIPT_DIR/$SCOPE.scope"
 [ -f "$SCOPE_RECEIPT" ] || die "polish対象の開始receiptが無い: $SCOPE"
 [ ! -e "$RECEIPT_DIR/implementation.active" ] || die "implementation requestはscope activate前に検証すること"
 [ "$(sed -n '1p' "$SCOPE_RECEIPT")" = "$REPOSITORY" ] || die "開始receiptのリポジトリが一致しない"
+
+SPEC=$(printf '%s' "$REQUEST" | jq -r '.spec // empty')
+if [ -n "$SPEC" ]; then
+  case "$SPEC" in .claude/prompt/*|.codex/prompt/*) ;; *) die "specが固定prompt path外にある" ;; esac
+  [ -f "$SPEC" ] || die "specが無い: $SPEC"
+fi
+
+while IFS= read -r TEST_PATH; do
+  [ -f "$TEST_PATH" ] || die "承認済みtestが無い: $TEST_PATH"
+  git ls-files --error-unmatch -- ":(literal)$TEST_PATH" >/dev/null 2>&1 || \
+    die "承認済みtestが未追跡またはignored: $TEST_PATH"
+done < <(printf '%s' "$REQUEST" | jq -r '.test_paths[]')
 
 REQUEST_PATHS=$(printf '%s' "$REQUEST" | jq -r '.allowed_paths[]')
 RECEIPT_PATHS=$(sed -n '3,$p' "$SCOPE_RECEIPT")

@@ -112,7 +112,7 @@ $bootstrap codex
 | 差分の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 初回実装後はworker・implementerへ戻さない |
 | ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認は共通の外部workerへ、初回実装は上位モデルが起動する専用implementerへ委任する。Claude Codeは`claude-sonnet-5` / `max`、Codexは`gpt-5.6-luna` / `max`をproject agent定義で固定する。上位モデルは設計判断、差分採否、レビュー、修正、テスト、Gitを担当する。workerの共通契約は`skills/worker/DELEGATION.md`を読む。
+コードベースの事実確認は共通の外部workerへ、初回実装は上位モデルが起動する専用implementerへ委任する。Claude Codeは`claude-sonnet-5` / `max`、Codexは`gpt-5.6-luna` / `max`を固定する。Codexはfresh contextで起動し、親会話の分類・レビュー依頼を継承させない。上位モデルは設計判断、差分採否、レビュー、修正、テスト、Gitを担当する。workerの共通契約は`skills/worker/DELEGATION.md`を読む。
 
 
 `errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → subagent-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜず、検証済みJSONへ分ける。implementerには設計または短い実装指示、Evidence、承認済みシナリオID、Red要約、許可pathを必須入力とする。初回実装後のレビューや修正は上位モデルが行う。

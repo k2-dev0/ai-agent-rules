@@ -49,7 +49,7 @@
 
 ## 2. [agent_name]がテストを書く
 
-承認済みシナリオと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。無視されたテスト資産は`git add -f`や`git add --force`を使わず、作業ツリー上で検証する。
+承認済みシナリオと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。承認済みtestが`.gitignore`や`.git/info/exclude`でignoredなら、作業ツリー上だけのRedを続行理由にしない。`git add -f`や`git add --force`で回避せず、実装requestを作る前に停止してignore規約の解消をユーザーへ求める。
 
 `.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない。画面挙動は既存のintegration / E2E境界で検証する。
 
@@ -68,20 +68,23 @@
 
 ```json
 {
-  "version": 1,
+  "version": 2,
+  "action": "implement",
   "scope": "機能名",
-  "instruction": "設計書または承認済みシナリオを含む短い実装指示",
+  "spec": ".codex/prompt/branch-example-prompt.md。errandではnull",
+  "implementation_instruction": "初回実装として行う変更を命令形で記述",
   "worker_tasks": [
     {"task_id": "task-id", "result": "result.jsonの相対path", "report": "report.mdの相対path", "evidence": "evidence.mdの相対path"}
   ],
-  "scenarios": ["S1"],
+  "approved_scenarios": [{"id": "S1", "contract": "前提、操作、期待結果の短い契約"}],
+  "test_paths": ["Redに使った追跡済みtestの相対path"],
   "red": {"command": "実行command", "status": 1, "reason": "期待した理由での失敗要約"},
   "test_exemption": null,
   "allowed_paths": ["変更を許可する個別file path"]
 }
 ```
 
-test除外時だけ`scenarios`を空配列、`red`を`null`とし、`test_exemption`を`{"paths":[...],"reason":"..."}`にする。次を実行し、成功時にstdoutへ返る正規化済みJSONをそのまま保持する。失敗したrequestを自然文で補ってsubagentを起動しない。
+`action`は常に`implement`とし、承認済みIDだけでなく各シナリオの短い契約を`approved_scenarios`へ入れる。`test_paths`は配置場所を推測せず、Redに使った追跡済みtestを列挙する。test除外時だけ`approved_scenarios`と`test_paths`を空配列、`red`を`null`とし、`test_exemption`を`{"paths":[...],"reason":"..."}`にする。次を実行し、成功時にstdoutへ返る正規化済みJSONをそのまま保持する。失敗したrequestを自然文で補ってsubagentを起動しない。
 
 ```bash
 bash [skills_root]/tdd/validate-implementation-request.sh '<request-json>'
@@ -93,7 +96,7 @@ bash [skills_root]/tdd/validate-implementation-request.sh '<request-json>'
 bash [skills_root]/polish/capture-scope.sh activate <scope名>
 ```
 
-Claude Codeではproject agent `implementer`、Codexではnamed project agent `implementer`を明示して起動する。generic agentへ置き換えない。validatorのstdoutを改変せず渡し、権限・停止条件は各implementer定義を正とする。
+Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動し、`.codex/agents/implementer.toml`を最初に読ませる。full-history forkは禁止する。generic agentへ「named implementer」と名乗らせて代用しない。spawnが返したchild agent IDを保持し、IDが空、waitのreceiverが空、または起動表示が`gpt-5.6-luna max`でなければ実装成功にせず、直ちに中断してscopeを解除する。validatorのstdoutを改変せず渡し、先頭に「これは分類・レビューではなく初回実装である。必要なartifactを読んで許可pathを変更せよ」とだけ付ける。
 
 subagentの完了・中断を確認したら、成功失敗にかかわらず、親が次を実行してscopeを解除する。active中に親がコード変更やshell実行を並行しない。
 
@@ -105,11 +108,11 @@ bash [skills_root]/polish/capture-scope.sh deactivate <scope名>
 
 実装subagentがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告した場合は[agent_name]が処理する。
 
-- 許可pathがすべてcleanで、追加surveyにより一意に解決できる: 必要なsurvey後にStep 4を一度だけ再実行する
+- 許可pathがすべてcleanで、追加surveyにより一意に解決できる: 必要なsurvey後に同じJSONをvalidatorへ再度通し、activateから一度だけ再実行する。deactivate済みのrequest receiptは再利用できない
 - 非ブロッキングな改善案: 記録して続行する
 - 新しい設計判断またはシナリオ変更が必要: Step 1へ戻す
 
-実装subagentが一部でも変更した後は再委任しない。テスト・設計の編集権と決定権は与えない。
+`Outcome: implemented`でも許可pathの実差分が0なら実装失敗として扱う。`Outcome: consultation_required`または説明・分類だけを返した場合は相談として処理し、実装成功に数えない。実装subagentが一部でも変更した後は再委任しない。テスト・設計の編集権と決定権は与えない。
 
 ## 6. 実装差分を検証する
 

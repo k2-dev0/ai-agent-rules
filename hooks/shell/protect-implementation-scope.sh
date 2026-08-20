@@ -49,6 +49,10 @@ case "$TOOL" in
   *) exit 0 ;;
 esac
 
+[ -f "$OWNER_FILE" ] || hook_deny "実装scopeをactivateした親sessionを確認できません。"
+[ "$(sed -n '1p' "$OWNER_FILE")" != "$(hook_session_id)" ] || \
+  hook_deny "実装scopeがactiveな間は親sessionもコードを変更できません。専用implementerの完了後にdeactivateしてください。"
+
 FOUND=false
 while IFS= read -r FILE; do
   [ -n "$FILE" ] || continue
