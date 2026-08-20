@@ -1,7 +1,7 @@
 interface:
   display_name: "errand"
-  short_description: "設計書なしでシナリオ承認からRed・Greenまで完了"
-  default_prompt: "$errand を使い、設計書なしでworker調査、シナリオ承認、テスト、専用subagent初回実装、Greenまで進めてください。"
+  short_description: "設計書なしでtestシナリオ選択からRed・Greenまで完了"
+  default_prompt: "$errand を使い、設計書なしでworker調査、testシナリオ候補の提示と選択、テスト、専用subagent初回実装、Greenまで進めてください。"
 
 policy:
   allow_implicit_invocation: false

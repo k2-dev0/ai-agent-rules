@@ -25,8 +25,8 @@ ai-agent-rules/
 │   ├── cowlick/            # 機能ごとの設計書を prompt/ へ直接作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
 │   ├── worker/             # 下位モデルを隔離実行するprovider非依存の共通基盤
-│   ├── tdd/                # シナリオ承認後、テスト・委任実装・レビューを連続実行
-│   ├── errand/             # 設計書なしでシナリオ承認・Red・委任実装・Greenを実行
+│   ├── tdd/                # testシナリオ選択後、テスト・委任実装・レビューを連続実行
+│   ├── errand/             # 設計書なしでtestシナリオ選択・Red・委任実装・Greenを実行
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
 │   ├── polish/             # 開始scope内の実変更pathだけを整形・静的検査・ネスト確認
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
@@ -125,7 +125,7 @@ timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKI
 
 task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
 
-`errand`は対象ファイルが未実装、複数、または対応テストが未作成であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。公開挙動を一意に決められるならシナリオ承認後に必要なテストを作り、Redから実装へ進む。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
+`errand`は対象ファイルが未実装、複数、または対応テストが未作成であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。公開挙動を一意に決められるならテストシナリオ候補を提示し、ユーザーが選択したものだけをテストへ変換してRedから実装へ進む。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
 
 事前にOpenCodeをインストールし、専用のOpenRouter API keyを環境変数へ設定する。
 
@@ -143,7 +143,7 @@ implementerは親とworktreeを共有する。親はworker artifact、全要件�
 
 隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
-テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。承認済みtest_scenariosからテスト内容を一意に解決できない場合だけ、ユーザーへテストシナリオ承認を求め直す。実装範囲は設計書またはユーザー依頼を正とする。
+テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。選択済みtest_scenariosからテスト内容を一意に解決できない場合だけ、候補と修正点をユーザーへ再提示して選択を求める。実装範囲は設計書またはユーザー依頼を正とする。
 
 ## 注意
 

@@ -27,9 +27,11 @@
 
 初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 
-## 1. テストシナリオを一括承認する
+## 1. テストシナリオ候補をまとめて提示する
 
-[agent_name]が要求根拠と調査パケットから、今回テストする正常系、境界値、異常系、副作用、回帰リスクを選び、各テストシナリオの前提・操作・期待結果だけを一括提示する。実装要件や実装要否を提案・再分類しない。既存テストを正解として盲目的に模倣せず、ユーザーが明示的に承認するまでファイルを変更しない。
+[agent_name]が要求根拠と調査パケットから、今回テストする正常系、境界値、異常系、副作用、回帰リスクを候補として選び、各テストシナリオの前提・操作・期待結果だけをまとめて提示する。実装要件や実装要否を提案・再分類しない。既存テストを正解として盲目的に模倣せず、どの候補を採用・不採用・修正するかはユーザーが決める。選択が確定するまでファイルを変更しない。
+
+候補の末尾では「採用するシナリオ、外すシナリオ、修正点を指定してください。」と尋ねる。「このNシナリオを一括承認してください」「承認後、テスト作成へ進みます」のように全件採用を既定または要求する言い方をしない。ユーザーが明示的に全件採用を選んだ場合だけ、候補全件を`test_scenarios`へ入れる。
 
 ユーザーがシナリオを「不要」とした場合、それはそのテストを作らないという意味だけに限定する。承認されなかった、削除された、または統合されたテストシナリオを、設計書・ユーザー依頼・`implementation_instruction`にある実装要件を省略する根拠にしてはならない。実装範囲を変えるには設計書またはユーザー依頼自体の明示的な変更が必要である。
 
@@ -39,9 +41,9 @@
 - シナリオを追加、削除、統合する
 - 検証対象の責務や公開挙動を変える
 
-承認済みtest_scenariosを忠実に表すためのimport、型、構文、テスト構造の修正は再承認しない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
+選択済みtest_scenariosを忠実に表すためのimport、型、構文、テスト構造の修正は再選択を求めない。新しいテストが必要であることだけを理由に停止しない。要求から公開挙動を一意に決められず、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
-次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、シナリオ承認も省略する。実装subagentへの入力には除外pathと理由を明記する。
+次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず、テストシナリオ候補の提示も省略する。実装subagentへの入力には除外pathと理由を明記する。
 
 - `schema.prisma`
 - basenameが`constants.ts`または`constants.js`のfile
@@ -51,7 +53,7 @@
 
 ## 2. [agent_name]がテストを書く
 
-承認済みtest_scenariosと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。`.gitignore`や`.git/info/exclude`で意図的にignoredなtestはローカルのRedとして使い、追跡を求めない。`git add -f`や`git add --force`でignore規約を迂回しない。追跡済みでもignore対象でもない野良の未追跡testだけを不正として停止する。
+選択済みtest_scenariosと調査パケットをテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。`.gitignore`や`.git/info/exclude`で意図的にignoredなtestはローカルのRedとして使い、追跡を求めない。`git add -f`や`git add --force`でignore規約を迂回しない。追跡済みでもignore対象でもない野良の未追跡testだけを不正として停止する。
 
 `.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない。画面挙動は既存のintegration / E2E境界で検証する。
 
@@ -143,19 +145,19 @@ subagentの自己申告ではなく、共有worktreeの実際の差分を正と�
 
 | 条件 | 実行 |
 |---|---|
-| 承認済みtest_scenariosから作ったtest | 全件 |
+| 選択済みtest_scenariosから作ったtest | 全件 |
 | surveyが`direct-regression`として返した既存test | 全件 |
 | TypeScript / JavaScriptを変更 | 所属packageの既存typecheck。なければ`tsc -p <tsconfig> --noEmit` |
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-承認済みtest_scenariosから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、設計書またはユーザー依頼の全要件へ合わせる本体コード修正を直接行う。通常の修正をworkerまたは実装subagentへ再委任しない。テストシナリオを変える必要が出た場合だけStep 1へ戻る。
+選択済みtest_scenariosから作ったtestが無い場合、test除外pathのために既存testを探索・実行しない。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、設計書またはユーザー依頼の全要件へ合わせる本体コード修正を直接行う。通常の修正をworkerまたは実装subagentへ再委任しない。テストシナリオを変える必要が出た場合だけStep 1へ戻る。
 
 ## 8. 失敗をscopeに帰属させる
 
 test、typecheck、lint、Prisma検証の終了codeだけで今回の成否を決めず、各diagnosticを次へ分類する。
 
-- `scope-related`: 承認済みtest_scenariosの対象test、実変更path自体のdiagnostic、または変更した公開型・export・契約が原因と確認できるcallerの失敗
+- `scope-related`: 選択済みtest_scenariosの対象test、実変更path自体のdiagnostic、または変更した公開型・export・契約が原因と確認できるcallerの失敗
 - `unrelated`: 実変更pathと因果関係がない既存失敗、今回作成・変更していないignored / untracked test、checkout前のbranchの残留testが消えた実装を参照する失敗
 - `uncertain`: 診断情報だけで因果関係を確定できない失敗
 

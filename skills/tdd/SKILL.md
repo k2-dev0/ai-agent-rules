@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚をworkerによる調査、専用subagentによる初回実装、上位モデルのシナリオ承認・テスト・レビュー・修正、polishまで実行するときに使う。
+description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚をworkerによる調査、ユーザーによるテストシナリオ選択、専用subagentによる初回実装、上位モデルのテスト・レビュー・修正、polishまで実行するときに使う。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 hooks:
@@ -26,7 +26,7 @@ hooks:
 | 対象 | [agent_name] | worker | implementer |
 |---|---|---|---|
 | テストシナリオ設計 | 可 | 禁止。既存テストの事実報告だけ可 | 禁止 |
-| テスト資産の変更 | 承認済みtest_scenarios内だけ可 | 禁止 | 禁止 |
+| テスト資産の変更 | ユーザーが選択したtest_scenarios内だけ可 | 禁止 | 禁止 |
 | 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 | 禁止 |
 | 本体コード、schema、rules、既存テスト基盤、同型実装の探索 | fallback条件成立後、または具体的疑義の限定検証だけ可 | 読み取り専用で可 | 許可pathと明示された根拠だけ可 |
 | 許可された本体コードと`schema.prisma`の初回実装 | subagentが利用不能またはcleanな再実行も失敗した場合だけ可 | 禁止 | 可 |
@@ -101,11 +101,11 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 
 ## 完了報告
 
-- 承認済みtest_scenariosのGreen / `scope fail`、またはtest除外を報告済み
+- 選択済みtest_scenariosのGreen / `scope fail`、またはtest除外を報告済み
 - 共通フローとpolishの各結果がscopeへ帰属済み
 - [agent_name]が差分をレビュー済み
 - 追跡対象の変更が1ファイルずつコミット済み
 - 無視された対象変更は作業ツリー上で検証済みで、未コミット理由を完了報告へ含めた
 - 検証結果の報告後に完了マークの判断をユーザーへ委ね、明示的に依頼された場合だけindexを更新した
 
-対象設計書、承認済みtest_scenarios、Red、Green、workerのsurvey / nesting task-id、implementerの相談・差分採否理由、polish結果、コミット、indexの残件数を完了報告へ含める。
+対象設計書、選択済みtest_scenarios、Red、Green、workerのsurvey / nesting task-id、implementerの相談・差分採否理由、polish結果、コミット、indexの残件数を完了報告へ含める。

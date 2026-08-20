@@ -1,6 +1,6 @@
 ---
 name: errand
-description: "ユーザーが $errand を明示し、設計書を作らず、既存パターンから一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、worker調査、シナリオ承認、テスト、Red、専用subagent初回実装、Greenまで完了したいときだけ使う。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
+description: "ユーザーが $errand を明示し、設計書を作らず、既存パターンから一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、worker調査、テストシナリオ選択、テスト、Red、専用subagent初回実装、Greenまで完了したいときだけ使う。複数ファイルを扱えるが、新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
 hooks:
@@ -13,9 +13,9 @@ hooks:
 
 ## 目的
 
-設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象path・完了条件を一意に確定できる実装を、`survey → scenario → red → subagent-green → review-green`で完了する。新しいテストが必要でも停止せず、[agent_name]がシナリオを設計してユーザー承認後にテストを書く。workerは読み取り調査、implementerは制限された初回実装、上位モデルは要件の縮約、シナリオ・テスト、許可path、差分の採否・修正、検証、Gitを担当する。
+設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・対象path・完了条件を一意に確定できる実装を、`survey → scenario → red → subagent-green → review-green`で完了する。新しいテストが必要でも停止せず、[agent_name]がテストシナリオ候補を提示し、ユーザーが選択したものだけをテストへ変換する。workerは読み取り調査、implementerは制限された初回実装、上位モデルは要件の縮約、シナリオ・テスト、許可path、差分の採否・修正、検証、Gitを担当する。
 
-開始時に[シナリオ駆動の共通実装フロー](../tdd/SCENARIO_FLOW.md)を全文読み、調査パケット、シナリオ承認、Red、初回実装、Greenの正本として従う。
+開始時に[シナリオ駆動の共通実装フロー](../tdd/SCENARIO_FLOW.md)を全文読み、調査パケット、テストシナリオ選択、Red、初回実装、Greenの正本として従う。
 
 ## 初回実装と修正の境界
 
@@ -50,7 +50,7 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
    - 同型実装から置き換える識別子・値の対応
    - cleanな本体コード・schema・テスト資産の候補path一覧
    - 共通フローで使う既存の検証command
-4. 許可する本体コードと`schema.prisma`を次でscopeへ固定する。その後、共通フローのStep 1〜3を実行し、[agent_name]がシナリオを一括提示して明示承認を得た後、必要なテストを作成してRedを確認する。test除外pathだけの変更は共通フローの例外に従う。
+4. 許可する本体コードと`schema.prisma`を次でscopeへ固定する。その後、共通フローのStep 1〜3を実行し、[agent_name]がテストシナリオ候補をまとめて提示してユーザーが選択した後、選択されたものだけをテストへ変換してRedを確認する。test除外pathだけの変更は共通フローの例外に従う。
    ```bash
    bash [skills_root]/polish/capture-scope.sh <scope名> -- <相対path>...
    ```
@@ -62,4 +62,4 @@ workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実
 
 ## 完了報告
 
-依頼、承認済みtest_scenarios、Red、Green、workerのsurvey task-id、implementerの結果、許可path、実装差分の採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。
+依頼、選択済みtest_scenarios、Red、Green、workerのsurvey task-id、implementerの結果、許可path、実装差分の採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。
