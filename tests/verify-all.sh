@@ -1349,6 +1349,12 @@ else
 fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
 [ "$(jq '[.hooks.PreToolUse[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 読み取り検索の正規化hookをBashへ配線" || ng "codex: 読み取り検索の正規化hookが未配線"
+[ "$(jq '[.hooks.PermissionRequest[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 安全な読み取りの承認省略hookをBashへ配線" || ng "codex: 読み取り承認省略hookが未配線"
+READONLY_PERMISSION_COMMAND='rg -n "requirements\.phone|requirements\.message|karadenResult\.status|console\.log\(filterRes|userId|prefix: \"karaden/\"" lambda/karaden/index.ts'
+READONLY_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command "$READONLY_PERMISSION_COMMAND" '{hook_event_name:"PermissionRequest",session_id:"CREAD1",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"opaque shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
+[ "$(printf '%s' "$READONLY_PERMISSION_OUT" | jq -r '.hookSpecificOutput.decision.behavior' 2>/dev/null)" = "allow" ] && ok "codex: quoteを含む単一rgの承認表示を省略" || ng "codex: 単一rgの承認省略失敗 out=[$READONLY_PERMISSION_OUT]"
+UNSAFE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PermissionRequest",session_id:"CREAD2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"rg foo src | sort",description:"opaque shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
+[ -z "$UNSAFE_PERMISSION_OUT" ] && ok "codex: 複合shellの承認判断へ介入しない" || ng "codex: 複合shellを誤って自動許可 out=[$UNSAFE_PERMISSION_OUT]"
 grep -Fq 'normalize_default_delegate_model' .codex/hooks/shell/readonly-search.sh && grep -Fq 'DELEGATE_MODEL=openrouter/minimax/minimax-m3' .codex/hooks/shell/readonly-search.sh && ok "codex: 既定workerモデルのwrapper化をhookで除去" || ng "codex: 既定workerモデルのwrapper化防止が不足"
 grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
 grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
