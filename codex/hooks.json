@@ -23,6 +23,18 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/readonly-search.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "^apply_patch$",
