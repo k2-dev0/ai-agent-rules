@@ -101,7 +101,7 @@ bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 bash [skills_root]/polish/capture-scope.sh activate <scope名>
 ```
 
-`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動し、最初に`bash .agents/skills/tdd/implementer-read.sh .codex/agents/implementer.toml`を実行させる。以後のCodexの読み取りも同scriptへ一回一pathで渡す。full-history forkとgeneric agentによる代用は禁止する。child agent IDが空、wait先が空、または起動表示が`gpt-5.6-luna max`でなければ中断してdeactivateする。validatorのstdoutを改変せず渡し、先頭に「これは分類・レビューではなく初回実装である。必要なartifactを読んで許可pathを変更せよ」とだけ付ける。
+`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動し、最初に`bash .agents/skills/tdd/implementer-read.sh '.codex/agents/implementer.toml'`を実行させる。以後のCodexの読み取りも同scriptへ一回一pathで渡し、pathはglobとして解釈されないよう必ず一重引用符で囲む。full-history forkとgeneric agentによる代用は禁止する。child agent IDが空、wait先が空、または起動表示が`gpt-5.6-luna max`でなければ中断してdeactivateする。validatorのstdoutを改変せず渡し、先頭に「これは分類・レビューではなく初回実装である。必要なartifactを読んで許可pathを変更せよ」とだけ付ける。
 
 subagentが実変更を完了したら親がscopeを解除する。
 
@@ -146,7 +146,7 @@ subagentが中断・無応答で、cleanな許可pathへの再実行も一度失
 bash [skills_root]/polish/capture-scope.sh handoff-to-parent <scope名>
 ```
 
-親は同じrequestの許可pathだけを実装し、完了後にdeactivateする。active中の読み取りは`implementer-read.sh`を使う。
+親は同じrequestの許可pathだけを実装し、完了後にdeactivateする。active中の読み取りは`implementer-read.sh`を使い、pathは必ず一重引用符で囲む。
 
 実装者差分の検証と必要な上位モデル修正またはfallback実装を終えた直後、Green、formatter、lint、polish、本体コードのcommitより先に、次の3項目だけを簡潔に報告する。
 
