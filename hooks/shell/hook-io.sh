@@ -121,6 +121,13 @@ hook_rewrite_command() {
   exit 0
 }
 
+# Codex の PermissionRequest で、検証済みの安全な操作を承認表示なしで続ける関数。
+hook_permission_allow() {
+  jq -n \
+    '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+  exit 0
+}
+
 # 人間の確認を要求する関数。Claude は ask 決定を返せるが、Codex の PreToolUse は
 # permissionDecision=ask を未サポートで、hook failure としてツール実行を継続してしまう。
 # Codex の確認操作は .codex/rules へ定義し、誤配線時は deny に倒して fail-open を防ぐ。
