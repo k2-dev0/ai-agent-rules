@@ -1,13 +1,22 @@
 #!/bin/bash
-# PreToolUse(Bash) hook: shell commandを単一の読み取り実行へ制限する。
+# PreToolUse / PermissionRequest(Bash) hook: shell commandを単一の読み取り実行へ制限する。
 # Why: pipelineごとの安全例外は組み合わせの数だけ増える。loop・条件分岐・pipeline・
 #      subshellは一律拒否し、危険optionもコマンド単体で拒否する。/dev/nullへの出力だけは
 #      検証済みの読み取りコマンドに限って許可し、不要な承認と不要な診断出力を避ける。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
+EVENT=$(hook_event_name)
+case "$EVENT" in ""|PreToolUse|PermissionRequest) ;; *) exit 0 ;; esac
 CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
+
+complete_safe_readonly_command() {
+  if [ "$EVENT" = "PermissionRequest" ]; then
+    hook_permission_allow
+  fi
+  hook_rewrite_command "$1"
+}
 
 has_safe_shell_syntax() {
   printf '%s\n' "$1" | awk '
@@ -112,7 +121,7 @@ normalize_default_delegate_model() {
   done
 }
 
-deny_dangerous_read_options() {
+dangerous_read_reason() {
   local command_without_quote_splits
 
   # shellが連結するquoteとbackslashを除いてからoptionを見る。例えば
@@ -121,23 +130,29 @@ deny_dangerous_read_options() {
 
   if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?find[[:space:]]' && \
      printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)([[:space:]]|$)'; then
-    hook_deny "findの削除・任意command実行・file出力actionは禁止です。読み取り専用の-printを使い、書き込みや削除は明示的な単一commandとして承認を受けてください。"
+    printf '%s\n' "findの削除・任意command実行・file出力actionは禁止です。読み取り専用の-printを使い、書き込みや削除は明示的な単一commandとして承認を受けてください。"
+    return 0
   fi
 
   if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?sort[[:space:]]' && \
      printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])(-o([^[:space:]]*)?|--output([=[:space:]]|$)|--compress-program([=[:space:]]|$))'; then
-    hook_deny "sortのfile出力・外部program実行optionは禁止です。sortは標準出力への読み取り専用実行に限定してください。"
+    printf '%s\n' "sortのfile出力・外部program実行optionは禁止です。sortは標準出力への読み取り専用実行に限定してください。"
+    return 0
   fi
 
   if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*([^[:space:]]*/)?rg[[:space:]]' && \
      printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])--pre([=[:space:]]|$)'; then
-    hook_deny "rg --preによる外部command実行は禁止です。rg単体で読める対象を検索してください。"
+    printf '%s\n' "rg --preによる外部command実行は禁止です。rg単体で読める対象を検索してください。"
+    return 0
   fi
 
   if printf '%s\n' "$command_without_quote_splits" | grep -Eq '^[[:space:]]*git[[:space:]]+(diff|log|show)([[:space:]]|$)' && \
      printf '%s\n' "$command_without_quote_splits" | grep -Eq -- '(^|[[:space:]])--output([=[:space:]]|$)'; then
-    hook_deny "読み取り用git commandの--outputによるfile書き込みは禁止です。標準出力で確認してください。"
+    printf '%s\n' "読み取り用git commandの--outputによるfile書き込みは禁止です。標準出力で確認してください。"
+    return 0
   fi
+
+  return 1
 }
 
 is_safe_readonly_command() {
@@ -237,14 +252,18 @@ normalize_safe_dev_null() {
     redirect_suffix=
   fi
 
-  hook_rewrite_command "$normalized_command$redirect_suffix"
+  complete_safe_readonly_command "$normalized_command$redirect_suffix"
 }
 
-deny_dangerous_read_options "$CMD"
+if DANGEROUS_REASON=$(dangerous_read_reason "$CMD"); then
+  [ "$EVENT" = "PermissionRequest" ] && exit 0
+  hook_deny "$DANGEROUS_REASON"
+fi
 
-normalize_default_delegate_model "$CMD"
+[ "$EVENT" = "PermissionRequest" ] || normalize_default_delegate_model "$CMD"
 
 if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
+  [ "$EVENT" = "PermissionRequest" ] && exit 0
   hook_deny "複数コマンドを shell loop・条件分岐・pipeline に集約してはいけません。Read/Grep/Glob または副作用を静的判定できる単一コマンドへ分割してください。複雑な処理はレビュー済み固定スクリプトへ移してください。"
 fi
 
@@ -254,7 +273,7 @@ normalize_safe_dev_null "$NORMALIZED_CMD"
 
 has_safe_shell_syntax "$CMD" || exit 0
 if is_safe_readonly_command "$NORMALIZED_CMD"; then
-  hook_rewrite_command "$NORMALIZED_CMD"
+  complete_safe_readonly_command "$NORMALIZED_CMD"
 fi
 
 exit 0
