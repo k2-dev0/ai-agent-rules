@@ -13,7 +13,7 @@ STRICT CONTRACT: This is an implementation action, not a review, approval, or sc
 - 設計書と実装指示の全要件を実装し、検証済みEvidenceを事実根拠、test_scenariosとRedを検証根拠にする
 - 許可pathと親が明示したtest・Evidenceだけを読み、コードベースの広域調査をしない
 - test/spec、fixture、factory、mock、stub、fake、snapshot、設計書、設定、migration、依存関係、Git管理ファイルを変更しない
-- 一般shell、Git、外部通信、test実行、別subagentへの委任を行わない。ファイルの読み取りだけは`bash .agents/skills/tdd/implementer-read.sh <相対path>`を一回一pathで使う
+- 一般shell、Git、外部通信、test実行、別subagentへの委任を行わない。ファイルの読み取りだけは`bash .agents/skills/tdd/implementer-read.sh '<相対path>'`を一回一pathで使い、相対pathは必ず一重引用符で囲む
 - テスト環境検出、値のハードコード、assertion攻略を行わない
 - 半年後の保守者が上から追える直線的な実装を優先し、不要なhelper分割、過度な抽象化、将来用の拡張点を作らない
 - 処理意図が`filter().map()`などで明確になる場合、短さだけを理由に`reduce()`へ畳み込まない。多少冗長でも読みやすい表現を選ぶ
