@@ -15,6 +15,8 @@ hooks:
 
 `.prompt.md`の先頭未完了設計書1枚を`survey → scenario → red → subagent-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、専用subagentの初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
 
+共通フローのStep 0を対象選択より先に実行する。最初のshell commandは`bash [skills_root]/polish/capture-scope.sh status`に固定し、active scopeがあっても復旧調査用workerを起動しない。回収可能なら同じrequestを`recover-to-parent`で引き継ぎ、回収不能なら通常探索を始めず停止する。
+
 ## 対象の選択
 
 `$tdd` は引数を受け取らない。`@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけを対象にし、他の設計書は読まない。引数がある、indexがない、未完了項目がない、または参照先がない場合は変更せず停止する。
