@@ -44,15 +44,33 @@ SESSION=$(hook_session_id)
 [ -n "$SESSION" ] || hook_deny "実装scopeのsessionを取得できません。"
 
 is_implementer_read_command() {
+  local prefix
+  local quoted_path
+  local relative_path
+
   case "$1" in
-    "bash .claude/skills/tdd/implementer-read.sh "*|\
-    "bash .agents/skills/tdd/implementer-read.sh "*) ;;
+    "bash .claude/skills/tdd/implementer-read.sh "*)
+      prefix="bash .claude/skills/tdd/implementer-read.sh " ;;
+    "bash .agents/skills/tdd/implementer-read.sh "*)
+      prefix="bash .agents/skills/tdd/implementer-read.sh " ;;
     *) return 1 ;;
   esac
-  case "$1" in
-    *$'\n'*|*$'\r'*|*$'\t'*|*' '*[\;\&\|\`\<\>\(\)\{\}\$\\\"\']*) return 1 ;;
+
+  quoted_path=${1#"$prefix"}
+  case "$quoted_path" in
+    \'*\') ;;
+    *) return 1 ;;
   esac
-  [ "$(printf '%s\n' "$1" | awk '{ print NF }')" -eq 3 ]
+  relative_path=${quoted_path#\'}
+  relative_path=${relative_path%\'}
+
+  # 外側の一組だけをshell quoteとして認める。内側は単一の正規化済み相対pathに限定する。
+  case "$relative_path" in
+    ""|.|/*|./*|../*|*/../*|*/..|*//*|*':'*|*'?'*|*'*'*|*' '*|\
+    *$'\n'*|*$'\r'*|*$'\t'*|*\'*|*'"'*|*';'*|*'&'*|*'|'*|*'`'*|\
+    *'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'$'*|*'\'*) return 1 ;;
+  esac
+  [ "$quoted_path" = "'$relative_path'" ]
 }
 
 if [ "$TOOL" = "Bash" ]; then
