@@ -5,12 +5,25 @@ exec 2>/dev/null
 
 REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel 2>/dev/null) || \
   hook_deny "実装scopeのリポジトリを解決できません。"
-REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
-RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
-ACTIVE_DIR="$RECEIPT_DIR/implementation.active"
-ACTIVE_SCOPE="$ACTIVE_DIR/scope"
-ACTIVE_MODE="$ACTIVE_DIR/mode"
-OWNER_FILE="$RECEIPT_DIR/implementation.owner"
+SCOPE_STATE_LIBRARY=
+for CANDIDATE in \
+  "$REPOSITORY/.agents/skills/polish/implementation-scope-state.sh" \
+  "$REPOSITORY/.claude/skills/polish/implementation-scope-state.sh" \
+  "$REPOSITORY/skills/polish/implementation-scope-state.sh"; do
+  if [ -f "$CANDIDATE" ]; then
+    SCOPE_STATE_LIBRARY=$CANDIDATE
+    break
+  fi
+done
+[ -n "$SCOPE_STATE_LIBRARY" ] || hook_deny "実装scopeの状態判定libraryがありません。設定を再配布してください。"
+. "$SCOPE_STATE_LIBRARY"
+implementation_scope_init "$REPOSITORY"
+RECEIPT_DIR=$IMPLEMENTATION_RECEIPT_DIR
+ACTIVE_DIR=$IMPLEMENTATION_ACTIVE_DIR
+ACTIVE_SCOPE=$IMPLEMENTATION_ACTIVE_SCOPE
+ACTIVE_MODE=$IMPLEMENTATION_ACTIVE_MODE
+OWNER_FILE=$IMPLEMENTATION_OWNER_FILE
+RECOVERY_OWNER_FILE=$IMPLEMENTATION_RECOVERY_OWNER_FILE
 TOOL=$(hook_tool_name)
 
 if [ "$TOOL" = "Bash" ] && [ ! -d "$ACTIVE_DIR" ]; then
@@ -25,6 +38,14 @@ if [ "$TOOL" = "Bash" ] && [ ! -d "$ACTIVE_DIR" ]; then
 fi
 
 [ -d "$ACTIVE_DIR" ] || exit 0
+
+if [ "$TOOL" = "Bash" ]; then
+  case "$(hook_command)" in
+    "bash .claude/skills/polish/capture-scope.sh status"|\
+    "bash .agents/skills/polish/capture-scope.sh status") exit 0 ;;
+  esac
+fi
+
 [ -f "$ACTIVE_SCOPE" ] || hook_deny "実装scopeのactive markerが不完全です。親が復旧してください。"
 [ -f "$ACTIVE_MODE" ] || hook_deny "実装scopeのmode markerが不完全です。親が復旧してください。"
 
@@ -34,7 +55,7 @@ FEATURE=$(sed -n '2p' "$ACTIVE_SCOPE")
 [ -n "$FEATURE" ] || hook_deny "実装scopeの機能名が空です。"
 MODE=$(sed -n '1p' "$ACTIVE_MODE")
 case "$MODE" in
-  subagent|parent-fallback) ;;
+  subagent|parent-fallback|orphaned) ;;
   *) hook_deny "実装scopeのmodeが不正です。親が復旧してください。" ;;
 esac
 
@@ -86,15 +107,28 @@ if [ "$TOOL" = "Bash" ]; then
       [ "$OWNER" = "$SESSION" ] || hook_deny "実装subagentはparent fallbackへhandoffできません。"
       [ "$MODE" = "subagent" ] || hook_deny "parent fallbackへのhandoffはsubagent modeから一度だけ実行できます。"
       exit 0 ;;
+    "bash .claude/skills/polish/capture-scope.sh recover-to-parent $FEATURE"|\
+    "bash .agents/skills/polish/capture-scope.sh recover-to-parent $FEATURE")
+      [ "$OWNER" != "$SESSION" ] || hook_deny "active scopeのowner自身はrecover-to-parentを実行できません。"
+      if [ "$MODE" != "orphaned" ] && ! implementation_scope_is_stale; then
+        hook_deny "active scopeのowner sessionは終了しておらず、leaseも失効していません。"
+      fi
+      TEMP_RECOVERY_OWNER="$RECOVERY_OWNER_FILE.tmp.$$"
+      printf '%s\n' "$SESSION" > "$TEMP_RECOVERY_OWNER" || hook_deny "復旧owner receiptを作成できません。"
+      mv "$TEMP_RECOVERY_OWNER" "$RECOVERY_OWNER_FILE" || hook_deny "復旧owner receiptを確定できません。"
+      exit 0 ;;
   esac
   is_implementer_read_command "$COMMAND" && exit 0
-  hook_deny "実装scopeがactiveな間のshellはimplementer-read.shと親のhandoff/deactivateだけ実行できます。"
+  hook_deny "実装scopeがactiveです。まずCodexでは 'bash .agents/skills/polish/capture-scope.sh status'、Claude Codeでは 'bash .claude/skills/polish/capture-scope.sh status' で状態を確認してください。許可されるshellはstatus、implementer-read.sh、ownerのhandoff/deactivate、回収可能時のrecover-to-parentだけです。"
 fi
 
 case "$TOOL" in
   Edit|Write|NotebookEdit|apply_patch) ;;
   *) exit 0 ;;
 esac
+
+[ "$MODE" != "orphaned" ] || \
+  hook_deny "owner sessionが終了した実装scopeです。statusを確認し、recover-to-parentで引き継いでください。"
 
 if [ "$MODE" = "subagent" ]; then
   [ "$OWNER" != "$SESSION" ] || \
@@ -132,4 +166,5 @@ while IFS= read -r FILE; do
 done < <(hook_file_paths)
 
 [ "$FOUND" = true ] || hook_deny "実装scope中の書き込み対象pathを取得できません。"
+implementation_scope_touch_lease || hook_deny "実装scopeのleaseを更新できません。"
 exit 0
