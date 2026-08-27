@@ -1159,6 +1159,8 @@ if [ "$MODE" != "smoke" ]; then
     [ -f "$PARENT_RESULT" ] || fail "repair parent result not found: $REPAIR_OF"
     [ "$(jq -r '.mode' "$PARENT_RESULT")" = "$MODE" ] || fail "repair parent mode does not match: $REPAIR_OF"
     [ "$(jq -r '.report_status' "$PARENT_RESULT")" = "complete" ] || fail "repair parent must have a complete report: $REPAIR_OF"
+    [ "$(jq -r '.evidence_status' "$PARENT_RESULT")" != "invalid" ] || \
+      fail "repair parent has invalid evidence; evidence selection requires supplement: $REPAIR_OF"
     [ "$(jq -r '.failure_class' "$PARENT_RESULT")" = "invalid_output" ] || \
       fail "repair parent must have formatting-only invalid_output; evidence selection requires supplement: $REPAIR_OF"
     [ "$(jq -r '.source_head' "$PARENT_RESULT")" = "$SOURCE_COMMIT" ] || fail "repair parent source snapshot does not match --source-ref: $REPAIR_OF"
@@ -1482,9 +1484,11 @@ if [ "$REPORT_STATUS" = "complete" ]; then
     EVIDENCE_STATUS="invalid"
     EVIDENCE_FAILURE_KIND="packet_mismatch"
   fi
-  if [ "$OUTPUT_CONTRACT_STATUS" != "valid" ]; then
+  if [ "$EVIDENCE_STATUS" = "invalid" ]; then
+    [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INVALID_EVIDENCE_STATUS"
+  elif [ "$OUTPUT_CONTRACT_STATUS" != "valid" ]; then
     [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INVALID_OUTPUT_STATUS"
-  elif [ "$EVIDENCE_STATUS" = "missing" ] || [ "$EVIDENCE_STATUS" = "invalid" ]; then
+  elif [ "$EVIDENCE_STATUS" = "missing" ]; then
     [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INVALID_EVIDENCE_STATUS"
   elif [ "$OUTCOME" != "fulfilled" ]; then
     [ "$FINAL_STATUS" -ne 0 ] || FINAL_STATUS="$INCOMPLETE_OUTCOME_STATUS"

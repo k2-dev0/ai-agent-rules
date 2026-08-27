@@ -155,7 +155,7 @@ else
   ng "worker survey validatorの単一claimまたは密度検証が不正"
 fi
 grep -Fq 'git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT"' "$WORKER_RUNNER" && grep -Fq -- '--source-ref is only valid for survey and research' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: revisionを固定し変更を機械拒否" || ng "workerのrevision snapshotまたは読み取り専用検査が不正"
-grep -Fq 'Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません' "$WORKER_RUNNER" && grep -Fq 'repair parent must have formatting-only invalid_output' "$WORKER_RUNNER" && grep -q 'EVIDENCE_FAILURE_KIND="range_too_wide"' "$WORKER_RUNNER" && grep -q 'NEXT_ACTION="supplement"' "$WORKER_RUNNER" && grep -q 'FAILURE_CLASS="step_limit_exhausted"' "$WORKER_RUNNER" && ok "worker再試行: 形式修正と意味上の証拠補完を機械分離" || ng "worker再試行のrepair・supplement分類が不正"
+grep -Fq 'Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません' "$WORKER_RUNNER" && grep -Fq 'repair parent has invalid evidence; evidence selection requires supplement' "$WORKER_RUNNER" && grep -Fq 'repair parent must have formatting-only invalid_output' "$WORKER_RUNNER" && grep -q 'EVIDENCE_FAILURE_KIND="range_too_wide"' "$WORKER_RUNNER" && grep -q 'NEXT_ACTION="supplement"' "$WORKER_RUNNER" && grep -q 'FAILURE_CLASS="step_limit_exhausted"' "$WORKER_RUNNER" && ok "worker再試行: 形式修正と意味上の証拠補完を機械分離" || ng "worker再試行のrepair・supplement分類が不正"
 grep -q '^  show)' "$WORKER_RUNNER" && grep -q 'show mode requires task id' "$WORKER_RUNNER" && grep -q "cannot extract delegated report" "$WORKER_RUNNER" && ok "外部ワーカー結果: report抽出と固定showを提供" || ng "外部ワーカー結果の固定取得経路が不正"
 if grep -q '^  prepare)' "$WORKER_RUNNER" && grep -q 'delegation contract ready' "$WORKER_RUNNER" && [ "$(OPENROUTER_API_KEY= bash "$WORKER_RUNNER" prepare)" = 'delegate: delegation contract ready' ]; then
   ok "外部ワーカーprepare: API key・外部通信なしの共通契約入口を提供"
@@ -960,6 +960,24 @@ if [ "$FAILED_CLAIM_REPAIR_STATUS" -eq 69 ] && [ "$(jq -r '.repair_attempt' "$FA
   ok "delegate-worker: 証拠を失ったrepair結果を採用せず限定surveyへ戻す"
 else
   ng "delegate-worker: 形式修正再失敗後のnext actionが不正"; cat delegate-failed-claim-repair.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 出力形式違反とEvidence上限超過が併発した\nEvidence:\n- `long-evidence.txt:1-1`\n- `long-evidence.txt:2-2`\n- `long-evidence.txt:3-3`\n- `long-evidence.txt:4-4`\n- `long-evidence.txt:5-5`\n- `long-evidence.txt:6-6`\n- `long-evidence.txt:7-7`\n- `long-evidence.txt:8-8`\n- `long-evidence.txt:9-9`\n- `long-evidence.txt:10-10`\n- `long-evidence.txt:11-11`\n- `long-evidence.txt:12-12`\n- `long-evidence.txt:13-13`\n- `long-evidence.txt:14-14`\n- `long-evidence.txt:15-15`\n- `long-evidence.txt:16-16`\n- `long-evidence.txt:17-17`\n- `long-evidence.txt:18-18`\n- `long-evidence.txt:19-19`\n- `long-evidence.txt:20-20`\n- `long-evidence.txt:21-21`\n- SEARCH:C1\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research "${DELEGATE_TIMEOUT_ARGS[@]}" compound-invalid-research spec.md > delegate-compound-invalid.out 2>&1
+COMPOUND_INVALID_STATUS=$?
+COMPOUND_INVALID_ROOT="$DELEGATE_REPO/.claude/tmp/worker/compound-invalid-research"
+if [ "$COMPOUND_INVALID_STATUS" -eq 68 ] && [ "$(jq -r '.output_contract_status' "$COMPOUND_INVALID_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.evidence_status' "$COMPOUND_INVALID_ROOT/result.json" 2>/dev/null)" = "invalid" ] && [ "$(jq -r '.evidence_failure_kind' "$COMPOUND_INVALID_ROOT/result.json" 2>/dev/null)" = "reference_limit" ] && [ "$(jq -r '.failure_class' "$COMPOUND_INVALID_ROOT/result.json" 2>/dev/null)" = "evidence_reference_limit" ] && [ "$(jq -r '.next_action' "$COMPOUND_INVALID_ROOT/result.json" 2>/dev/null)" = "supplement" ]; then
+  ok "delegate-worker: 出力形式違反よりEvidence選択違反を優先してsupplementへ分類"
+else
+  ng "delegate-worker: 複合エラーをformat repairへ誤分類"; cat delegate-compound-invalid.out
+fi
+COMPOUND_REPAIR_CALL_MARKER="$DELEGATE_REPO/compound-repair-call.marker"
+if PATH="$DELEGATE_BIN:$PATH" CURL_CALL_MARKER="$COMPOUND_REPAIR_CALL_MARKER" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" research "${DELEGATE_TIMEOUT_ARGS[@]}" --repair-of compound-invalid-research forbidden-compound-repair > delegate-forbidden-compound-repair.out 2>&1; then
+  ng "delegate-worker: invalid Evidenceを持つ複合エラーをrepair"
+elif [ ! -e "$COMPOUND_REPAIR_CALL_MARKER" ] && grep -Fq 'repair parent has invalid evidence; evidence selection requires supplement' delegate-forbidden-compound-repair.out; then
+  ok "delegate-worker: invalid Evidenceのrepairを外部実行前に拒否"
+else
+  ng "delegate-worker: 複合エラーrepairの起動前拒否が不正"; cat delegate-forbidden-compound-repair.out
 fi
 printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: evidenceが多すぎる\nEvidence:\n- `spec.md:1-1`\n- `spec.md:2-2`\n- `spec.md:3-3`\n- `spec.md:4-4`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
