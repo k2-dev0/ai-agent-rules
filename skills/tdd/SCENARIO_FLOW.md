@@ -13,6 +13,23 @@
 
 実装subagentへ許可できる変更先はcleanな本体コードと`schema.prisma`だけとする。test/spec、fixture、factory、mock、stub、fake、snapshot、golden file、Markdown、設定、依存関係、migration、Git管理ファイルは許可pathに含めない。
 
+## 0. 残留した実装scopeを先に処理する
+
+呼び出し直後、設計書・index・本体・worker artifactを読む前の最初のshell commandとして、次を単独実行する。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh status
+```
+
+`active: false`なら通常フローへ進む。`active: true`なら、状態確認のためにworkerやsubagentを起動せず、返却JSONだけで次を処理する。
+
+- `recoverable: false`: owner sessionまたは有効なleaseが残っている。通常探索、別scopeのactivate、推測した機能名でのdeactivateを行わず、`feature`、`mode`、`lease_age_seconds`を報告して停止する
+- `recoverable: true`: 返却された`feature`をそのまま使い、`bash [skills_root]/polish/capture-scope.sh recover-to-parent <feature>`を単独実行する
+  - `dirty_paths`が空: 同じsessionでdeactivateし、通常フローを先頭から開始する
+  - `dirty_paths`がある: active request、許可path、既存差分を捨てずparent-fallbackとして再開する。設計書選択、survey、シナリオ提示、テスト作成、Red、scope再取得、implementer再起動は繰り返さない。必要なrequest内artifactは`implementer-read.sh`で読み、許可pathの初回実装を親が完了してdeactivateした後、Step 6以降へ進む
+
+Codexで`SessionEnd`を受けたownerのscopeは即時に`orphaned`となる。Claude Codeまたは強制終了などで`SessionEnd`によるorphan化が行われなかったscopeは、許可済みの読み取り・書き込みで更新されるleaseが既定1時間失効した後だけ回収できる。回収時もrequestと差分は削除しない。
+
 ## 必須の調査パケット
 
 実装前のsurveyでは、共通委任契約のvalidatorを通るJSONをtask-idごとに渡す。各claimは一つの事実に保ち、同じsource refと候補file群を読むclaimだけを最大3件まで一つのpacketへまとめる。現在挙動、同型実装、schema、test、検証commandは別claimにし、file群が離れるものは別taskへ分ける。`test_absence`と旧revisionを読むtaskは単独にし、旧revisionには`--source-ref <revision>`を付ける。独立packetは最大3件を同時に起動する。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
