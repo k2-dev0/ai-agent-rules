@@ -2,6 +2,8 @@
 # active implementation requestに列挙された入力だけを、実装者と親へ読み出す。
 set -eu
 
+. "$(dirname "$0")/../polish/implementation-scope-state.sh"
+
 die() { echo "ERROR: $1" >&2; exit 1; }
 
 [ "$#" -eq 1 ] || die "usage: implementer-read.sh <相対path>"
@@ -9,15 +11,14 @@ command -v jq >/dev/null 2>&1 || die "jq が必要"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
 
 REPOSITORY=$(git rev-parse --show-toplevel)
-REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
-ACTIVE_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY/implementation.active"
-ACTIVE_REQUEST="$ACTIVE_DIR/request.json"
-ACTIVE_MODE="$ACTIVE_DIR/mode"
+implementation_scope_init "$REPOSITORY"
+ACTIVE_REQUEST=$IMPLEMENTATION_ACTIVE_REQUEST
+ACTIVE_MODE=$IMPLEMENTATION_ACTIVE_MODE
 PATH_TO_READ=$1
 
 [ -f "$ACTIVE_REQUEST" ] || die "activeなimplementation requestが無い"
 [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmodeが無い"
-case "$(sed -n '1p' "$ACTIVE_MODE")" in subagent|parent-fallback) ;; *) die "activeな実装scopeのmodeが不正" ;; esac
+case "$(sed -n '1p' "$ACTIVE_MODE")" in subagent|parent-fallback|orphaned) ;; *) die "activeな実装scopeのmodeが不正" ;; esac
 
 case "$PATH_TO_READ" in
   ""|.|/*|./*|../*|*/../*|*/..|*//*|*':'*|*'?'*|*'*'*|*$'\n'*|*$'\r'*|*$'\t'*)
@@ -48,4 +49,5 @@ case "$PATH_TO_READ" in
 esac
 
 [ "$ALLOWED" = true ] || die "implementation request外の読み取りpath: $PATH_TO_READ"
+implementation_scope_touch_lease || die "activeな実装scopeのleaseを更新できない"
 cat "$REPOSITORY/$PATH_TO_READ"
