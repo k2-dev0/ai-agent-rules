@@ -206,6 +206,7 @@ implementerは親とworktreeを共有する。親はworker artifact、全要件�
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
 | testの有無によるコード書き込み判定 | `hooks/shell/require-test.sh`。Claude Codeはtddのfrontmatter、Codexは常時配線と`session.sh`のmarkerでtdd中だけ執行 |
+| TDD実装scopeの所有・回収 | `hooks/shell/protect-implementation-scope.sh`、`hooks/shell/session.sh`、`skills/polish/capture-scope.sh`。Codexのowner終了時はrequestを保持したままorphan化し、新sessionは`status`後に`recover-to-parent`で引き継ぐ。Claude CodeまたはSessionEnd欠落時は1時間のlease失効後だけ回収可 |
 | 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
 | `.claude` / `.codex` / `.agents`の設定・skill自己改変防止（`prompt/`は直接編集可） | `hooks/shell/protect-config.sh` |
 | `.env` / `.env.*`の書き込み・削除防止 | `hooks/shell/protect-env.sh`。sandbox / permission profileとの二重層 |
