@@ -2,18 +2,23 @@
 # tdd が本体コードへ触る前にscopeを固定し、後から実変更pathだけを列挙する。
 set -eu
 
+. "$(dirname "$0")/implementation-scope-state.sh"
+
 FEATURE_RE='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
 
 die() { echo "ERROR: $1" >&2; exit 1; }
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
 REPOSITORY=$(git rev-parse --show-toplevel)
-REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
-RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
-ACTIVE_DIR="$RECEIPT_DIR/implementation.active"
-ACTIVE_SCOPE="$ACTIVE_DIR/scope"
-ACTIVE_MODE="$ACTIVE_DIR/mode"
-OWNER_FILE="$RECEIPT_DIR/implementation.owner"
+implementation_scope_init "$REPOSITORY"
+RECEIPT_DIR=$IMPLEMENTATION_RECEIPT_DIR
+ACTIVE_DIR=$IMPLEMENTATION_ACTIVE_DIR
+ACTIVE_SCOPE=$IMPLEMENTATION_ACTIVE_SCOPE
+ACTIVE_MODE=$IMPLEMENTATION_ACTIVE_MODE
+ACTIVE_REQUEST=$IMPLEMENTATION_ACTIVE_REQUEST
+ACTIVE_LEASE=$IMPLEMENTATION_ACTIVE_LEASE
+OWNER_FILE=$IMPLEMENTATION_OWNER_FILE
+RECOVERY_OWNER_FILE=$IMPLEMENTATION_RECOVERY_OWNER_FILE
 
 validate_path() {
   case "$1" in
@@ -47,6 +52,46 @@ read_scope_receipt() {
   git cat-file -e "$BASE^{commit}" >/dev/null 2>&1 || die "開始commitが存在しない: $BASE"
   git merge-base --is-ancestor "$BASE" HEAD || die "開始commitが現在HEADの祖先ではない"
 }
+
+if [ "${1:-}" = "status" ]; then
+  [ "$#" -eq 1 ] || die "usage: capture-scope.sh status"
+  if [ ! -d "$ACTIVE_DIR" ]; then
+    printf '{"active":false}\n'
+    exit 0
+  fi
+  [ -f "$ACTIVE_SCOPE" ] || die "activeな実装scopeのscope markerが無い"
+  [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmode markerが無い"
+  [ -f "$ACTIVE_REQUEST" ] || die "activeなimplementation requestが無い"
+  [ "$(sed -n '1p' "$ACTIVE_SCOPE")" = "$REPOSITORY" ] || die "active scopeのリポジトリが一致しない"
+  FEATURE=$(sed -n '2p' "$ACTIVE_SCOPE")
+  [[ "$FEATURE" =~ $FEATURE_RE ]] || die "active scopeの機能名が不正"
+  MODE=$(sed -n '1p' "$ACTIVE_MODE")
+  case "$MODE" in subagent|parent-fallback|orphaned) ;; *) die "active scopeのmodeが不正" ;; esac
+  LEASE_AGE=$(implementation_scope_lease_age) || die "active scopeのleaseを判定できない"
+  STALE_SECONDS=$(implementation_scope_stale_seconds) || die "POLISH_SCOPE_STALE_SECONDSが0以上の整数ではない"
+  STALE=false
+  [ "$LEASE_AGE" -lt "$STALE_SECONDS" ] || STALE=true
+  RECOVERABLE=$STALE
+  [ "$MODE" != "orphaned" ] || RECOVERABLE=true
+  DIRTY_PATHS='[]'
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    validate_path "$path"
+    if [ -n "$(git status --porcelain --untracked-files=all -- ":(literal)$path")" ]; then
+      DIRTY_PATHS=$(printf '%s' "$DIRTY_PATHS" | jq --arg path "$path" '. + [$path]') || die "変更pathをJSONへ変換できない"
+    fi
+  done < <(sed -n '4,$p' "$ACTIVE_SCOPE")
+  jq -n \
+    --arg repository "$REPOSITORY" \
+    --arg feature "$FEATURE" \
+    --arg mode "$MODE" \
+    --argjson lease_age_seconds "$LEASE_AGE" \
+    --argjson stale "$STALE" \
+    --argjson recoverable "$RECOVERABLE" \
+    --argjson dirty_paths "$DIRTY_PATHS" \
+    '{active:true,repository:$repository,feature:$feature,mode:$mode,lease_age_seconds:$lease_age_seconds,stale:$stale,recoverable:$recoverable,dirty_paths:$dirty_paths}'
+  exit 0
+fi
 
 if [ "${1:-}" = "activate" ]; then
   [ "$#" -eq 2 ] || die "usage: capture-scope.sh activate <機能名>"
@@ -92,6 +137,12 @@ if [ "${1:-}" = "activate" ]; then
     rmdir "$ACTIVE_DIR" 2>/dev/null || true
     die "検証済みimplementation requestをactive scopeへ移せない"
   fi
+  if ! implementation_scope_touch_lease; then
+    mv "$ACTIVE_REQUEST" "$REQUEST_RECEIPT" 2>/dev/null || true
+    rm -f "$ACTIVE_MODE" "$ACTIVE_SCOPE" "$ACTIVE_LEASE"
+    rmdir "$ACTIVE_DIR" 2>/dev/null || true
+    die "実装scopeのleaseを記録できない"
+  fi
   echo "activated: $FEATURE"
   exit 0
 fi
@@ -109,7 +160,39 @@ if [ "${1:-}" = "handoff-to-parent" ]; then
   TEMP_MODE="$ACTIVE_MODE.tmp.$$"
   printf 'parent-fallback\n' > "$TEMP_MODE" || die "parent fallback modeを書けない"
   mv "$TEMP_MODE" "$ACTIVE_MODE" || die "parent fallback modeを確定できない"
+  implementation_scope_touch_lease || die "parent fallbackのleaseを更新できない"
   echo "handed-off: $FEATURE parent-fallback"
+  exit 0
+fi
+
+if [ "${1:-}" = "recover-to-parent" ]; then
+  [ "$#" -eq 2 ] || die "usage: capture-scope.sh recover-to-parent <機能名>"
+  FEATURE=$2
+  [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
+  [ -f "$ACTIVE_SCOPE" ] || die "activeな実装scopeが無い"
+  [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmodeが無い"
+  [ -f "$ACTIVE_REQUEST" ] || die "activeなimplementation requestが無い"
+  [ -f "$RECOVERY_OWNER_FILE" ] || die "hookが発行した復旧owner receiptが無い"
+  [ "$(sed -n '1p' "$ACTIVE_SCOPE")" = "$REPOSITORY" ] || die "active scopeのリポジトリが一致しない"
+  [ "$(sed -n '2p' "$ACTIVE_SCOPE")" = "$FEATURE" ] || die "active scopeの機能名が一致しない"
+  MODE=$(sed -n '1p' "$ACTIVE_MODE")
+  case "$MODE" in
+    orphaned) ;;
+    subagent|parent-fallback)
+      implementation_scope_is_stale || die "active scopeのleaseは失効していない" ;;
+    *) die "active scopeのmodeが不正" ;;
+  esac
+  RECOVERY_OWNER=$(sed -n '1p' "$RECOVERY_OWNER_FILE")
+  [ -n "$RECOVERY_OWNER" ] || die "復旧owner receiptが空"
+  TEMP_MODE="$ACTIVE_MODE.tmp.$$"
+  printf 'parent-fallback\n' > "$TEMP_MODE" || die "parent fallback modeを書けない"
+  if ! mv "$RECOVERY_OWNER_FILE" "$OWNER_FILE"; then
+    rm -f "$TEMP_MODE"
+    die "復旧ownerを確定できない"
+  fi
+  mv "$TEMP_MODE" "$ACTIVE_MODE" || die "parent fallback modeを確定できない"
+  implementation_scope_touch_lease || die "復旧後のleaseを更新できない"
+  echo "recovered: $FEATURE parent-fallback"
   exit 0
 fi
 
@@ -121,8 +204,8 @@ if [ "${1:-}" = "deactivate" ]; then
   [ -f "$ACTIVE_MODE" ] || die "activeな実装scopeのmodeが無い"
   [ "$(sed -n '1p' "$ACTIVE_SCOPE")" = "$REPOSITORY" ] || die "active scopeのリポジトリが一致しない"
   [ "$(sed -n '2p' "$ACTIVE_SCOPE")" = "$FEATURE" ] || die "active scopeの機能名が一致しない"
-  case "$(sed -n '1p' "$ACTIVE_MODE")" in subagent|parent-fallback) ;; *) die "active scopeのmodeが不正" ;; esac
-  rm -f "$ACTIVE_DIR/request.json"
+  case "$(sed -n '1p' "$ACTIVE_MODE")" in subagent|parent-fallback|orphaned) ;; *) die "active scopeのmodeが不正" ;; esac
+  rm -f "$ACTIVE_REQUEST" "$ACTIVE_LEASE" "$RECOVERY_OWNER_FILE"
   rm "$ACTIVE_MODE" || die "active scopeのmodeを解除できない"
   rm "$ACTIVE_SCOPE" || die "active scopeを解除できない"
   rmdir "$ACTIVE_DIR" || die "active scope directoryを解除できない"
