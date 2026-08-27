@@ -15,8 +15,9 @@ workerへは`delegate.sh`だけを使い、`research`、`survey`、`nesting`以�
 
 ## 委任前の判断
 
-- `survey`は、一つの変更判断に必要な最小の事実だけを聞く。入口・入力・変換・保存・testなどを一つのclaimへ詰め込まない。
-- 旧revisionと現在を比較するなら別taskにする。依頼のJSON schema、CLI引数、timeoutはrunnerの検証に従う。
+- `survey`の各claimは、一つの変更判断に必要な最小の事実だけを聞く。入口・入力・変換・保存・testなどを一つのclaimへ詰め込まない。
+- 同じsource refと候補file群を読むclaimは最大3件まで一つのpacketへまとめる。異なるrevision、無関係なfile群、`test_absence`は別taskにする。
+- 独立packetは最大3件を同時に起動する。同じ調査の重複起動や、先行結果を必要とするsupplementの先行起動はしない。依頼のJSON schema、CLI引数、timeoutはrunnerの検証に従う。
 
 ## 結果の扱い
 

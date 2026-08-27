@@ -12,7 +12,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SURVEY_STEPS_PER_CLAIM="8"
 readonly SURVEY_FINALIZATION_STEPS="3"
 readonly SURVEY_OUTLINE_EXTRA_STEPS="4"
-readonly MAX_SURVEY_REQUEST_CLAIMS="1"
+readonly MAX_SURVEY_REQUEST_CLAIMS="3"
 readonly TIMEOUT_MINUTE_SECONDS="60"
 readonly TIMEOUT_TERM_GRACE_SECONDS="10"
 readonly SMOKE_HARD_TIMEOUT_MINUTES="1"
@@ -40,7 +40,7 @@ readonly MALFORMED_REPORT_MESSAGE="Delegated model returned malformed JSON event
 readonly MAX_EVIDENCE_REFERENCES="20"
 readonly RECOMMENDED_EVIDENCE_REFERENCES="12"
 readonly MAX_SURVEY_CLAIMS="$MAX_SURVEY_REQUEST_CLAIMS"
-readonly MAX_SURVEY_EVIDENCE_PER_CLAIM="3"
+readonly MAX_SURVEY_EVIDENCE_PER_CLAIM="4"
 readonly MAX_EVIDENCE_LINES_PER_REFERENCE="80"
 readonly MAX_EVIDENCE_TOTAL_LINES="400"
 readonly EVIDENCE_CONTEXT_LINES="8"
@@ -253,6 +253,14 @@ normalize_report_format() {
         claims_header_seen = 1
         next
       }
+      if ($0 ~ /^Outcome: (fulfilled|partial|blocked)### C1([: ]|$)/) {
+        marker = index($0, "### C1")
+        print substr($0, 1, marker - 1)
+        print "## Claims"
+        print substr($0, marker)
+        claims_header_seen = 1
+        next
+      }
     }
     first_line_seen && !claims_header_seen && /^## Claims$/ {
       claims_header_seen = 1
@@ -260,6 +268,13 @@ normalize_report_format() {
     first_line_seen && !claims_header_seen && /^### C1([: ]|$)/ {
       print "## Claims"
       claims_header_seen = 1
+    }
+    /^Claim: .*Evidence:[[:space:]]*$/ {
+      claim = $0
+      sub(/Evidence:[[:space:]]*$/, "", claim)
+      print claim
+      print "Evidence:"
+      next
     }
     /^Interpretation: .*Limitations: / && $0 !~ /\\nLimitations: / {
       marker = index($0, "Limitations: ")
@@ -283,19 +298,24 @@ normalize_report_format() {
   mv "$relative_evidence_path" "$normalized_path" || fail "cannot publish normalized evidence paths"
 
   awk -v maximum="$MAX_EVIDENCE_LINES_PER_REFERENCE" '
-    /^- `[^`]+:[1-9][0-9]*-[1-9][0-9]*`[[:space:]]*$/ {
+    /^- `[^`]+:[1-9][0-9]*(-[1-9][0-9]*)?`[[:space:]]*$/ {
       value = $0
       sub(/^- `/, "", value)
       sub(/`[[:space:]]*$/, "", value)
-      if (!match(value, /:[1-9][0-9]*-[1-9][0-9]*$/)) {
+      if (match(value, /:[1-9][0-9]*$/)) {
+        path = substr(value, 1, RSTART - 1)
+        start = substr(value, RSTART + 1) + 0
+        finish = start
+      } else if (match(value, /:[1-9][0-9]*-[1-9][0-9]*$/)) {
+        path = substr(value, 1, RSTART - 1)
+        range = substr(value, RSTART + 1)
+        split(range, bounds, "-")
+        start = bounds[1] + 0
+        finish = bounds[2] + 0
+      } else {
         print
         next
       }
-      path = substr(value, 1, RSTART - 1)
-      range = substr(value, RSTART + 1)
-      split(range, bounds, "-")
-      start = bounds[1] + 0
-      finish = bounds[2] + 0
       if (start > finish) {
         print
         next
@@ -378,13 +398,15 @@ claims_follow_contract() {
       next
     }
     /^- `[^`]+:[1-9][0-9]*-[1-9][0-9]*`[[:space:]]*$/ {
-      if (!claim_seen || phase != 2) invalid = 1
+      if (!claim_seen || (phase != 2 && phase != 3)) invalid = 1
       if (allow_search_evidence) invalid = 1
+      phase = 2
       evidence_count += 1
       next
     }
     /^- `SEARCH:C[0-9]+`[[:space:]]*$/ {
-      if (!claim_seen || phase != 2 || !allow_search_evidence) invalid = 1
+      if (!claim_seen || (phase != 2 && phase != 3) || !allow_search_evidence) invalid = 1
+      phase = 2
       evidence_count += 1
       next
     }
@@ -1295,7 +1317,7 @@ jq -cn \
 ' > "$TEMP_ROOT/opencode.json" || fail "cannot create OpenCode config"
 
 READ_ONLY_OUTPUT_CONTRACT='最終回答は次の形式だけを使ってください。
-STRICT OUTPUT RULES: Start the final response with `Outcome:`. Do not write any preamble. Use exactly the claim IDs present in the request; if the request has only C1, never create C2. Keep a cross-file flow inside one claim with up to three Evidence ranges. If Evidence satisfies done_when and answers the question, return `Outcome: fulfilled` and `Remaining: none`. An unimplemented target is not a reason for partial when the requested existing pattern or fact was found.
+STRICT OUTPUT RULES: Start the final response with `Outcome:`. Do not write any preamble. Use exactly the claim IDs present in the request; if the request has only C1, never create C2. Keep a cross-file flow inside one claim with up to four Evidence ranges. If Evidence satisfies done_when and answers the question, return `Outcome: fulfilled` and `Remaining: none`. An unimplemented target is not a reason for partial when the requested existing pattern or fact was found.
 1行目は Outcome: fulfilled、Outcome: partial、Outcome: blocked のどれか一つにしてください。区切り記号は出力しないでください。
 ## Claims
 事実ごとに ### C1, ### C2 と分け、各claimを次の固定構造で完結させてください。Claim:、Evidence:、Interpretation:、Limitations:の省略、並べ替え、claim外へのまとめ書きは禁止です。
@@ -1305,15 +1327,15 @@ Evidence:
 - `path/to/file.ts:10-20`
 Interpretation: この範囲がclaimを直接支える理由
 Limitations: none
-Evidenceの形式は上の例と完全一致させ、コロンの後ろや行番号の前に空白を入れないでください。調査依頼にclaim IDがある場合は同じIDと順序を保持してください。各claimは1〜3範囲です。重複範囲を増やさず、主張と実行順序を判断できる最小範囲を指定してください。コード本文は貼らないでください。否定的主張では調べたscope、検索語、除外した候補をInterpretationへ書いてください。
+Evidenceの形式は上の例と完全一致させ、コロンの後ろや行番号の前に空白を入れないでください。調査依頼にclaim IDがある場合は同じIDと順序を保持してください。各claimは1〜4範囲です。重複範囲を増やさず、主張と実行順序を判断できる最小範囲を指定してください。コード本文は貼らないでください。否定的主張では調べたscope、検索語、除外した候補をInterpretationへ書いてください。
 Evidenceの各範囲はClaimまたはInterpretationに書いた一つの事実と一対一に対応させ、その事実を直接支える行だけを選んでください。読んだだけの隣接fileを引用しないでください。
-巨大な関数全体を1範囲にせず、必要なら同じclaimの最大3範囲をsignature・対象branch/call・return/side effectに分けてください。
+巨大な関数全体を1範囲にせず、必要なら同じclaimの最大4範囲をsignature・対象branch/call・return/side effectに分けてください。
 For a `test_absence` claim, do not cite production source ranges as proof of absence. Write exactly `- `SEARCH:C1`` under Evidence. The runner will independently search every exact anchor across tracked test/spec paths and will reject a contradicted absence claim.
 ## Remaining
 未確認事項と理由を書き、無ければ none と書いてください。done_whenを直接支えるEvidenceが揃い、questionへの回答が完結したclaimはOutcome: fulfilledかつRemaining: noneにしてください。調査対象が未実装であること、変更や実装が今後必要なこと、excludeした範囲を確認していないことは、それ自体をpartialやRemainingの理由にしないでください。'
 READ_ONLY_OUTPUT_CONTRACT=$(printf '%s\nEvidenceは全claim合計で最大%s範囲、推奨%s範囲以下、1範囲あたり最大%s行です。実行器は各範囲の前後%s行を追加し、展開後のpacket全体を最大%s行に制限します。上限を超える広い範囲を指定せず、直接根拠となる行だけを選んでください。' \
   "$READ_ONLY_OUTPUT_CONTRACT" "$MAX_EVIDENCE_REFERENCES" "$RECOMMENDED_EVIDENCE_REFERENCES" "$MAX_EVIDENCE_LINES_PER_REFERENCE" "$EVIDENCE_CONTEXT_LINES" "$MAX_EVIDENCE_TOTAL_LINES")
-SURVEY_OUTPUT_LIMIT=$(printf 'surveyのclaimは検証済み依頼JSONの%s個以下に限定されています。依頼JSONにC1だけがある場合、C2以降を絶対に作らないでください。cross-fileの制御フローや複数段階がdone_whenに必要でも、同じC1のClaim・Evidence・Interpretationへ最大3範囲でまとめます。各IDは一つのkindと変更判断だけを扱います。依頼された成果IDを細分化・統合せず、根拠不足はRemainingへ分離してください。' "$MAX_SURVEY_REQUEST_CLAIMS")
+SURVEY_OUTPUT_LIMIT=$(printf 'surveyのclaimは検証済み依頼JSONの%s個以下に限定されています。依頼JSONにC1だけがある場合、C2以降を絶対に作らないでください。cross-fileの制御フローや複数段階がdone_whenに必要でも、一つのclaimのClaim・Evidence・Interpretationへ最大4範囲でまとめます。各IDは一つのkindと変更判断だけを扱います。依頼された成果IDを細分化・統合せず、根拠不足はRemainingへ分離してください。' "$MAX_SURVEY_REQUEST_CLAIMS")
 OUTLINE_INSTRUCTION=""
 if [ "$OUTLINE_TOOL" = "zat" ]; then
   OUTLINE_INSTRUCTION='STRICT ZAT RULES: zat is already installed and available. Never run `which zat`, `zat --help`, `zat --version`, or bare `zat`. The only permitted shell form is `zat <repository-relative tracked file path>` after grep, Glob, or LSP has identified that exact file. Never pass an absolute path or a directory. If zat fails once, do not try another zat command for that file; use grep, LSP, or Read. Shellは、grep・Glob・LSPで特定済みの単一tracked fileに対する `zat <repository-relative-path>` だけです。最初のtoolはgrep・Glob・LSPにし、zatを探索やhelp・version確認に使わず、zat以外のshell commandも試さないでください。zat対応の大きいfileごとに1回だけ署名と行番号を絞り、その後必要範囲を80行以下でReadしてください。zatのsymbol全rangeをEvidenceへ転記してはなりません。schema.prisma、constants.ts、constants/配下、testにはzatを使わないでください。zat出力自体はEvidenceにしないでください。'

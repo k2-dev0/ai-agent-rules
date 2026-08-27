@@ -43,7 +43,7 @@ hooks:
 workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
 
 1. 依頼から公開挙動、完了条件、既知の識別子・機能語を探索anchorとして固定する。候補pathを得るためにproduction fileを読まない。依頼にある識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
-2. 必要な事実ごとにworkerの`survey`を別task-idで実行し、共通契約のvalidatorを通る`C1` 1件だけのJSONを渡す。現在の対象挙動、最寄りの同型実装1件、置換する要素、test・schema境界を同じtaskへ混ぜない。旧branch・tag・commitを読むsurveyには`--source-ref <revision>`を付け、現在HEADの調査と分ける。今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandをexcludeへ明記する。
+2. 必要な事実を単一claimへ分け、同じsource refと候補file群を読むclaimだけを最大3件まで一つのworker `survey`へまとめる。異なるfile群、旧revision、`test_absence`は別task-idにし、独立packetは最大3件を同時に起動する。現在の対象挙動、最寄りの同型実装1件、置換する要素、test・schema境界を一つのclaimへ混ぜない。旧branch・tag・commitを読むsurveyには`--source-ref <revision>`を付け、現在HEADの調査と分ける。今回不要なruntime、schedule、handler、HTTP、設定、DB、schema、test基盤、検証commandをexcludeへ明記する。
 3. `errand-<短い機能名>`形式のASCII kebab-case scope名を一つ固定する。次がすべて一意なら続け、一つでも欠ければ変更せず停止する。
    - 依頼後の公開挙動と完了条件
    - 最寄りの同型実装1件の正確なpath

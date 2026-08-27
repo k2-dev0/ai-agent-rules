@@ -73,7 +73,7 @@ bash [skills_root]/polish/capture-scope.sh <機能名> -- <相対path>...
 
 workerへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。`survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
 
-設計書を要求根拠としてworkerの`survey`へ委任し、共通契約のvalidatorを通る`C1` 1件だけのJSONを事実ごとの別task-idへ渡す。旧revisionは`--source-ref`で現在HEADと分ける。[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。共通契約の成功条件を満たし、残件が空で、指定した単一claimが揃った場合だけ進む。不足は`next-action: supplement`に従って同じ事実の欠落境界だけを補完し、`next-action: repair`の場合だけEvidenceのpath・行・件数を変えず形式修正する。
+設計書を要求根拠としてworkerの`survey`へ委任する。各claimは一つの事実に保ち、同じsource refと候補file群を読むclaimだけをvalidator上限の3件まで同じJSONへまとめる。異なるfile群、旧revision、`test_absence`は別task-idにし、独立packetは最大3件を同時に起動する。旧revisionは`--source-ref`で現在HEADと分ける。[agent_name]はsurvey前後を問わず探索禁止区間の対象を通常探索しない。共通契約の成功条件を満たし、残件が空で、指定したclaimが揃った場合だけ進む。不足は`next-action: supplement`に従って欠落claimの境界だけを補完し、`next-action: repair`の場合だけEvidenceのpath・行・件数を変えず形式修正する。
 
 ### 3. 共通のシナリオ駆動実装フローを完了する
 

@@ -62,7 +62,7 @@ bug修正を含む設計書では、報告された症状とroot causeを分け�
 既存実装、実行方式、標準・native機能、導入済み依存の調査はworkerの`survey`へ委任する。設計判断、横断比較、採否、設計書の修正は[agent_name]が行う。
 `survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
 
-各surveyは共通契約のvalidatorを通る`C1` 1件だけのJSONで依頼する。既存経路、runtime境界、個別要素、counterexampleを同じtaskへ混ぜず、独立した監査境界は固有task-idへ分ける。
+各claimは一つの監査境界に保つ。同じsource refと候補file群を読むclaimだけを共通validator上限の3件まで一つのsurveyへまとめ、独立packetは最大3件を同時に起動する。既存経路、runtime境界、個別要素、counterexampleは別claimにし、file群が離れるものと`test_absence`は固有task-idへ分ける。
 
 1. 個別設計書より先に設計書一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索させる
 2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探させる

@@ -125,14 +125,14 @@ grep -q 'DEFAULT_MODEL="openrouter/minimax/minimax-m3"' "$WORKER_RUNNER" && grep
 grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
 grep -q 'MISSING_REPORT_STATUS="65"' "$WORKER_RUNNER" && grep -q 'MALFORMED_REPORT_STATUS="66"' "$WORKER_RUNNER" && grep -q 'PARTIAL_REPORT_STATUS="67"' "$WORKER_RUNNER" && grep -q 'report_status:\$report_status' "$WORKER_RUNNER" && ok "worker report: 欠落・破損・部分応答を別statusへ分類" || ng "worker reportのprotocol失敗分類が不足"
 grep -q '^build_evidence_packet()' "$WORKER_RUNNER" && grep -q '^claims_have_evidence()' "$WORKER_RUNNER" && grep -Fq 'code below was not copied by the worker' "$WORKER_RUNNER" && grep -q -- '--argjson evidence "$EVIDENCE_JSON"' "$WORKER_RUNNER" && ok "worker evidence: snapshotからclaim根拠を抽出" || ng "worker evidenceの抽出・記録処理が不足"
-grep -q 'MAX_EVIDENCE_REFERENCES="20"' "$WORKER_RUNNER" && grep -q 'RECOMMENDED_EVIDENCE_REFERENCES="12"' "$WORKER_RUNNER" && grep -Fq 'MAX_SURVEY_CLAIMS="$MAX_SURVEY_REQUEST_CLAIMS"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_EVIDENCE_PER_CLAIM="3"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_LINES_PER_REFERENCE="80"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_TOTAL_LINES="400"' "$WORKER_RUNNER" && grep -Fq '1範囲あたり最大%s行' "$WORKER_RUNNER" && grep -Fq 'signature・対象branch/call・return/side effect' "$WORKER_RUNNER" && ok "worker evidence: validator定数をpromptと検証へ共有" || ng "worker evidenceのclaim・範囲上限またはprompt共有が不足"
+grep -q 'MAX_EVIDENCE_REFERENCES="20"' "$WORKER_RUNNER" && grep -q 'RECOMMENDED_EVIDENCE_REFERENCES="12"' "$WORKER_RUNNER" && grep -Fq 'MAX_SURVEY_CLAIMS="$MAX_SURVEY_REQUEST_CLAIMS"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_EVIDENCE_PER_CLAIM="4"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_LINES_PER_REFERENCE="80"' "$WORKER_RUNNER" && grep -q 'MAX_EVIDENCE_TOTAL_LINES="400"' "$WORKER_RUNNER" && grep -Fq '1範囲あたり最大%s行' "$WORKER_RUNNER" && grep -Fq 'signature・対象branch/call・return/side effect' "$WORKER_RUNNER" && ok "worker evidence: validator定数をpromptと検証へ共有" || ng "worker evidenceのclaim・範囲上限またはprompt共有が不足"
 if ! grep -Eq '^  (implement|errand)\)' "$WORKER_RUNNER" && grep -q 'mode must be research, survey, nesting, prepare, smoke, or show' "$WORKER_RUNNER"; then
   ok "workerは読み取り調査modeだけを公開"
 else
   ng "workerに実装modeが残存"
 fi
 grep -q 'XDG_DATA_HOME="\$OPENCODE_XDG_DATA_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="\$OPENCODE_XDG_STATE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="\$OPENCODE_XDG_CACHE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="\$OPENCODE_XDG_CONFIG_HOME"' "$WORKER_RUNNER" && grep -q 'TMPDIR="\$OPENCODE_TMPDIR"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
-grep -q 'SURVEY_STEPS_PER_CLAIM="8"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_REQUEST_CLAIMS="1"' "$WORKER_RUNNER" && grep -q 'SURVEY_FINALIZATION_STEPS="3"' "$WORKER_RUNNER" && grep -q 'SURVEY_OUTLINE_EXTRA_STEPS="4"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_MAX_STEPS + SURVEY_OUTLINE_EXTRA_STEPS))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 単一claimとzat有効時だけの追加stepを固定" || ng "worker surveyの単一claimまたはstep上限が不正"
+grep -q 'SURVEY_STEPS_PER_CLAIM="8"' "$WORKER_RUNNER" && grep -q 'MAX_SURVEY_REQUEST_CLAIMS="3"' "$WORKER_RUNNER" && grep -q 'SURVEY_FINALIZATION_STEPS="3"' "$WORKER_RUNNER" && grep -q 'SURVEY_OUTLINE_EXTRA_STEPS="4"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_CLAIM_COUNT * SURVEY_STEPS_PER_CLAIM + SURVEY_FINALIZATION_STEPS))"' "$WORKER_RUNNER" && grep -Fq 'SURVEY_MAX_STEPS="$((SURVEY_MAX_STEPS + SURVEY_OUTLINE_EXTRA_STEPS))"' "$WORKER_RUNNER" && grep -q '"steps":$survey_max_steps' "$WORKER_RUNNER" && grep -q -- '--agent delegate' "$WORKER_RUNNER" && ok "worker survey: 最大3 claimとzat有効時だけの追加stepを固定" || ng "worker surveyのclaim packetまたはstep上限が不正"
 grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q 'last_event_type' "$WORKER_RUNNER" && grep -q 'valid_event_observed' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
 grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && grep -q 'source_ref:\$source_ref' "$WORKER_RUNNER" && grep -q 'context_snapshot_paths' "$WORKER_RUNNER" && ok "worker lifecycle: task状態・重複拒否・revision snapshotを記録" || ng "worker lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$WORKER_RUNNER" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$WORKER_RUNNER" && ok "worker config: readonly定数をjq引数で受け渡す" || ng "worker config: readonly変数への再代入が残存"
@@ -146,13 +146,14 @@ grep -q '^  survey)' "$WORKER_RUNNER" && grep -q 'survey mode requires task id a
 VALID_SURVEY_REQUEST='{"purpose":"移植元の変換規則を確認する","claims":[{"id":"C1","kind":"behavior","subject":"固定長入力変換","question":"入力から出力列を生成する規則は何か","anchors":["sagawa-delivery-import","tool-def.tsx"],"done_when":"入力位置と出力列を直接示す根拠がある","exclude":["admin-2026","全test基盤"]}]}'
 INVALID_SURVEY_REQUEST='{"purpose":"境界を詰め込む","claims":[]}'
 MULTI_SURVEY_REQUEST='{"purpose":"旧新を同時に調べる","claims":[{"id":"C1","kind":"behavior","subject":"旧実装","question":"旧実装の入力は何か","anchors":["old"],"done_when":"入力の根拠がある","exclude":["current"]},{"id":"C2","kind":"behavior","subject":"現実装","question":"現実装の入力は何か","anchors":["current"],"done_when":"入力の根拠がある","exclude":["old"]}]}'
+TOO_MANY_SURVEY_REQUEST=$(printf '%s' "$MULTI_SURVEY_REQUEST" | jq -c '.claims += [{id:"C3",kind:"behavior",subject:"第三実装",question:"第三実装の入力は何か",anchors:["third"],done_when:"入力の根拠がある",exclude:["old"]},{id:"C4",kind:"behavior",subject:"第四実装",question:"第四実装の入力は何か",anchors:["fourth"],done_when:"入力の根拠がある",exclude:["old"]}]')
 DENSE_SURVEY_REQUEST='{"purpose":"過密claimを拒否する","claims":[{"id":"C1","kind":"behavior","subject":"同期batch","question":"入口、入力、変換、保存、出力をすべて確認せよ","anchors":["sync"],"done_when":"全体の根拠がある","exclude":["test"]}]}'
 DENSE_SURVEY_ERROR=$(bash "$SURVEY_REQUEST_VALIDATOR" "$DENSE_SURVEY_REQUEST" 2>&1)
 DENSE_SURVEY_STATUS=$?
-if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$MULTI_SURVEY_REQUEST" >/dev/null 2>&1 && [ "$DENSE_SURVEY_STATUS" -ne 0 ] && printf '%s' "$DENSE_SURVEY_ERROR" | grep -Fq 'C1.question has 4 enumerators (maximum 2)'; then
-  ok "worker survey validator: 1 task 1 claimと列挙密度を外部実行前に強制"
+if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && bash "$SURVEY_REQUEST_VALIDATOR" "$MULTI_SURVEY_REQUEST" | jq -e '.claims | length == 2' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$TOO_MANY_SURVEY_REQUEST" >/dev/null 2>&1 && [ "$DENSE_SURVEY_STATUS" -ne 0 ] && printf '%s' "$DENSE_SURVEY_ERROR" | grep -Fq 'C1.question has 4 enumerators (maximum 2)'; then
+  ok "worker survey validator: 最大3 claim packetとclaim内の列挙密度を外部実行前に強制"
 else
-  ng "worker survey validatorの単一claimまたは密度検証が不正"
+  ng "worker survey validatorのpacket上限または密度検証が不正"
 fi
 grep -Fq 'git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT"' "$WORKER_RUNNER" && grep -Fq -- '--source-ref is only valid for survey and research' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: revisionを固定し変更を機械拒否" || ng "workerのrevision snapshotまたは読み取り専用検査が不正"
 grep -Fq 'Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません' "$WORKER_RUNNER" && grep -Fq 'repair parent has invalid evidence; evidence selection requires supplement' "$WORKER_RUNNER" && grep -Fq 'repair parent must have formatting-only invalid_output' "$WORKER_RUNNER" && grep -q 'EVIDENCE_FAILURE_KIND="range_too_wide"' "$WORKER_RUNNER" && grep -q 'NEXT_ACTION="supplement"' "$WORKER_RUNNER" && grep -q 'FAILURE_CLASS="step_limit_exhausted"' "$WORKER_RUNNER" && ok "worker再試行: 形式修正と意味上の証拠補完を機械分離" || ng "worker再試行のrepair・supplement分類が不正"
@@ -267,9 +268,9 @@ for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
   fi
 done
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'validatorを通る`C1` 1件だけのJSON' "$ERRAND_SKILL" && grep -Fq '`--source-ref <revision>`' "$ERRAND_SKILL" && ok "errand は識別子を保持して単一claimのsurveyへ限定" || ng "errand の軽量調査境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq '必要な事実を単一claimへ分け' "$ERRAND_SKILL" && grep -Fq '最大3件まで一つのworker `survey`へまとめる' "$ERRAND_SKILL" && grep -Fq '`--source-ref <revision>`' "$ERRAND_SKILL" && ok "errand は識別子を保持してsource-localなclaim packetへ限定" || ng "errand の軽量調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
-grep -Fq '必要な事実ごとにworkerの`survey`を別task-idで実行' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$ERRAND_SKILL" && grep -Fq 'implementerへ判断に使った検証済みsurvey task-idとartifact pathを全件渡し' "$ERRAND_SKILL" && grep -Fq 'implementerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はworker調査と専用implementer実装を分離" || ng "errand のworker調査・implementer実装境界が不正"
+grep -Fq '独立packetは最大3件を同時に起動する' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$ERRAND_SKILL" && grep -Fq 'implementerへ判断に使った検証済みsurvey task-idとartifact pathを全件渡し' "$ERRAND_SKILL" && grep -Fq 'implementerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はworker調査と専用implementer実装を分離" || ng "errand のworker調査・implementer実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q '親directoryが存在しない' "$REPO/skills/polish/capture-scope.sh" && grep -q 'ignoredされている' "$REPO/skills/polish/capture-scope.sh" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装、複数、または対応テストが未作成であることだけを理由に停止しない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
 grep -Fq '初回実装は専用`implementer` subagent' "$ERRAND_SKILL" && grep -Fq 'cleanな許可pathに限り一度だけ再起動' "$ERRAND_SKILL" && grep -Fq '修正をworkerまたはimplementerへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && ok "errand は専用subagent初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
@@ -305,7 +306,7 @@ grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && 
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
 grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$TDD_SKILL" && grep -Fq 'subagentが利用不能またはcleanな再実行も失敗した場合だけ可' "$TDD_SKILL" && grep -Fq '初回実装後の本体コード修正 | 可 | 禁止 | 禁止' "$TDD_SKILL" && ok "tdd はworker調査・専用subagent初回実装・上位fallbackと修正へ固定" || ng "tdd の調査・実装・fallback・修正境界が不正"
 grep -Fq '設計書を選んでから共通フローでimplementerの初回実装を受領するまで' "$TDD_SKILL" && grep -Fq '`evidence_status: verified`のコードがclaimを直接支え' "$TDD_SKILL" && grep -Fq '`--supplement-of`で初回を含む合計3回まで限定survey' "$TDD_SKILL" && grep -Fq '3回目までは保存範囲の不足自体を直接確認の理由にしない' "$TDD_SKILL" && grep -Fq '全file Read、path発見のためのRead' "$TDD_SKILL" && ok "tdd は検証済みevidenceを標準根拠、直接探索を例外へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
-grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件や実装要否を提案・再分類しない' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionを読むtaskには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq 'validatorのstdoutを改変せず渡し' "$SCENARIO_FLOW" && grep -Fq '`fork_turns: "none"`' "$SCENARIO_FLOW" && grep -Fq '`reasoning_effort: "max"`' "$SCENARIO_FLOW" && grep -Fq 'generic agentによる代用は禁止' "$SCENARIO_FLOW" && grep -Fq 'child agent IDが空' "$SCENARIO_FLOW" && grep -Fq 'wait先が空' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなLuna maxを固定" || ng "共通フローのtest選択権・実装境界またはsubagent起動が不正"
+grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件や実装要否を提案・再分類しない' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq '独立packetは最大3件を同時に起動する' "$SCENARIO_FLOW" && grep -Fq 'validatorのstdoutを改変せず渡し' "$SCENARIO_FLOW" && grep -Fq '`fork_turns: "none"`' "$SCENARIO_FLOW" && grep -Fq '`reasoning_effort: "max"`' "$SCENARIO_FLOW" && grep -Fq 'generic agentによる代用は禁止' "$SCENARIO_FLOW" && grep -Fq 'child agent IDが空' "$SCENARIO_FLOW" && grep -Fq 'wait先が空' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなLuna maxを固定" || ng "共通フローのtest選択権・実装境界またはsubagent起動が不正"
 grep -Fq '半年後に負債にならないかを必ずレビュー' "$SCENARIO_FLOW" && grep -Fq '関数ジャンプ' "$SCENARIO_FLOW" && grep -Fq 'YAGNI' "$SCENARIO_FLOW" && grep -Fq '`filter().map()`' "$SCENARIO_FLOW" && grep -Fq '`reduce()`' "$SCENARIO_FLOW" && grep -Fq '多少冗長でも局所的に理解できる' "$SCENARIO_FLOW" && ok "上位モデルは半年後の負債と可読性を必須レビュー" || ng "上位モデルの保守性・可読性レビュー契約が不足"
 grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$SCENARIO_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$SCENARIO_FLOW" && grep -Fq '採用:' "$SCENARIO_FLOW" && grep -Fq '問題:' "$SCENARIO_FLOW" && grep -Fq '上位修正:' "$SCENARIO_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$SCENARIO_FLOW" && ok "上位モデルは実装差分の評価と修正理由を後続処理前に簡潔に報告" || ng "上位モデルの実装差分レビュー報告契約が不足"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
@@ -723,16 +724,62 @@ none'\''' \
 chmod +x "$DELEGATE_BIN/opencode"
 SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
 SURVEY_REQUEST=$(jq -cn --arg anchor "$SURVEY_EXACT_IDENTIFIER" '{purpose:"同型実装の境界を確認する",claims:[{id:"C1",kind:"integration",subject:"指定識別子の同型実装",question:"指定識別子と同じ責務を持つ統合境界は何か",anchors:[$anchor],done_when:"直接の統合点を示す根拠がある",exclude:["全DB","全test基盤"]}]}')
+BATCH_SURVEY_REQUEST=$(jq -cn '{purpose:"同じsourceを読む三つの事実を一度に確認する",claims:[{id:"C1",kind:"behavior",subject:"specの見出し",question:"見出しは何か",anchors:["research spec"],done_when:"見出しの根拠がある",exclude:["runtime"]},{id:"C2",kind:"contract",subject:"specの2行目",question:"2行目は何か",anchors:["line 2"],done_when:"2行目の根拠がある",exclude:["runtime"]},{id:"C3",kind:"integration",subject:"specの3行目",question:"3行目は何か",anchors:["line 3"],done_when:"3行目の根拠がある",exclude:["runtime"]}]}')
+TOO_MANY_SURVEY_REQUEST=$(printf '%s' "$BATCH_SURVEY_REQUEST" | jq -c '.claims += [{id:"C4",kind:"behavior",subject:"specの4行目",question:"4行目は何か",anchors:["line 4"],done_when:"4行目の根拠がある",exclude:["runtime"]}]')
 SURVEY_SUPPLEMENT_ONE=$(jq -cn '{purpose:"caller境界を補完する",claims:[{id:"C1",kind:"control_flow",subject:"O2のcaller境界",question:"O2を呼び出す直接callerは何か",anchors:["O2"],done_when:"直接callerを示す根拠がある",exclude:["runtime","全test基盤"]}]}')
 SURVEY_SUPPLEMENT_TWO=$(jq -cn '{purpose:"runtime境界を補完する",claims:[{id:"C1",kind:"contract",subject:"O3のruntime境界",question:"O3が依存するruntime契約は何か",anchors:["O3"],done_when:"runtime契約を示す根拠がある",exclude:["caller","全test基盤"]}]}')
 SURVEY_SUPPLEMENT_THREE=$(jq -cn '{purpose:"追加境界を補完する",claims:[{id:"C1",kind:"integration",subject:"O4の追加境界",question:"O4の直接統合点は何か",anchors:["O4"],done_when:"統合点を示す根拠がある",exclude:["runtime","全test基盤"]}]}')
 ABSENCE_REQUEST=$(jq -cn '{purpose:"tracked test不在を確認する",claims:[{id:"C1",kind:"test_absence",subject:"exact anchorのtest参照",question:"tracked test/specにexact anchorが存在しないか",anchors:["no_test_anchor"],done_when:"tracked test/spec一致が0件と機械検証される",exclude:["production実装の解釈"]}]}')
+MIXED_ABSENCE_REQUEST=$(printf '%s' "$BATCH_SURVEY_REQUEST" | jq -c '.claims[2] = {id:"C3",kind:"test_absence",subject:"exact anchorのtest参照",question:"tracked test/specにexact anchorが存在しないか",anchors:["no_test_anchor"],done_when:"tracked test/spec一致が0件と機械検証される",exclude:["production実装の解釈"]}')
+if BATCH_NORMALIZED=$(bash "$DELEGATE_VALIDATOR" "$BATCH_SURVEY_REQUEST" 2>/dev/null) && [ "$(printf '%s' "$BATCH_NORMALIZED" | jq '.claims | length')" = "3" ] && \
+   ! bash "$DELEGATE_VALIDATOR" "$TOO_MANY_SURVEY_REQUEST" >/dev/null 2>&1 && \
+   ! bash "$DELEGATE_VALIDATOR" "$MIXED_ABSENCE_REQUEST" >/dev/null 2>&1; then
+  ok "delegate-worker: 同一sourceの3 claimを許可し4 claimとtest_absence混在を拒否"
+else
+  ng "delegate-worker: survey packet境界が不正"
+fi
 if PATH="/usr/bin:/bin" bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" test-absence-survey "$ABSENCE_REQUEST" > delegate-test-absence.out 2>&1 && \
    jq -e '.status == 0 and .outcome == "fulfilled" and .output_contract_status == "valid" and .evidence_status == "verified" and .tool_call_count == 0 and .usage_before == 0 and .limit_reset == "not_used" and .evidence[0].source == "verified_absence_search"' ".claude/tmp/worker/test-absence-survey/result.json" >/dev/null; then
   ok "delegate-worker: test不在を外部modelなしで機械検証"
 else
   ng "delegate-worker: deterministic test absenceが不正"; cat delegate-test-absence.out
 fi
+cp "$DELEGATE_BIN/opencode" "$DELEGATE_BIN/opencode.single-claim"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'jq -e '\''(.agent.delegate.steps == 31)'\'' "$OPENCODE_CONFIG" >/dev/null || exit 41' \
+  'text='\''Outcome: fulfilled
+## Claims
+### C1
+Claim: 見出しを確認した
+Evidence:
+- `spec.md:1-1`
+Interpretation: C1
+Limitations: none
+### C2
+Claim: 2行目を確認した
+Evidence:
+- `spec.md:2-2`
+Interpretation: C2
+Limitations: none
+### C3
+Claim: 3行目を確認した
+Evidence:
+- `spec.md:3-3`
+Interpretation: C3
+Limitations: none
+## Remaining
+none'\''' \
+  'jq -cn --arg text "$text" '\''{type:"text",text:$text}'\''' \
+  > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" batch-survey "$BATCH_SURVEY_REQUEST" > delegate-batch-survey.out 2>&1 && \
+   jq -e '.status == 0 and .step_limit == 31 and (.survey_request.claims | length) == 3 and .evidence_status == "verified"' ".claude/tmp/worker/batch-survey/result.json" >/dev/null; then
+  ok "delegate-worker: 同一sourceの3 claimを1回のsurveyで検証"
+else
+  ng "delegate-worker: 3 claim surveyを完了できない"; cat delegate-batch-survey.out
+fi
+mv "$DELEGATE_BIN/opencode.single-claim" "$DELEGATE_BIN/opencode"
 mkdir -p tests
 printf 'no_test_anchor\n' > tests/integration.ts
 git add tests/integration.ts
@@ -872,6 +919,16 @@ if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" su
 else
   ng "delegate-worker: 正規化可能なreportを失敗扱い"; cat delegate-normalized-report.out
 fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled### C1\nClaim: 実ログ由来のformatを正規化したEvidence:\n- `spec.md:1`\nInterpretation: 1行目を支える\n- `spec.md:2-2`\nInterpretation: 2行目を支える\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" observed-format-survey "$SURVEY_REQUEST" > delegate-observed-format.out 2>&1 && \
+   grep -Fxq '## Claims' ".claude/tmp/worker/observed-format-survey/report.md" && \
+   grep -Fxq -- '- `spec.md:1-1`' ".claude/tmp/worker/observed-format-survey/report.md" && \
+   jq -e '.status == 0 and .report_normalized == true and .output_contract_status == "valid" and .evidence_status == "verified"' ".claude/tmp/worker/observed-format-survey/result.json" >/dev/null; then
+  ok "delegate-worker: 実ログで頻出した見出し連結・単一行・反復Interpretationを決定的に受理"
+else
+  ng "delegate-worker: 回答済みformatを不要なrepairへ回す"; cat delegate-observed-format.out
+fi
 printf '%s\n' \
   '#!/bin/bash' \
   'physical=$(pwd -P)' \
@@ -979,12 +1036,12 @@ elif [ ! -e "$COMPOUND_REPAIR_CALL_MARKER" ] && grep -Fq 'repair parent has inva
 else
   ng "delegate-worker: 複合エラーrepairの起動前拒否が不正"; cat delegate-forbidden-compound-repair.out
 fi
-printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: evidenceが多すぎる\nEvidence:\n- `spec.md:1-1`\n- `spec.md:2-2`\n- `spec.md:3-3`\n- `spec.md:4-4`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: evidenceが多すぎる\nEvidence:\n- `spec.md:1-1`\n- `spec.md:2-2`\n- `spec.md:3-3`\n- `spec.md:4-4`\n- `spec.md:5-5`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" excessive-claim-evidence-survey "$SURVEY_REQUEST" > delegate-excessive-claim-evidence.out 2>&1
 EXCESSIVE_CLAIM_EVIDENCE_STATUS=$?
 if [ "$EXCESSIVE_CLAIM_EVIDENCE_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract_status' "$DELEGATE_REPO/.claude/tmp/worker/excessive-claim-evidence-survey/result.json" 2>/dev/null)" = "invalid" ]; then
-  ok "delegate-worker: surveyの各claimをEvidence 3件以下へ強制"
+  ok "delegate-worker: surveyの各claimをEvidence 4件以下へ強制"
 else
   ng "delegate-worker: claim単位のEvidence上限検証が不正"; cat delegate-excessive-claim-evidence.out
 fi
@@ -993,7 +1050,7 @@ chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" excessive-claims-survey "$SURVEY_REQUEST" > delegate-excessive-claims.out 2>&1
 EXCESSIVE_CLAIMS_STATUS=$?
 if [ "$EXCESSIVE_CLAIMS_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract_status' "$DELEGATE_REPO/.claude/tmp/worker/excessive-claims-survey/result.json" 2>/dev/null)" = "invalid" ]; then
-  ok "delegate-worker: surveyをC1 1件へ強制"
+  ok "delegate-worker: survey reportのclaim IDを依頼JSONと完全一致させる"
 else
   ng "delegate-worker: surveyのclaim上限検証が不正"; cat delegate-excessive-claims.out
 fi

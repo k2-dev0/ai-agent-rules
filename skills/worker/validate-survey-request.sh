@@ -2,7 +2,7 @@
 # survey依頼を外部workerへ送る前に、scopeとclaim境界を機械検証する。
 set -u
 
-readonly MAX_CLAIMS="1"
+readonly MAX_CLAIMS="3"
 readonly MAX_PURPOSE_CHARACTERS="240"
 readonly MAX_SUBJECT_CHARACTERS="120"
 readonly MAX_QUESTION_CHARACTERS="160"
@@ -38,7 +38,7 @@ PURPOSE_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq -r '.purpose | length') || fai
 
 CLAIM_COUNT=$(printf '%s' "$REQUEST_JSON" | jq -r '.claims | length') || fail "cannot count claims"
 [ "$CLAIM_COUNT" -le "$MAX_CLAIMS" ] || \
-  fail "claims exceed $MAX_CLAIMS; split independent boundaries into separate task ids"
+  fail "claims exceed $MAX_CLAIMS; split source-local packets into separate task ids"
 
 printf '%s' "$REQUEST_JSON" | jq -e '
   all(.claims[];
@@ -54,6 +54,10 @@ printf '%s' "$REQUEST_JSON" | jq -e '
   )
 ' >/dev/null 2>&1 || \
   fail "each claim requires only id, kind, subject, question, anchors, done_when, and exclude; kind must be behavior, control_flow, integration, contract, test, or test_absence"
+
+if printf '%s' "$REQUEST_JSON" | jq -e 'any(.claims[]; .kind == "test_absence")' >/dev/null 2>&1; then
+  [ "$CLAIM_COUNT" -eq 1 ] || fail "test_absence must be the only claim because the runner verifies it deterministically"
+fi
 
 printf '%s' "$REQUEST_JSON" | jq -e '
   [.claims[].id] == [range(1; (.claims | length) + 1) | "C\(.)"]

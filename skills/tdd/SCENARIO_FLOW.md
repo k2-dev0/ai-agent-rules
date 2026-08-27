@@ -15,7 +15,7 @@
 
 ## 必須の調査パケット
 
-実装前のsurveyでは、共通委任契約のvalidatorを通る`C1` 1件だけのJSONをtask-idごとに渡す。現在挙動、同型実装、schema、test、検証commandを別taskへ分ける。旧revisionを読むtaskには`--source-ref <revision>`を付け、現在HEADと同じtaskで比較しない。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
+実装前のsurveyでは、共通委任契約のvalidatorを通るJSONをtask-idごとに渡す。各claimは一つの事実に保ち、同じsource refと候補file群を読むclaimだけを最大3件まで一つのpacketへまとめる。現在挙動、同型実装、schema、test、検証commandは別claimにし、file群が離れるものは別taskへ分ける。`test_absence`と旧revisionを読むtaskは単独にし、旧revisionには`--source-ref <revision>`を付ける。独立packetは最大3件を同時に起動する。`evidence.md`だけで[agent_name]がシナリオとテスト資産を作れなければ完了ではない。
 
 - 変更対象の現在の挙動・型・保存先
 - 最寄りの同型実装1件と置換する識別子・値
@@ -23,7 +23,7 @@
 - 対象へ直接使う既存検証command
 - 読めなかったpath、未確認事項、推測を分けたRemaining
 
-上の分類を毎回すべて要求しない。たとえば既存列への値の入れ替えなら、現在の生成方法、同型実装1件、入力mapの存在、列型を必要な順に別task-idで調べる。次の変更判断に不要なclaimは起動しない。検証commandのtaskだけ`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でも`C1`が足りなければ、`--supplement-of`で同じ事実の欠落境界だけを補完する。
+上の分類を毎回すべて要求しない。たとえば既存列への値の入れ替えなら、現在の生成方法、同型実装1件、入力mapの存在、列型のうち同じfile群を読む事実を別claimとして同じpacketへまとめる。次の変更判断に不要なclaimは起動しない。検証commandのclaimだけ`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。`status: 0`でも指定claimが足りなければ、`--supplement-of`で欠落claimの境界だけを補完する。
 
 初回surveyへproduction pathを渡すための事前Readは行わない。ユーザー入力、承認済み設計書、既知の識別子・機能語を探索anchorとして渡し、実装の許可pathは検証済みsurveyまたは承認済み設計書から得る。
 
