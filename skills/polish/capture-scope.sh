@@ -51,6 +51,7 @@ read_scope_receipt() {
   [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || die "開始receiptのリポジトリが一致しない"
   git cat-file -e "$BASE^{commit}" >/dev/null 2>&1 || die "開始commitが存在しない: $BASE"
   git merge-base --is-ancestor "$BASE" HEAD || die "開始commitが現在HEADの祖先ではない"
+  SCOPE_MODE=$(sed -n '3p' "$SCOPE_RECEIPT")
 }
 
 collect_active_dirty_paths() {
@@ -235,6 +236,18 @@ if [ "${1:-}" = "list-changed" ]; then
   FEATURE=$2
   [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
   read_scope_receipt
+  if [ "$SCOPE_MODE" = "@auto" ]; then
+    while IFS= read -r -d '' path; do
+      [ -n "$path" ] || continue
+      validate_path "$path"
+      if [ -e "$REPOSITORY/$path" ] || [ -L "$REPOSITORY/$path" ]; then
+        [ ! -L "$REPOSITORY/$path" ] || die "$path はsymlinkなので実変更対象にできない"
+        git ls-files --error-unmatch -- ":(literal)$path" >/dev/null 2>&1 || die "$path は未追跡またはignoredのまま"
+        printf '%s\n' "$path"
+      fi
+    done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$BASE" HEAD)
+    exit 0
+  fi
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     validate_path "$path"
@@ -250,6 +263,22 @@ if [ "${1:-}" = "list-changed" ]; then
       printf '%s\n' "$path"
     fi
   done < <(sed -n '3,$p' "$SCOPE_RECEIPT")
+  exit 0
+fi
+
+if [ "${2:-}" = "--auto" ]; then
+  [ "$#" -eq 2 ] || die "usage: capture-scope.sh <機能名> --auto"
+  FEATURE=$1
+  [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
+  [ -z "$(git status --porcelain --untracked-files=all)" ] || die "auto baselineはclean worktreeでだけ記録できる"
+  SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
+  rm -f "$RECEIPT_DIR/$FEATURE.implementation-request"
+  BASE=$(git rev-parse HEAD)
+  mkdir -p "$RECEIPT_DIR" || die "scope receipt用の一時ディレクトリを作れない"
+  TEMP_SCOPE="$SCOPE_RECEIPT.tmp.$$"
+  printf '%s\n%s\n@auto\n' "$REPOSITORY" "$BASE" > "$TEMP_SCOPE" || die "auto scope receiptを作れない"
+  mv "$TEMP_SCOPE" "$SCOPE_RECEIPT" || die "auto scope receiptを記録できない"
+  echo "captured-auto: $FEATURE $BASE"
   exit 0
 fi
 
