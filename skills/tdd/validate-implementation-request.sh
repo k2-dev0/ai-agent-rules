@@ -16,7 +16,7 @@ RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 printf '%s' "$REQUEST" | jq -e '
   type == "object" and
   (keys | sort) == ["action", "allowed_paths", "implementation_instruction", "red", "scope", "spec", "test_exemption", "test_paths", "test_scenarios", "version", "worker_tasks"] and
-  .version == 3 and
+  .version == 4 and
   .action == "implement" and
   (.scope | type == "string" and test("^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$")) and
   (.implementation_instruction | type == "string" and test("[^[:space:]]")) and
@@ -24,8 +24,11 @@ printf '%s' "$REQUEST" | jq -e '
   (.worker_tasks | type == "array" and length > 0) and
   (all(.worker_tasks[];
     type == "object" and
-    (keys | sort) == ["evidence", "report", "result", "task_id"] and
+    (keys | sort) == ["evidence", "report", "required_claim_ids", "result", "task_id"] and
     (.task_id | type == "string" and test("^[a-z0-9][a-z0-9-]{0,62}$")) and
+    (.required_claim_ids | type == "array" and length > 0 and
+      all(.[]; type == "string" and test("^C[1-9][0-9]*$")) and
+      (unique | length) == length) and
     all(.result, .report, .evidence; type == "string" and test("^[^/].*") and (contains("..") | not))
   )) and
   (.allowed_paths | type == "array" and length > 0 and all(.[]; type == "string" and test("^[^/].*") and (contains("..") | not))) and
@@ -88,6 +91,7 @@ while [ "$TASK_INDEX" -lt "$TASK_COUNT" ]; do
   RESULT_PATH=$(printf '%s' "$TASK" | jq -r '.result')
   REPORT_PATH=$(printf '%s' "$TASK" | jq -r '.report')
   EVIDENCE_PATH=$(printf '%s' "$TASK" | jq -r '.evidence')
+  REQUIRED_CLAIM_IDS=$(printf '%s' "$TASK" | jq -r '.required_claim_ids[]')
 
   case "$RESULT_PATH" in
     ".claude/tmp/worker/$TASK_ID/result.json"|".codex/tmp/worker/$TASK_ID/result.json") ;;
@@ -100,10 +104,18 @@ while [ "$TASK_INDEX" -lt "$TASK_COUNT" ]; do
   [ -f "$EVIDENCE_PATH" ] || die "worker evidenceが無い: $EVIDENCE_PATH"
   [ "$(jq -r '.task_id' "$RESULT_PATH")" = "$TASK_ID" ] || die "worker task-idがresultと一致しない: $TASK_ID"
   case "$(jq -r '.mode' "$RESULT_PATH")" in research|survey|nesting) ;; *) die "worker modeが読み取り調査ではない: $TASK_ID" ;; esac
-  [ "$(jq -r '.status' "$RESULT_PATH")" = "0" ] || die "worker resultが成功していない: $TASK_ID"
   [ "$(jq -r '.output_contract_status' "$RESULT_PATH")" = "valid" ] || die "worker出力契約が不正: $TASK_ID"
-  [ "$(jq -r '.outcome' "$RESULT_PATH")" = "fulfilled" ] || die "worker調査が未完了: $TASK_ID"
-  [ "$(jq -r '.evidence_status' "$RESULT_PATH")" = "verified" ] || die "worker evidenceが未検証: $TASK_ID"
+  jq -e '
+    (.claim_results | type == "array" and length > 0) and
+    ([.claim_results[].id] | length == (unique | length)) and
+    all(.claim_results[];
+      type == "object" and
+      (keys | sort) == ["evidence_count", "evidence_status", "id", "status"] and
+      (.id | type == "string" and test("^C[1-9][0-9]*$")) and
+      (.status | type == "string" and IN("fulfilled", "partial", "blocked", "unknown")) and
+      (.evidence_count | type == "number" and floor == . and . >= 0) and
+      (.evidence_status | type == "string" and IN("verified", "missing", "invalid")))
+  ' "$RESULT_PATH" >/dev/null 2>&1 || die "worker claim metadataが不正: $TASK_ID"
   [ "$(jq -c '.changed_paths' "$RESULT_PATH")" = "[]" ] || die "workerが変更を生成している: $TASK_ID"
   [ "$(jq -r '.report_file' "$RESULT_PATH")" = "report.md" ] || die "worker report名が不正: $TASK_ID"
   [ "$(jq -r '.evidence_file' "$RESULT_PATH")" = "evidence.md" ] || die "worker evidence名が不正: $TASK_ID"
@@ -112,6 +124,27 @@ while [ "$TASK_INDEX" -lt "$TASK_COUNT" ]; do
   [ "$(dirname "$RESULT_PATH")/$(jq -r '.report_file' "$RESULT_PATH")" = "$REPORT_PATH" ] || die "worker report pathがresultと一致しない: $TASK_ID"
   [ "$(dirname "$RESULT_PATH")/$(jq -r '.evidence_file' "$RESULT_PATH")" = "$EVIDENCE_PATH" ] || die "worker evidence pathがresultと一致しない: $TASK_ID"
   [ ! -e "$(dirname "$RESULT_PATH")/candidate.patch" ] || die "worker artifactにcandidate.patchを含められない: $TASK_ID"
+
+  RESULT_STATUS=$(jq -r '.status' "$RESULT_PATH")
+  RESULT_OUTCOME=$(jq -r '.outcome' "$RESULT_PATH")
+  if [ "$RESULT_STATUS" = "0" ] && [ "$RESULT_OUTCOME" = "fulfilled" ]; then
+    [ "$(jq -r '.evidence_status' "$RESULT_PATH")" = "verified" ] || die "worker evidenceが未検証: $TASK_ID"
+  else
+    case "$RESULT_STATUS:$RESULT_OUTCOME" in
+      68:partial|70:partial) ;;
+      *) die "worker resultが再利用可能なpartialではない: $TASK_ID" ;;
+    esac
+  fi
+  while IFS= read -r REQUIRED_CLAIM_ID; do
+    jq -e --arg id "$REQUIRED_CLAIM_ID" '
+      any(.claim_results[];
+        .id == $id and
+        .status == "fulfilled" and
+        .evidence_count > 0 and
+        .evidence_status == "verified")
+    ' "$RESULT_PATH" >/dev/null 2>&1 ||
+      die "required claimが未検証: $TASK_ID $REQUIRED_CLAIM_ID"
+  done <<< "$REQUIRED_CLAIM_IDS"
   TASK_INDEX=$((TASK_INDEX + 1))
 done
 
