@@ -411,15 +411,33 @@ printf '# Verified evidence\n' > "$IMPLEMENTATION_TASK_DIR/evidence.md"
 jq -n \
   --arg report_blob "$(git hash-object "$IMPLEMENTATION_TASK_DIR/report.md")" \
   --arg evidence_blob "$(git hash-object "$IMPLEMENTATION_TASK_DIR/evidence.md")" \
-  '{mode:"survey",task_id:"implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
+  '{mode:"survey",task_id:"implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",claim_results:[{id:"C1",status:"fulfilled",evidence_count:1,evidence_status:"verified"}],changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
   > "$IMPLEMENTATION_TASK_DIR/result.json"
+PARTIAL_IMPLEMENTATION_TASK_DIR=".claude/tmp/worker/partial-implementation-survey"
+mkdir -p "$PARTIAL_IMPLEMENTATION_TASK_DIR"
+printf 'Outcome: partial\n' > "$PARTIAL_IMPLEMENTATION_TASK_DIR/report.md"
+printf '# Verified evidence\n' > "$PARTIAL_IMPLEMENTATION_TASK_DIR/evidence.md"
+jq -n \
+  --arg report_blob "$(git hash-object "$PARTIAL_IMPLEMENTATION_TASK_DIR/report.md")" \
+  --arg evidence_blob "$(git hash-object "$PARTIAL_IMPLEMENTATION_TASK_DIR/evidence.md")" \
+  '{mode:"survey",task_id:"partial-implementation-survey",status:68,output_contract_status:"valid",outcome:"partial",evidence_status:"missing",claim_results:[{id:"C1",status:"fulfilled",evidence_count:1,evidence_status:"verified"},{id:"C2",status:"partial",evidence_count:0,evidence_status:"missing"}],changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
+  > "$PARTIAL_IMPLEMENTATION_TASK_DIR/result.json"
 mkdir -p tests/approved
 printf 'test fixture\n' > tests/approved/implementation-flow.test.ts
 git add tests/approved/implementation-flow.test.ts
 git commit -qm "test: implementation requestのtest fixture"
-IMPLEMENTATION_REQUEST=$(jq -cn '{version:3,action:"implement",scope:"implementation-check",spec:null,implementation_instruction:"要件R1と、テストシナリオを作らない要件R2を両方とも初回実装する",worker_tasks:[{task_id:"implementation-survey",result:".claude/tmp/worker/implementation-survey/result.json",report:".claude/tmp/worker/implementation-survey/report.md",evidence:".claude/tmp/worker/implementation-survey/evidence.md"}],test_scenarios:[{id:"S1",contract:"要件R1は入力が有効な場合に期待値を返す"}],test_paths:["tests/approved/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/rules.ts"]}')
+IMPLEMENTATION_REQUEST=$(jq -cn '{version:4,action:"implement",scope:"implementation-check",spec:null,implementation_instruction:"要件R1と、テストシナリオを作らない要件R2を両方とも初回実装する",worker_tasks:[{task_id:"implementation-survey",result:".claude/tmp/worker/implementation-survey/result.json",report:".claude/tmp/worker/implementation-survey/report.md",evidence:".claude/tmp/worker/implementation-survey/evidence.md",required_claim_ids:["C1"]}],test_scenarios:[{id:"S1",contract:"要件R1は入力が有効な場合に期待値を返す"}],test_paths:["tests/approved/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/rules.ts"]}')
+PARTIAL_IMPLEMENTATION_REQUEST=$(printf '%s' "$IMPLEMENTATION_REQUEST" | jq -c '.worker_tasks=[{task_id:"partial-implementation-survey",result:".claude/tmp/worker/partial-implementation-survey/result.json",report:".claude/tmp/worker/partial-implementation-survey/report.md",evidence:".claude/tmp/worker/partial-implementation-survey/evidence.md",required_claim_ids:["C1"]}]')
+UNVERIFIED_PARTIAL_IMPLEMENTATION_REQUEST=$(printf '%s' "$PARTIAL_IMPLEMENTATION_REQUEST" | jq -c '.worker_tasks[0].required_claim_ids=["C2"]')
 if bash "$CS" implementation-check -- src/rules.ts > implementation-capture.out 2>&1 && \
-   bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" > implementation-request.out 2>&1 && \
+   bash "$IMPLEMENTATION_VALIDATOR" "$PARTIAL_IMPLEMENTATION_REQUEST" > implementation-partial-request.out 2>&1 && \
+   ! bash "$IMPLEMENTATION_VALIDATOR" "$UNVERIFIED_PARTIAL_IMPLEMENTATION_REQUEST" > implementation-unverified-partial-request.out 2>&1 && \
+   grep -Fq 'required claimが未検証: partial-implementation-survey C2' implementation-unverified-partial-request.out; then
+  ok "implementation request: partial artifactの検証済みclaimだけを再利用"
+else
+  ng "implementation request: partial claim coverage判定が不正"; cat implementation-capture.out implementation-partial-request.out implementation-unverified-partial-request.out
+fi
+if bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" > implementation-request.out 2>&1 && \
    jq -e '.implementation_instruction | contains("テストシナリオを作らない要件R2")' implementation-request.out >/dev/null && \
    jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh activate implementation-check"}}' | bash ".claude/hooks/shell/protect-implementation-scope.sh" >/dev/null && \
    bash "$CS" activate implementation-check > implementation-activate.out 2>&1; then
@@ -430,6 +448,8 @@ fi
 IMPLEMENTATION_HOOK=".claude/hooks/shell/protect-implementation-scope.sh"
 REQUIRE_TEST_HOOK=".claude/hooks/shell/require-test.sh"
 ALLOW_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
+DENY_SECOND_IMPLEMENTER_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL2",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
+WRITER_BOUND_STATUS=$(bash "$CS" status)
 ALLOW_NON_ADJACENT_TEST=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$REQUIRE_TEST_HOOK")
 DENY_PARENT_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/untouched.ts")}}' | bash "$IMPLEMENTATION_HOOK")
@@ -444,8 +464,8 @@ ALLOW_PARENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",
 ALLOW_PARENT_HANDOFF=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh handoff-to-parent implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_SUBAGENT_HANDOFF=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh handoff-to-parent implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
 IMPLEMENTER_READ_OUTPUT=$(bash .claude/skills/tdd/implementer-read.sh src/rules.ts)
-  if [ -z "$ALLOW_EDIT" ] && [ -z "$ALLOW_NON_ADJACENT_TEST" ] && [ -z "$ALLOW_IMPLEMENTER_READ" ] && [ -z "$ALLOW_PARENT_READ" ] && printf '%s' "$IMPLEMENTER_READ_OUTPUT" | grep -Fq 'legacyNumber' && [ "$(echo "$DENY_PARENT_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_UNQUOTED_READ" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_QUOTED_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ] && [ -z "$ALLOW_PARENT_HANDOFF" ] && [ "$(echo "$DENY_SUBAGENT_HANDOFF" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
-  ok "implementation-scope: subagentは許可fileを読み書きし親は読み取りだけ可能"
+  if [ -z "$ALLOW_EDIT" ] && [ "$(printf '%s' "$WRITER_BOUND_STATUS" | jq -r '.writer_bound')" = "true" ] && [ "$(echo "$DENY_SECOND_IMPLEMENTER_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_NON_ADJACENT_TEST" ] && [ -z "$ALLOW_IMPLEMENTER_READ" ] && [ -z "$ALLOW_PARENT_READ" ] && printf '%s' "$IMPLEMENTER_READ_OUTPUT" | grep -Fq 'legacyNumber' && [ "$(echo "$DENY_PARENT_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_UNQUOTED_READ" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_QUOTED_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ] && [ -z "$ALLOW_PARENT_HANDOFF" ] && [ "$(echo "$DENY_SUBAGENT_HANDOFF" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
+  ok "implementation-scope: 最初のsubagent writerだけをbindし親は読み取りだけ可能"
 else
   ng "implementation-scope: Claude hookのsubagent境界が不正"
 fi
@@ -462,6 +482,25 @@ else
   ng "implementation-scope: parent fallbackへhandoffできない"; cat implementation-handoff.out
 fi
 if bash "$CS" deactivate implementation-check > implementation-deactivate.out 2>&1 && ! bash .claude/skills/tdd/implementer-read.sh src/rules.ts >/dev/null 2>&1; then ok "implementation-scope: 完了後にactive receiptを解除"; else ng "implementation-scope: deactivate失敗"; cat implementation-deactivate.out; fi
+mkdir -p .codex/hooks/shell
+cp .claude/hooks/shell/protect-implementation-scope.sh .codex/hooks/shell/protect-implementation-scope.sh
+cp .claude/hooks/shell/hook-io.sh .codex/hooks/shell/hook-io.sh
+sed -i.bak 's/HOOK_AGENT="claude"/HOOK_AGENT="codex"/' .codex/hooks/shell/hook-io.sh
+rm -f .codex/hooks/shell/hook-io.sh.bak
+if bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" >/dev/null 2>&1 && \
+   jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CODEX-SHARED",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh activate implementation-check"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh >/dev/null && \
+   bash "$CS" activate implementation-check >/dev/null 2>&1; then
+  ALLOW_CODEX_SHARED_WRITER=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CODEX-SHARED",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/rules.ts\n@@\n-old\n+new\n*** End Patch"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh)
+  DENY_CODEX_SECOND_WRITER=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"OTHER",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/rules.ts\n@@\n-old\n+new\n*** End Patch"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh)
+  if [ -z "$ALLOW_CODEX_SHARED_WRITER" ] && [ "$(echo "$DENY_CODEX_SECOND_WRITER" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
+    ok "implementation-scope: Codex親子のshared sessionをwriterへbindして別sessionを拒否"
+  else
+    ng "implementation-scope: Codex shared-session writer認可が不正"
+  fi
+  bash "$CS" deactivate implementation-check >/dev/null 2>&1 || ng "implementation-scope: Codex shared writer確認後のdeactivate失敗"
+else
+  ng "implementation-scope: Codex shared-session fixtureをactivateできない"
+fi
 mkdir -p local-only-tests
 printf '/local-only-tests/\n' > .gitignore
 printf 'local ignored test fixture\n' > local-only-tests/implementation-flow.test.ts
@@ -729,17 +768,31 @@ SURVEY_EXACT_IDENTIFIER='t47_20__kanzen_douki__device_nebiki_kanri_db'
 SURVEY_REQUEST=$(jq -cn --arg anchor "$SURVEY_EXACT_IDENTIFIER" '{purpose:"同型実装の境界を確認する",claims:[{id:"C1",kind:"integration",subject:"指定識別子の同型実装",question:"指定識別子と同じ責務を持つ統合境界は何か",anchors:[$anchor],done_when:"直接の統合点を示す根拠がある",exclude:["全DB","全test基盤"]}]}')
 BATCH_SURVEY_REQUEST=$(jq -cn '{purpose:"同じsourceを読む三つの事実を一度に確認する",claims:[{id:"C1",kind:"behavior",subject:"specの見出し",question:"見出しは何か",anchors:["research spec"],done_when:"見出しの根拠がある",exclude:["runtime"]},{id:"C2",kind:"contract",subject:"specの2行目",question:"2行目は何か",anchors:["line 2"],done_when:"2行目の根拠がある",exclude:["runtime"]},{id:"C3",kind:"integration",subject:"specの3行目",question:"3行目は何か",anchors:["line 3"],done_when:"3行目の根拠がある",exclude:["runtime"]}]}')
 TOO_MANY_SURVEY_REQUEST=$(printf '%s' "$BATCH_SURVEY_REQUEST" | jq -c '.claims += [{id:"C4",kind:"behavior",subject:"specの4行目",question:"4行目は何か",anchors:["line 4"],done_when:"4行目の根拠がある",exclude:["runtime"]}]')
+DUPLICATE_ANCHOR_REQUEST=$(printf '%s' "$SURVEY_REQUEST" | jq -c '.claims[0].anchors += [.claims[0].anchors[0], "secondary", "secondary"] | .claims[0].exclude += ["全DB"]')
+INVALID_PACKET_REQUEST=$(printf '%s' "$TOO_MANY_SURVEY_REQUEST" | jq -c '.packet="survey"')
 SURVEY_SUPPLEMENT_ONE=$(jq -cn '{purpose:"caller境界を補完する",claims:[{id:"C1",kind:"control_flow",subject:"O2のcaller境界",question:"O2を呼び出す直接callerは何か",anchors:["O2"],done_when:"直接callerを示す根拠がある",exclude:["runtime","全test基盤"]}]}')
 SURVEY_SUPPLEMENT_TWO=$(jq -cn '{purpose:"runtime境界を補完する",claims:[{id:"C1",kind:"contract",subject:"O3のruntime境界",question:"O3が依存するruntime契約は何か",anchors:["O3"],done_when:"runtime契約を示す根拠がある",exclude:["caller","全test基盤"]}]}')
 SURVEY_SUPPLEMENT_THREE=$(jq -cn '{purpose:"追加境界を補完する",claims:[{id:"C1",kind:"integration",subject:"O4の追加境界",question:"O4の直接統合点は何か",anchors:["O4"],done_when:"統合点を示す根拠がある",exclude:["runtime","全test基盤"]}]}')
 ABSENCE_REQUEST=$(jq -cn '{purpose:"tracked test不在を確認する",claims:[{id:"C1",kind:"test_absence",subject:"exact anchorのtest参照",question:"tracked test/specにexact anchorが存在しないか",anchors:["no_test_anchor"],done_when:"tracked test/spec一致が0件と機械検証される",exclude:["production実装の解釈"]}]}')
 MIXED_ABSENCE_REQUEST=$(printf '%s' "$BATCH_SURVEY_REQUEST" | jq -c '.claims[2] = {id:"C3",kind:"test_absence",subject:"exact anchorのtest参照",question:"tracked test/specにexact anchorが存在しないか",anchors:["no_test_anchor"],done_when:"tracked test/spec一致が0件と機械検証される",exclude:["production実装の解釈"]}')
 if BATCH_NORMALIZED=$(bash "$DELEGATE_VALIDATOR" "$BATCH_SURVEY_REQUEST" 2>/dev/null) && [ "$(printf '%s' "$BATCH_NORMALIZED" | jq '.claims | length')" = "3" ] && \
+   DEDUPED_REQUEST=$(bash "$DELEGATE_VALIDATOR" "$DUPLICATE_ANCHOR_REQUEST" 2>/dev/null) && \
+   [ "$(printf '%s' "$DEDUPED_REQUEST" | jq -c '.claims[0].anchors')" = "[\"$SURVEY_EXACT_IDENTIFIER\",\"secondary\"]" ] && \
+   [ "$(printf '%s' "$DEDUPED_REQUEST" | jq -c '.claims[0].exclude')" = '["全DB","全test基盤"]' ] && \
    ! bash "$DELEGATE_VALIDATOR" "$TOO_MANY_SURVEY_REQUEST" >/dev/null 2>&1 && \
    ! bash "$DELEGATE_VALIDATOR" "$MIXED_ABSENCE_REQUEST" >/dev/null 2>&1; then
-  ok "delegate-worker: 同一sourceの3 claimを許可し4 claimとtest_absence混在を拒否"
+  ok "delegate-worker: packetをstable dedupeし3 claimを許可、4 claimとtest_absence混在を拒否"
 else
   ng "delegate-worker: survey packet境界が不正"
+fi
+INVALID_PACKET_CALL_MARKER="$DELEGATE_REPO/invalid-packet-call.marker"
+if PATH="$DELEGATE_BIN:$PATH" CURL_CALL_MARKER="$INVALID_PACKET_CALL_MARKER" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" invalid-packet-survey "$INVALID_PACKET_REQUEST" > delegate-invalid-packet.out 2>&1; then
+  ng "delegate-worker: schema外packetを外部実行した"
+elif [ ! -e "$INVALID_PACKET_CALL_MARKER" ] && \
+   jq -e '.phase == "request_validation" and .task_id == "invalid-packet-survey" and (.diagnostics.errors | length) >= 2 and .request.packet == "survey"' ".claude/tmp/worker-preflight/invalid-packet-survey.json" >/dev/null 2>&1; then
+  ok "delegate-worker: 外部実行前の全validation errorと拒否packetを保存"
+else
+  ng "delegate-worker: preflight rejection artifactが不正"; cat delegate-invalid-packet.out
 fi
 if PATH="/usr/bin:/bin" bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" test-absence-survey "$ABSENCE_REQUEST" > delegate-test-absence.out 2>&1 && \
    jq -e '.status == 0 and .outcome == "fulfilled" and .output_contract_status == "valid" and .evidence_status == "verified" and .tool_call_count == 0 and .usage_before == 0 and .limit_reset == "not_used" and .evidence[0].source == "verified_absence_search"' ".claude/tmp/worker/test-absence-survey/result.json" >/dev/null; then
@@ -910,12 +963,12 @@ if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" su
 else
   ng "delegate-worker: 指定revisionのsnapshotが不正"; cat delegate-legacy-source.out
 fi
-printf '#!/bin/bash\ntext='\''\n\nOutcome: fulfilled## Claims\n### C1\nClaim: report formatを正規化した\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+printf '#!/bin/bash\ntext='\''\n\nOutcome: fulfilled## Claims\n### C1\nClaim:report formatを正規化した\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" normalized-report-survey "$SURVEY_REQUEST" > delegate-normalized-report.out 2>&1; then
   NORMALIZED_REPORT_ROOT="$DELEGATE_REPO/.claude/tmp/worker/normalized-report-survey"
-  if [ "$(jq -r '.report_normalized' "$NORMALIZED_REPORT_ROOT/result.json" 2>/dev/null)" = "true" ] && [ "$(sed -n '1p' "$NORMALIZED_REPORT_ROOT/report.md")" = "Outcome: fulfilled" ] && [ "$(grep -Fxc '## Claims' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && [ "$(grep -Ec '^Outcome: ' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && [ "$(grep -Fxc '## Remaining' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && grep -Fq 'Outcome: fulfilled## Claims' "$NORMALIZED_REPORT_ROOT/opencode.jsonl"; then
-    ok "delegate-worker: rawを保持して先頭空行と固定見出し連結だけを正規化"
+  if [ "$(jq -r '.report_normalized' "$NORMALIZED_REPORT_ROOT/result.json" 2>/dev/null)" = "true" ] && [ "$(sed -n '1p' "$NORMALIZED_REPORT_ROOT/report.md")" = "Outcome: fulfilled" ] && [ "$(grep -Fxc '## Claims' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && [ "$(grep -Ec '^Outcome: ' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && [ "$(grep -Fxc 'Claim: report formatを正規化した' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && [ "$(grep -Fxc '## Remaining' "$NORMALIZED_REPORT_ROOT/report.md")" = "1" ] && grep -Fq 'Outcome: fulfilled## Claims' "$NORMALIZED_REPORT_ROOT/opencode.jsonl"; then
+    ok "delegate-worker: rawを保持して見出し連結とClaim空白を決定的に正規化"
   else
     ng "delegate-worker: reportの安全正規化またはraw保持が不正"
   fi
@@ -1043,10 +1096,28 @@ printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: evid
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" excessive-claim-evidence-survey "$SURVEY_REQUEST" > delegate-excessive-claim-evidence.out 2>&1
 EXCESSIVE_CLAIM_EVIDENCE_STATUS=$?
-if [ "$EXCESSIVE_CLAIM_EVIDENCE_STATUS" -eq 69 ] && [ "$(jq -r '.output_contract_status' "$DELEGATE_REPO/.claude/tmp/worker/excessive-claim-evidence-survey/result.json" 2>/dev/null)" = "invalid" ]; then
-  ok "delegate-worker: surveyの各claimをEvidence 4件以下へ強制"
+if [ "$EXCESSIVE_CLAIM_EVIDENCE_STATUS" -eq 68 ] && \
+   jq -e '.output_contract_status == "invalid" and .evidence_status == "invalid" and .evidence_failure_kind == "claim_reference_limit" and .next_action == "supplement"' "$DELEGATE_REPO/.claude/tmp/worker/excessive-claim-evidence-survey/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: claim単位のEvidence超過をrepair不能としてsupplementへ分類"
 else
   ng "delegate-worker: claim単位のEvidence上限検証が不正"; cat delegate-excessive-claim-evidence.out
+fi
+EXCESSIVE_REPAIR_CALL_MARKER="$DELEGATE_REPO/excessive-repair-call.marker"
+if PATH="$DELEGATE_BIN:$PATH" CURL_CALL_MARKER="$EXCESSIVE_REPAIR_CALL_MARKER" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --repair-of excessive-claim-evidence-survey forbidden-excessive-repair > delegate-forbidden-excessive-repair.out 2>&1; then
+  ng "delegate-worker: Evidence件数変更が必要なreportをformat repairへ渡した"
+elif [ ! -e "$EXCESSIVE_REPAIR_CALL_MARKER" ] && grep -Fq 'evidence selection requires supplement' delegate-forbidden-excessive-repair.out; then
+  ok "delegate-worker: Evidence件数変更禁止と上限修正の矛盾を外部実行前に拒否"
+else
+  ng "delegate-worker: claim Evidence超過repairの拒否が不正"; cat delegate-forbidden-excessive-repair.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 不在検索kindが不正\nEvidence:\n- `SEARCH:C1`\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" wrong-absence-kind-survey "$SURVEY_REQUEST" > delegate-wrong-absence-kind.out 2>&1
+WRONG_ABSENCE_KIND_STATUS=$?
+if [ "$WRONG_ABSENCE_KIND_STATUS" -eq 68 ] && jq -e '.evidence_failure_kind == "absence_kind_mismatch" and .next_action == "supplement"' "$DELEGATE_REPO/.claude/tmp/worker/wrong-absence-kind-survey/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: 通常claimのSEARCH引用をformat repairでなくrequest再分類へ戻す"
+else
+  ng "delegate-worker: 不在検索kind不一致の分類が不正"; cat delegate-wrong-absence-kind.out
 fi
 printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 1\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n### C2\nClaim: 2\nEvidence:\n- `spec.md:1-1`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
@@ -1096,6 +1167,30 @@ elif grep -Fq 'information survey limit reached after 3 attempts' delegate-suppl
 else
   ng "delegate-worker: 情報調査上限の拒否理由が不正"; cat delegate-supplement-three.out
 fi
+printf '#!/bin/bash\ntext='\''Outcome: partial\n## Claims\n### C1\nClaim: 情報が不足した\nEvidence:\nInterpretation: 未完了\nLimitations: route未確認\n## Remaining\nroute'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" capped-information-one "$SURVEY_REQUEST" > delegate-capped-information-one.out 2>&1
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --supplement-of capped-information-one capped-information-two "$SURVEY_SUPPLEMENT_ONE" > delegate-capped-information-two.out 2>&1
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --supplement-of capped-information-two capped-information-three "$SURVEY_SUPPLEMENT_TWO" > delegate-capped-information-three.out 2>&1
+CAPPED_INFORMATION_THREE_STATUS=$?
+if [ "$CAPPED_INFORMATION_THREE_STATUS" -ne 0 ] && jq -e '.information_attempt == 3 and .next_action == "review"' "$DELEGATE_REPO/.claude/tmp/worker/capped-information-three/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: 最終information attemptで実行不能なsupplement遷移を返さない"
+else
+  ng "delegate-worker: 最終information attemptの状態遷移が不正"; cat delegate-capped-information-three.out
+fi
+printf '#!/bin/bash\nprintf '\''not-json\\n'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" serialization-one "$SURVEY_REQUEST" > delegate-serialization-one.out 2>&1
+SERIALIZATION_ONE_STATUS=$?
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" --retry-of serialization-one serialization-two "$SURVEY_REQUEST" > delegate-serialization-two.out 2>&1
+SERIALIZATION_TWO_STATUS=$?
+if [ "$SERIALIZATION_ONE_STATUS" -eq 66 ] && [ "$SERIALIZATION_TWO_STATUS" -eq 66 ] && \
+   jq -e '.serialization_attempt == 0 and .next_action == "retry"' "$DELEGATE_REPO/.claude/tmp/worker/serialization-one/result.json" >/dev/null 2>&1 && \
+   jq -e '.serialization_attempt == 1 and .information_attempt == 1 and .next_action == "review"' "$DELEGATE_REPO/.claude/tmp/worker/serialization-two/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: serialization retryを情報調査と分離して1回で止める"
+else
+  ng "delegate-worker: serialization retry予算が不正"; cat delegate-serialization-one.out delegate-serialization-two.out
+fi
 printf '#!/bin/bash\ntext='\''Outcome: partial\n## Claims\n### C1\nClaim: 調査途中\nEvidence:\nInterpretation: 上限前に完了できなかった\nLimitations: O2未確認\n## Remaining\nO2'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
 PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" incomplete-outcome-survey "$SURVEY_REQUEST" > delegate-incomplete-outcome.out 2>&1
@@ -1105,6 +1200,22 @@ if [ "$INCOMPLETE_OUTCOME_STATUS" -eq 70 ] && [ "$(jq -r '.report_status' "$INCO
   ok "delegate-worker: 完全に受信した未完了outcomeを通信失敗と分離"
 else
   ng "delegate-worker: 未完了outcomeの分類が不正"; cat delegate-incomplete-outcome.out
+fi
+printf '#!/bin/bash\ntext='\''Outcome: partial\n## Claims\n### C1\nStatus: fulfilled\nClaim: 見出しを確認した\nEvidence:\n- `spec.md:1-1`\nInterpretation: 完了\nLimitations: none\n### C2\nStatus: partial\nClaim: 2行目は未確認\nEvidence:\nInterpretation: 未完了\nLimitations: 直接根拠なし\n### C3\nStatus: blocked\nClaim: 3行目は未確認\nEvidence:\nInterpretation: 未完了\nLimitations: 直接根拠なし\n## Remaining\nC2, C3'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
+chmod +x "$DELEGATE_BIN/opencode"
+PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" survey "${DELEGATE_TIMEOUT_ARGS[@]}" partial-claims-survey "$BATCH_SURVEY_REQUEST" > delegate-partial-claims.out 2>&1
+PARTIAL_CLAIMS_STATUS=$?
+if [ "$PARTIAL_CLAIMS_STATUS" -ne 0 ] && jq -e '
+  .outcome == "partial" and .output_contract_status == "valid" and
+  .claim_results == [
+    {id:"C1",status:"fulfilled",evidence_count:1,evidence_status:"verified"},
+    {id:"C2",status:"partial",evidence_count:0,evidence_status:"missing"},
+    {id:"C3",status:"blocked",evidence_count:0,evidence_status:"missing"}
+  ]
+' "$DELEGATE_REPO/.claude/tmp/worker/partial-claims-survey/result.json" >/dev/null 2>&1; then
+  ok "delegate-worker: partial artifactをclaim単位の検証結果へ構造化"
+else
+  ng "delegate-worker: partial claim metadataが不正"; cat delegate-partial-claims.out
 fi
 printf '#!/bin/bash\ntext='\''Outcome: fulfilled\n## Claims\n### C1\nClaim: 根拠範囲が広すぎる\nEvidence:\n- `long-evidence.txt:1-100`\nInterpretation: fixture\nLimitations: none\n## Remaining\nnone'\''\njq -cn --arg text "$text" '\''{type:"text",text:$text}'\''\n' > "$DELEGATE_BIN/opencode"
 chmod +x "$DELEGATE_BIN/opencode"
