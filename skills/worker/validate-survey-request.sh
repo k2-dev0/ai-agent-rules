@@ -1,5 +1,5 @@
 #!/bin/bash
-# survey依頼を外部workerへ送る前に、scopeとclaim境界を機械検証する。
+# survey依頼を正規化し、外部workerへ送る前にscopeとclaim境界を一括検証する。
 set -u
 
 readonly MAX_CLAIMS="3"
@@ -13,85 +13,122 @@ readonly MAX_DONE_WHEN_CHARACTERS="160"
 readonly MAX_EXCLUDES="8"
 readonly MAX_EXCLUDE_CHARACTERS="160"
 
-fail() {
-  printf 'survey-request: %s\n' "$1" >&2
+fatal() {
+  printf '{"errors":[{"path":"","message":"%s"}],"normalized_request":null}\n' "$1" >&2
   exit 1
 }
 
-[ "$#" -eq 1 ] || fail "expected exactly one JSON request argument"
-command -v jq >/dev/null 2>&1 || fail "jq is required"
+[ "$#" -eq 1 ] || fatal "expected exactly one JSON request argument"
+command -v jq >/dev/null 2>&1 || fatal "jq is required"
 
-REQUEST_JSON="$1"
-printf '%s' "$REQUEST_JSON" | jq -e 'type == "object"' >/dev/null 2>&1 || \
-  fail "request must be a JSON object"
+RAW_REQUEST=$1
+printf '%s' "$RAW_REQUEST" | jq -e . >/dev/null 2>&1 || fatal "request must be valid JSON"
 
-printf '%s' "$REQUEST_JSON" | jq -e '
-  (keys | sort) == ["claims", "purpose"]
-  and (.purpose | type == "string" and length > 0)
-  and (.claims | type == "array" and length > 0)
-' >/dev/null 2>&1 || \
-  fail "request must contain only non-empty purpose and claims fields"
+# 同じ意味のpacketを同じdigestへ寄せる。anchor / excludeは最初の出現順を保持して集合化する。
+NORMALIZED_REQUEST=$(printf '%s' "$RAW_REQUEST" | jq -cS '
+  def stable_unique:
+    reduce .[] as $item ([]; if any(.[]; . == $item) then . else . + [$item] end);
+  if type == "object" and (.claims | type) == "array" then
+    .claims |= map(
+      if type == "object" then
+        (if (.anchors | type) == "array" then .anchors |= stable_unique else . end)
+        | (if (.exclude | type) == "array" then .exclude |= stable_unique else . end)
+      else . end
+    )
+  else . end
+') || fatal "cannot normalize request"
 
-PURPOSE_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq -r '.purpose | length') || fail "cannot read purpose"
-[ "$PURPOSE_LENGTH" -le "$MAX_PURPOSE_CHARACTERS" ] || \
-  fail "purpose exceeds $MAX_PURPOSE_CHARACTERS characters"
+ERRORS='[]'
+add_error() {
+  ERRORS=$(printf '%s' "$ERRORS" | jq -c --arg path "$1" --arg message "$2" '. + [{path:$path,message:$message}]') || fatal "cannot collect validation errors"
+}
+json_test() {
+  printf '%s' "$NORMALIZED_REQUEST" | jq -e "$1" >/dev/null 2>&1
+}
 
-CLAIM_COUNT=$(printf '%s' "$REQUEST_JSON" | jq -r '.claims | length') || fail "cannot count claims"
-[ "$CLAIM_COUNT" -le "$MAX_CLAIMS" ] || \
-  fail "claims exceed $MAX_CLAIMS; split source-local packets into separate task ids"
+if ! json_test 'type == "object"'; then
+  add_error "" "request must be a JSON object"
+else
+  json_test '(keys | sort) == ["claims", "purpose"]' ||
+    add_error "" "request must contain only purpose and claims fields"
 
-printf '%s' "$REQUEST_JSON" | jq -e '
-  all(.claims[];
-    type == "object"
-    and (keys | sort) == ["anchors", "done_when", "exclude", "id", "kind", "question", "subject"]
-    and (.id | type == "string")
-    and (.kind | type == "string" and IN("behavior", "control_flow", "integration", "contract", "test", "test_absence"))
-    and (.subject | type == "string" and length > 0)
-    and (.question | type == "string" and length > 0)
-    and (.anchors | type == "array" and length > 0)
-    and (.done_when | type == "string" and length > 0)
-    and (.exclude | type == "array" and length > 0)
-  )
-' >/dev/null 2>&1 || \
-  fail "each claim requires only id, kind, subject, question, anchors, done_when, and exclude; kind must be behavior, control_flow, integration, contract, test, or test_absence"
+  if ! json_test '.purpose | type == "string" and length > 0'; then
+    add_error "/purpose" "purpose must be a non-empty string"
+  elif ! json_test ".purpose | length <= $MAX_PURPOSE_CHARACTERS"; then
+    add_error "/purpose" "purpose exceeds $MAX_PURPOSE_CHARACTERS characters"
+  fi
 
-if printf '%s' "$REQUEST_JSON" | jq -e 'any(.claims[]; .kind == "test_absence")' >/dev/null 2>&1; then
-  [ "$CLAIM_COUNT" -eq 1 ] || fail "test_absence must be the only claim because the runner verifies it deterministically"
+  if ! json_test '.claims | type == "array" and length > 0'; then
+    add_error "/claims" "claims must be a non-empty array"
+  else
+    CLAIM_COUNT=$(printf '%s' "$NORMALIZED_REQUEST" | jq -r '.claims | length') || fatal "cannot count claims"
+    [ "$CLAIM_COUNT" -le "$MAX_CLAIMS" ] ||
+      add_error "/claims" "claims exceed $MAX_CLAIMS; split source-local packets into separate task ids"
+
+    if json_test 'any(.claims[]; type == "object" and .kind == "test_absence")' && [ "$CLAIM_COUNT" -ne 1 ]; then
+      add_error "/claims" "test_absence must be the only claim because the runner verifies it deterministically"
+    fi
+    json_test '[.claims[].id] == [range(1; (.claims | length) + 1) | "C\(.)"]' ||
+      add_error "/claims" "claim ids must be unique and contiguous in C1..${CLAIM_COUNT} order"
+
+    CLAIM_INDEX=0
+    while [ "$CLAIM_INDEX" -lt "$CLAIM_COUNT" ]; do
+      CLAIM_PATH="/claims/$CLAIM_INDEX"
+      CLAIM_ID="C$((CLAIM_INDEX + 1))"
+      if ! json_test ".claims[$CLAIM_INDEX] | type == \"object\""; then
+        add_error "$CLAIM_PATH" "$CLAIM_ID must be an object"
+        CLAIM_INDEX=$((CLAIM_INDEX + 1))
+        continue
+      fi
+
+      json_test ".claims[$CLAIM_INDEX] | (keys | sort) == [\"anchors\", \"done_when\", \"exclude\", \"id\", \"kind\", \"question\", \"subject\"]" ||
+        add_error "$CLAIM_PATH" "$CLAIM_ID requires only id, kind, subject, question, anchors, done_when, and exclude"
+      json_test ".claims[$CLAIM_INDEX].kind | type == \"string\" and IN(\"behavior\", \"control_flow\", \"integration\", \"contract\", \"test\", \"test_absence\")" ||
+        add_error "$CLAIM_PATH/kind" "$CLAIM_ID.kind is unsupported"
+
+      for FIELD in subject question done_when; do
+        if ! json_test ".claims[$CLAIM_INDEX].$FIELD | type == \"string\" and length > 0"; then
+          add_error "$CLAIM_PATH/$FIELD" "$CLAIM_ID.$FIELD must be a non-empty string"
+        elif ! json_test ".claims[$CLAIM_INDEX].$FIELD | test(\"[\\\\n\\\\r\\\\t]\") | not"; then
+          add_error "$CLAIM_PATH/$FIELD" "$CLAIM_ID.$FIELD contains a newline, carriage return, or tab"
+        fi
+      done
+
+      json_test ".claims[$CLAIM_INDEX].subject | type != \"string\" or length <= $MAX_SUBJECT_CHARACTERS" ||
+        add_error "$CLAIM_PATH/subject" "$CLAIM_ID.subject exceeds $MAX_SUBJECT_CHARACTERS characters"
+      json_test ".claims[$CLAIM_INDEX].question | type != \"string\" or length <= $MAX_QUESTION_CHARACTERS" ||
+        add_error "$CLAIM_PATH/question" "$CLAIM_ID.question exceeds $MAX_QUESTION_CHARACTERS characters"
+      json_test ".claims[$CLAIM_INDEX].question | type != \"string\" or ([scan(\"[、,;；]\")] | length) <= $MAX_QUESTION_ENUMERATORS" ||
+        add_error "$CLAIM_PATH/question" "$CLAIM_ID.question exceeds $MAX_QUESTION_ENUMERATORS enumerators"
+      json_test ".claims[$CLAIM_INDEX].done_when | type != \"string\" or length <= $MAX_DONE_WHEN_CHARACTERS" ||
+        add_error "$CLAIM_PATH/done_when" "$CLAIM_ID.done_when exceeds $MAX_DONE_WHEN_CHARACTERS characters"
+
+      if ! json_test ".claims[$CLAIM_INDEX].anchors | type == \"array\" and length > 0 and all(.[]; type == \"string\" and length > 0)"; then
+        add_error "$CLAIM_PATH/anchors" "$CLAIM_ID.anchors must be a non-empty string array"
+      else
+        json_test ".claims[$CLAIM_INDEX].anchors | length <= $MAX_ANCHORS" ||
+          add_error "$CLAIM_PATH/anchors" "$CLAIM_ID.anchors exceeds $MAX_ANCHORS items"
+        json_test ".claims[$CLAIM_INDEX].anchors | all(length <= $MAX_ANCHOR_CHARACTERS and (test(\"[\\\\n\\\\r\\\\t]\") | not))" ||
+          add_error "$CLAIM_PATH/anchors" "$CLAIM_ID.anchors contains an overlong or control-character item"
+      fi
+
+      if ! json_test ".claims[$CLAIM_INDEX].exclude | type == \"array\" and length > 0 and all(.[]; type == \"string\" and length > 0)"; then
+        add_error "$CLAIM_PATH/exclude" "$CLAIM_ID.exclude must be a non-empty string array"
+      else
+        json_test ".claims[$CLAIM_INDEX].exclude | length <= $MAX_EXCLUDES" ||
+          add_error "$CLAIM_PATH/exclude" "$CLAIM_ID.exclude exceeds $MAX_EXCLUDES items"
+        json_test ".claims[$CLAIM_INDEX].exclude | all(length <= $MAX_EXCLUDE_CHARACTERS and (test(\"[\\\\n\\\\r\\\\t]\") | not))" ||
+          add_error "$CLAIM_PATH/exclude" "$CLAIM_ID.exclude contains an overlong or control-character item"
+      fi
+      CLAIM_INDEX=$((CLAIM_INDEX + 1))
+    done
+  fi
 fi
 
-printf '%s' "$REQUEST_JSON" | jq -e '
-  [.claims[].id] == [range(1; (.claims | length) + 1) | "C\(.)"]
-' >/dev/null 2>&1 || \
-  fail "claim ids must be unique and contiguous in C1..C${CLAIM_COUNT} order"
+if [ "$(printf '%s' "$ERRORS" | jq 'length')" -gt 0 ]; then
+  jq -cn --argjson errors "$ERRORS" --argjson normalized_request "$NORMALIZED_REQUEST" \
+    '{errors:$errors,normalized_request:$normalized_request}' >&2
+  exit 1
+fi
 
-CLAIM_INDEX=0
-while [ "$CLAIM_INDEX" -lt "$CLAIM_COUNT" ]; do
-  CLAIM_ID=$(printf '%s' "$REQUEST_JSON" | jq -r ".claims[$CLAIM_INDEX].id") || fail "cannot read claim id"
-  SUBJECT_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].subject | length") || fail "cannot read $CLAIM_ID.subject"
-  [ "$SUBJECT_LENGTH" -le "$MAX_SUBJECT_CHARACTERS" ] || fail "$CLAIM_ID.subject exceeds $MAX_SUBJECT_CHARACTERS characters (actual $SUBJECT_LENGTH)"
-
-  QUESTION_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].question | length") || fail "cannot read $CLAIM_ID.question"
-  [ "$QUESTION_LENGTH" -le "$MAX_QUESTION_CHARACTERS" ] || fail "$CLAIM_ID.question exceeds $MAX_QUESTION_CHARACTERS characters (actual $QUESTION_LENGTH)"
-  QUESTION_ENUMERATORS=$(printf '%s' "$REQUEST_JSON" | jq "[.claims[$CLAIM_INDEX].question | scan(\"[、,;；]\")] | length") || fail "cannot inspect $CLAIM_ID.question"
-  [ "$QUESTION_ENUMERATORS" -le "$MAX_QUESTION_ENUMERATORS" ] || fail "$CLAIM_ID.question has $QUESTION_ENUMERATORS enumerators (maximum $MAX_QUESTION_ENUMERATORS)"
-
-  printf '%s' "$REQUEST_JSON" | jq -e "[.claims[$CLAIM_INDEX].subject, .claims[$CLAIM_INDEX].question, .claims[$CLAIM_INDEX].done_when, .claims[$CLAIM_INDEX].anchors[], .claims[$CLAIM_INDEX].exclude[]] | all(type == \"string\" and length > 0)" >/dev/null 2>&1 || fail "$CLAIM_ID contains a non-string or empty text/list value"
-  printf '%s' "$REQUEST_JSON" | jq -e "[.claims[$CLAIM_INDEX].subject, .claims[$CLAIM_INDEX].question, .claims[$CLAIM_INDEX].done_when, .claims[$CLAIM_INDEX].anchors[], .claims[$CLAIM_INDEX].exclude[]] | all(test(\"[\\\\n\\\\r\\\\t]\") | not)" >/dev/null 2>&1 || fail "$CLAIM_ID contains a newline, carriage return, or tab"
-
-  ANCHOR_COUNT=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].anchors | length") || fail "cannot count $CLAIM_ID.anchors"
-  [ "$ANCHOR_COUNT" -le "$MAX_ANCHORS" ] || fail "$CLAIM_ID.anchors has $ANCHOR_COUNT items (maximum $MAX_ANCHORS)"
-  printf '%s' "$REQUEST_JSON" | jq -e ".claims[$CLAIM_INDEX].anchors | length == (unique | length)" >/dev/null 2>&1 || fail "$CLAIM_ID.anchors contains duplicates"
-  printf '%s' "$REQUEST_JSON" | jq -e --argjson maximum "$MAX_ANCHOR_CHARACTERS" ".claims[$CLAIM_INDEX].anchors | all(length <= \$maximum)" >/dev/null 2>&1 || fail "$CLAIM_ID.anchors item exceeds $MAX_ANCHOR_CHARACTERS characters"
-
-  DONE_WHEN_LENGTH=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].done_when | length") || fail "cannot read $CLAIM_ID.done_when"
-  [ "$DONE_WHEN_LENGTH" -le "$MAX_DONE_WHEN_CHARACTERS" ] || fail "$CLAIM_ID.done_when exceeds $MAX_DONE_WHEN_CHARACTERS characters (actual $DONE_WHEN_LENGTH)"
-
-  EXCLUDE_COUNT=$(printf '%s' "$REQUEST_JSON" | jq ".claims[$CLAIM_INDEX].exclude | length") || fail "cannot count $CLAIM_ID.exclude"
-  [ "$EXCLUDE_COUNT" -le "$MAX_EXCLUDES" ] || fail "$CLAIM_ID.exclude has $EXCLUDE_COUNT items (maximum $MAX_EXCLUDES)"
-  printf '%s' "$REQUEST_JSON" | jq -e ".claims[$CLAIM_INDEX].exclude | length == (unique | length)" >/dev/null 2>&1 || fail "$CLAIM_ID.exclude contains duplicates"
-  printf '%s' "$REQUEST_JSON" | jq -e --argjson maximum "$MAX_EXCLUDE_CHARACTERS" ".claims[$CLAIM_INDEX].exclude | all(length <= \$maximum)" >/dev/null 2>&1 || fail "$CLAIM_ID.exclude item exceeds $MAX_EXCLUDE_CHARACTERS characters"
-  CLAIM_INDEX=$((CLAIM_INDEX + 1))
-done
-
-# key順と空白を正規化し、同じ意味の依頼が同じdigestになるようにする。
-printf '%s' "$REQUEST_JSON" | jq -cS . || fail "cannot normalize request"
+printf '%s\n' "$NORMALIZED_REQUEST"
