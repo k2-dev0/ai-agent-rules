@@ -301,7 +301,7 @@ grep -q '新しい関数・メソッド・helperへ切り出して直後に呼�
 grep -Fq '外部ワーカーの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'workerが検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind はprepare・固定実行器で機械的検出を外部ワーカー、修正判断を上位へ固定" || ng "unwind のprepare・固定実行器または検出・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -x "$IMPLEMENTATION_SCOPE_HOOK" ] && bash -n "$IMPLEMENTATION_SCOPE_HOOK" && [ -x "$IMPLEMENTER_READ_SCRIPT" ] && [ -x "$IMPLEMENTER_PREFLIGHT_SCRIPT" ] && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq 'preflight-implementer.sh [agent_name]' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh status' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh recover-to-parent <feature>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh activate <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh handoff-to-parent <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh deactivate <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ok "tdd は開始scope・実装mode・安全な読み取り・実変更pathを固定" || ng "tdd のscope selectorまたは実装scope hookが不正"
-grep -Fq '最初のshell command' "$SCENARIO_FLOW" && grep -Fq '復旧調査用workerを起動しない' "$TDD_SKILL" && grep -Fq 'dirty_paths' "$SCENARIO_FLOW" && ok "tdd は残留scopeをworkerなしで安全に回収" || ng "tdd の残留scope回収フローが不正"
+grep -Fq '最初のshell command' "$SCENARIO_FLOW" && grep -Fq '復旧調査用workerを起動しない' "$TDD_SKILL" && grep -Fq 'dirty_paths' "$SCENARIO_FLOW" && grep -Fq '`dirty_paths`が空なら、同じcommandがscopeを解除する' "$TDD_SKILL" && grep -Fq '間に別の読み取りを挟まない' "$TDD_SKILL" && ok "tdd は残留scopeをworkerなしで安全に回収" || ng "tdd の残留scope回収フローが不正"
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '入力された実変更pathだけが追跡済みかつclean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
@@ -1693,21 +1693,51 @@ else
 fi
 CODEX_RECOVER_COMMAND="bash .agents/skills/polish/capture-scope.sh recover-to-parent codex-implementation"
 CODEX_ALLOW_RECOVER=$(jq -n --arg cwd "$PWD" --arg command "$CODEX_RECOVER_COMMAND" '{hook_event_name:"PreToolUse",session_id:"CRECOVER1",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+CODEX_CLEAN_RECOVER_OUTPUT=$(bash "$CODEX_CAPTURE_SCOPE" recover-to-parent codex-implementation 2>/dev/null)
+CODEX_AFTER_CLEAN_RECOVER=$(bash "$CODEX_CAPTURE_SCOPE" status 2>/dev/null)
 if [ -z "$CODEX_ALLOW_RECOVER" ] && \
-   bash "$CODEX_CAPTURE_SCOPE" recover-to-parent codex-implementation >/dev/null 2>&1 && \
-   [ "$(bash "$CODEX_CAPTURE_SCOPE" status | jq -r '.mode')" = "parent-fallback" ]; then
-  CODEX_ALLOW_RECOVERED_WRITE=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CRECOVER1",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
-  CODEX_DENY_OLD_IMPLEMENTER_WRITE=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CIMPL2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
-  if [ -z "$CODEX_ALLOW_RECOVERED_WRITE" ] && [ "$(echo "$CODEX_DENY_OLD_IMPLEMENTER_WRITE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
-    ok "implementation orphan recovery: 新parentが同じrequestを引き継ぐ"
-  else
-    ng "implementation orphan recovery: 復旧後のowner境界が不正"
-  fi
+   [ "$(echo "$CODEX_CLEAN_RECOVER_OUTPUT" | jq -r '.outcome' 2>/dev/null)" = "clean-deactivated" ] && \
+   [ "$(echo "$CODEX_CLEAN_RECOVER_OUTPUT" | jq -r '.next_action' 2>/dev/null)" = "start-normal-flow" ] && \
+   [ "$(echo "$CODEX_AFTER_CLEAN_RECOVER" | jq -r '.active' 2>/dev/null)" = "false" ] && \
+   [ ! -e "$CODEX_ORPHAN_RECEIPT_ROOT/implementation.active" ] && \
+   [ ! -e "$CODEX_ORPHAN_RECEIPT_ROOT/implementation.owner" ]; then
+  ok "implementation orphan recovery: clean scopeを1 commandで回収・解除"
 else
-  ng "implementation orphan recovery: recover-to-parent失敗"
+  ng "implementation orphan recovery: clean scopeの原子的回収失敗 out=[$CODEX_CLEAN_RECOVER_OUTPUT] status=[$CODEX_AFTER_CLEAN_RECOVER]"
 fi
-CODEX_ALLOW_RECOVERED_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CRECOVER1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh deactivate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
-if [ -z "$CODEX_ALLOW_RECOVERED_DEACTIVATE" ] && bash "$CODEX_CAPTURE_SCOPE" deactivate codex-implementation >/dev/null 2>&1; then ok "implementation orphan recovery: 復旧ownerがdeactivate"; else ng "implementation orphan recovery: 復旧ownerのdeactivate失敗"; fi
+
+# 実差分がある中断scopeだけはrequestを保持してparent-fallbackへ移す。
+if bash "$CODEX_IMPLEMENTATION_VALIDATOR" "$CODEX_IMPLEMENTATION_REQUEST" >/dev/null 2>&1 && \
+   jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CDIRTYOWNER",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh activate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK" >/dev/null && \
+   bash "$CODEX_CAPTURE_SCOPE" activate codex-implementation >/dev/null 2>&1; then
+  printf 'export const codexImplementation = false\n' > src/codex-implementation.ts
+  CODEX_DIRTY_OWNER_END=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"CDIRTYOWNER",cwd:$cwd}')
+  echo "$CODEX_DIRTY_OWNER_END" | bash $H/session.sh
+  CODEX_DIRTY_STATUS=$(bash "$CODEX_CAPTURE_SCOPE" status 2>/dev/null)
+  CODEX_ALLOW_DIRTY_RECOVER=$(jq -n --arg cwd "$PWD" --arg command "$CODEX_RECOVER_COMMAND" '{hook_event_name:"PreToolUse",session_id:"CDIRTYRECOVER",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+  CODEX_DIRTY_RECOVER_OUTPUT=$(bash "$CODEX_CAPTURE_SCOPE" recover-to-parent codex-implementation 2>/dev/null)
+  CODEX_AFTER_DIRTY_RECOVER=$(bash "$CODEX_CAPTURE_SCOPE" status 2>/dev/null)
+  CODEX_DENY_OWNER_NORMAL_SHELL=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CDIRTYRECOVER",cwd:$cwd,tool_name:"Bash",tool_input:{command:"git status --short"}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+  CODEX_ALLOW_RECOVERED_WRITE=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CDIRTYRECOVER",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+  CODEX_DENY_OLD_IMPLEMENTER_WRITE=$(jq -n --arg cwd "$PWD" --arg command $'*** Begin Patch\n*** Update File: src/codex-implementation.ts\n+x\n*** End Patch' '{hook_event_name:"PreToolUse",session_id:"CIMPL2",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:$command}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+  if [ "$(echo "$CODEX_DIRTY_STATUS" | jq -r '.dirty_paths[0]' 2>/dev/null)" = "src/codex-implementation.ts" ] && \
+     [ -z "$CODEX_ALLOW_DIRTY_RECOVER" ] && \
+     [ "$(echo "$CODEX_DIRTY_RECOVER_OUTPUT" | jq -r '.outcome' 2>/dev/null)" = "parent-fallback" ] && \
+     [ "$(echo "$CODEX_DIRTY_RECOVER_OUTPUT" | jq -r '.next_action' 2>/dev/null)" = "resume-active-request" ] && \
+     [ "$(echo "$CODEX_AFTER_DIRTY_RECOVER" | jq -r '.mode' 2>/dev/null)" = "parent-fallback" ] && \
+     [ -z "$CODEX_ALLOW_RECOVERED_WRITE" ] && \
+     [ "$(echo "$CODEX_DENY_OLD_IMPLEMENTER_WRITE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && \
+     echo "$CODEX_DENY_OWNER_NORMAL_SHELL" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null | grep -Fq 'parent-fallback ownerとして認識済み'; then
+    ok "implementation orphan recovery: dirty scopeだけを新parentへ引き継ぐ"
+  else
+    ng "implementation orphan recovery: dirty scopeのowner境界が不正 out=[$CODEX_DIRTY_RECOVER_OUTPUT] status=[$CODEX_AFTER_DIRTY_RECOVER]"
+  fi
+  CODEX_ALLOW_DIRTY_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CDIRTYRECOVER",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh deactivate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK")
+  if [ -z "$CODEX_ALLOW_DIRTY_DEACTIVATE" ] && bash "$CODEX_CAPTURE_SCOPE" deactivate codex-implementation >/dev/null 2>&1; then ok "implementation orphan recovery: dirty復旧ownerがdeactivate"; else ng "implementation orphan recovery: dirty復旧ownerのdeactivate失敗"; fi
+  printf 'export const codexImplementation = true\n' > src/codex-implementation.ts
+else
+  ng "implementation orphan recovery: dirty fixture activate失敗"
+fi
 
 # 旧配布版が残したscopeにはleaseもSessionEnd orphan markerも無い。一定時間後だけ復旧を許す。
 if bash "$CODEX_IMPLEMENTATION_VALIDATOR" "$CODEX_IMPLEMENTATION_REQUEST" >/dev/null 2>&1 && \
@@ -1717,15 +1747,16 @@ if bash "$CODEX_IMPLEMENTATION_VALIDATOR" "$CODEX_IMPLEMENTATION_REQUEST" >/dev/
   rm -f "$CODEX_RECEIPT_ROOT/implementation.active/lease"
   CODEX_LEGACY_STATUS=$(POLISH_SCOPE_STALE_SECONDS=0 bash "$CODEX_CAPTURE_SCOPE" status 2>/dev/null)
   CODEX_ALLOW_LEGACY_RECOVER=$(jq -n --arg cwd "$PWD" --arg command "$CODEX_RECOVER_COMMAND" '{hook_event_name:"PreToolUse",session_id:"CRECOVER2",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command}}' | POLISH_SCOPE_STALE_SECONDS=0 bash "$CODEX_IMPLEMENTATION_HOOK")
+  CODEX_LEGACY_RECOVER_OUTPUT=$(POLISH_SCOPE_STALE_SECONDS=0 bash "$CODEX_CAPTURE_SCOPE" recover-to-parent codex-implementation 2>/dev/null)
+  CODEX_AFTER_LEGACY_RECOVER=$(bash "$CODEX_CAPTURE_SCOPE" status 2>/dev/null)
   if [ "$(echo "$CODEX_LEGACY_STATUS" | jq -r '.recoverable' 2>/dev/null)" = "true" ] && \
      [ -z "$CODEX_ALLOW_LEGACY_RECOVER" ] && \
-     POLISH_SCOPE_STALE_SECONDS=0 bash "$CODEX_CAPTURE_SCOPE" recover-to-parent codex-implementation >/dev/null 2>&1; then
-    ok "implementation orphan recovery: lease無しの旧scopeも期限後に復旧"
+     [ "$(echo "$CODEX_LEGACY_RECOVER_OUTPUT" | jq -r '.outcome' 2>/dev/null)" = "clean-deactivated" ] && \
+     [ "$(echo "$CODEX_AFTER_LEGACY_RECOVER" | jq -r '.active' 2>/dev/null)" = "false" ]; then
+    ok "implementation orphan recovery: lease無しの旧clean scopeも期限後に回収・解除"
   else
-    ng "implementation orphan recovery: 旧scopeの復旧失敗 status=[$CODEX_LEGACY_STATUS]"
+    ng "implementation orphan recovery: 旧scopeの復旧失敗 out=[$CODEX_LEGACY_RECOVER_OUTPUT] status=[$CODEX_AFTER_LEGACY_RECOVER]"
   fi
-  jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CRECOVER2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh deactivate codex-implementation"}}' | bash "$CODEX_IMPLEMENTATION_HOOK" >/dev/null
-  bash "$CODEX_CAPTURE_SCOPE" deactivate codex-implementation >/dev/null 2>&1
 else
   ng "implementation orphan recovery: 旧scope fixture activate失敗"
 fi
