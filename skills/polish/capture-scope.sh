@@ -270,7 +270,6 @@ if [ "${2:-}" = "--auto" ]; then
   [ "$#" -eq 2 ] || die "usage: capture-scope.sh <機能名> --auto"
   FEATURE=$1
   [[ "$FEATURE" =~ $FEATURE_RE ]] || die "invalid 機能名: $FEATURE (ASCII kebab-case only)"
-  [ -z "$(git status --porcelain --untracked-files=all)" ] || die "auto baselineはclean worktreeでだけ記録できる"
   SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
   rm -f "$RECEIPT_DIR/$FEATURE.implementation-request"
   BASE=$(git rev-parse HEAD)
