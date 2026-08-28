@@ -15,7 +15,15 @@ hooks:
 
 `.prompt.md`の先頭未完了設計書1枚を`survey → scenario → red → subagent-green → review-green → polish`で完了する。調査後のシナリオ、テスト、Red、専用subagentの初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、探索制限、scope固定、polish、index更新だけを追加する。
 
-共通フローのStep 0を対象選択より先に実行する。最初のshell commandは`bash [skills_root]/polish/capture-scope.sh status`に固定し、active scopeがあっても復旧調査用workerを起動しない。回収可能なら同じrequestを`recover-to-parent`で引き継ぎ、回収不能なら通常探索を始めず停止する。
+共通フローのStep 0を対象選択より先に実行する。最初のshell commandは`bash [skills_root]/polish/capture-scope.sh status`に固定し、active scopeがあっても復旧調査用workerを起動しない。返却JSONを次の状態遷移だけで処理し、この判断のために参照先を読む必要がないようにする。
+
+- `active: false`: 共通フローを読み、通常の対象選択から開始する
+- `active: true`かつ`recoverable: false`: 通常探索を始めず、statusの`feature`、`mode`、`lease_age_seconds`を報告して停止する
+- `active: true`かつ`recoverable: true`: statusの直後に`bash [skills_root]/polish/capture-scope.sh recover-to-parent <feature>`を一回実行し、間に別の読み取りを挟まない
+  - `dirty_paths`が空なら、同じcommandがscopeを解除する。`next_action: "start-normal-flow"`を受け取った後に共通フローを読み、通常の対象選択から開始する
+  - `dirty_paths`があれば、同じcommandがrequestと差分をparent-fallbackへ移し、`next_action: "resume-active-request"`を返す。通常shellを使わず、request内pathだけをquoted `implementer-read.sh`で読み、初回実装の続きから再開する
+
+`recover-to-parent`成功後にstatusを再解釈したり、clean scopeへ別のdeactivateを要求したりしない。commandの`next_action`だけに従う。
 
 ## 対象の選択
 
