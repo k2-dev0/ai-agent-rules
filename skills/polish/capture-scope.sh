@@ -53,6 +53,17 @@ read_scope_receipt() {
   git merge-base --is-ancestor "$BASE" HEAD || die "開始commitが現在HEADの祖先ではない"
 }
 
+collect_active_dirty_paths() {
+  DIRTY_PATHS='[]'
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    validate_path "$path"
+    if [ -n "$(git status --porcelain --untracked-files=all -- ":(literal)$path")" ]; then
+      DIRTY_PATHS=$(printf '%s' "$DIRTY_PATHS" | jq --arg path "$path" '. + [$path]') || die "変更pathをJSONへ変換できない"
+    fi
+  done < <(sed -n '4,$p' "$ACTIVE_SCOPE")
+}
+
 if [ "${1:-}" = "status" ]; then
   [ "$#" -eq 1 ] || die "usage: capture-scope.sh status"
   if [ ! -d "$ACTIVE_DIR" ]; then
@@ -73,14 +84,7 @@ if [ "${1:-}" = "status" ]; then
   [ "$LEASE_AGE" -lt "$STALE_SECONDS" ] || STALE=true
   RECOVERABLE=$STALE
   [ "$MODE" != "orphaned" ] || RECOVERABLE=true
-  DIRTY_PATHS='[]'
-  while IFS= read -r path; do
-    [ -n "$path" ] || continue
-    validate_path "$path"
-    if [ -n "$(git status --porcelain --untracked-files=all -- ":(literal)$path")" ]; then
-      DIRTY_PATHS=$(printf '%s' "$DIRTY_PATHS" | jq --arg path "$path" '. + [$path]') || die "変更pathをJSONへ変換できない"
-    fi
-  done < <(sed -n '4,$p' "$ACTIVE_SCOPE")
+  collect_active_dirty_paths
   jq -n \
     --arg repository "$REPOSITORY" \
     --arg feature "$FEATURE" \
@@ -184,6 +188,18 @@ if [ "${1:-}" = "recover-to-parent" ]; then
   esac
   RECOVERY_OWNER=$(sed -n '1p' "$RECOVERY_OWNER_FILE")
   [ -n "$RECOVERY_OWNER" ] || die "復旧owner receiptが空"
+  collect_active_dirty_paths
+  if [ "$DIRTY_PATHS" = '[]' ]; then
+    RECOVERED_DIR="$RECEIPT_DIR/implementation.recovered.$$"
+    mv "$ACTIVE_DIR" "$RECOVERED_DIR" || die "cleanな実装scopeを回収できない"
+    rm -f "$RECOVERED_DIR/request.json" "$RECOVERED_DIR/lease"
+    rm "$RECOVERED_DIR/mode" || die "回収済みscopeのmodeを解除できない"
+    rm "$RECOVERED_DIR/scope" || die "回収済みscopeを解除できない"
+    rmdir "$RECOVERED_DIR" || die "回収済みscope directoryを解除できない"
+    rm -f "$OWNER_FILE" "$RECOVERY_OWNER_FILE"
+    jq -n --arg feature "$FEATURE" '{outcome:"clean-deactivated",feature:$feature,next_action:"start-normal-flow"}'
+    exit 0
+  fi
   TEMP_MODE="$ACTIVE_MODE.tmp.$$"
   printf 'parent-fallback\n' > "$TEMP_MODE" || die "parent fallback modeを書けない"
   if ! mv "$RECOVERY_OWNER_FILE" "$OWNER_FILE"; then
@@ -192,7 +208,7 @@ if [ "${1:-}" = "recover-to-parent" ]; then
   fi
   mv "$TEMP_MODE" "$ACTIVE_MODE" || die "parent fallback modeを確定できない"
   implementation_scope_touch_lease || die "復旧後のleaseを更新できない"
-  echo "recovered: $FEATURE parent-fallback"
+  jq -n --arg feature "$FEATURE" --argjson dirty_paths "$DIRTY_PATHS" '{outcome:"parent-fallback",feature:$feature,next_action:"resume-active-request",dirty_paths:$dirty_paths}'
   exit 0
 fi
 
