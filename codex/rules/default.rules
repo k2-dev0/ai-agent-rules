@@ -14,17 +14,6 @@ prefix_rule(
     justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )
 prefix_rule(
-    pattern = ["bash", ".agents/skills/tdd/implementer-read.sh"],
-    decision = "allow",
-    justification = "active implementation requestで許可済みの単一pathだけを読み取ります。",
-    match = [
-        "bash .agents/skills/tdd/implementer-read.sh 'front/features/mypage/routes/contract/pages/-.[number]._index.tsx'",
-    ],
-    not_match = [
-        "bash .claude/skills/tdd/implementer-read.sh front/features/mypage/routes/contract/pages/index.tsx",
-    ],
-)
-prefix_rule(
     pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
     decision = "allow",
     justification = "polish対象が実変更pathと一致し、追跡済み・cleanであることを確認します。",
