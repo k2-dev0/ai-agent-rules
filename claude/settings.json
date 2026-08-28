@@ -43,10 +43,6 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/load-required-contract.sh"
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-implementation-scope.sh"
           }
         ]
       },
@@ -73,10 +69,6 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-locks.sh"
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/shell/protect-implementation-scope.sh"
           }
         ]
       }
