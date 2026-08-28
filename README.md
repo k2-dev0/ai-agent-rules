@@ -100,26 +100,30 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $bootstrap codex
 ```
 
-### worker調査とsubagent実装
+### native subagentによるTDD / errand
 
 役割分担は次で固定する。
 
 | 工程 | 担当 | 境界 |
 |---|---|---|
-| 設計に必要なコードベース探索・根拠収集 | worker | `delegate.sh`を最優先。設計判断はしない |
-| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行い、外部ワーカーや調査subagentへ渡さない |
-| 承認済み範囲の初回実装 | implementer subagent | active scope内の本体コードと`schema.prisma`だけを変更する |
+| TDD / errandのコードベース探索・根拠収集 | native surveyor subagent | source group単位の読み取り専用調査。設計判断はしない |
+| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行う |
+| 承認済み範囲の初回実装 | native implementer subagent | 要求に必要なproduction codeと`schema.prisma`を変更する |
 | 差分の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 初回実装後はworker・implementerへ戻さない |
+| meeting等の設計調査、ネストの機械的検出 | 外部worker | `delegate.sh`の読み取り専用実行。TDD / errandでは使わない |
 | ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
 
-コードベースの事実確認は共通の外部workerへ、初回実装は上位モデルが起動する専用implementerへ委任する。Claude Codeは`claude-sonnet-5` / `max`、Codexは`gpt-5.6-luna` / `max`を固定する。Codexはfresh contextで起動し、親会話の分類・レビュー依頼を継承させない。上位モデルは設計判断、差分採否、レビュー、修正、テスト、Gitを担当する。workerの共通契約は`skills/worker/DELEGATION.md`を読む。
+`tdd`と`errand`は、調査も初回実装もnative subagentへ委任する。surveyorはClaude CodeではRead / Grep / Globだけ、Codexではread-only sandboxを使う。独立したsource groupは最大3体を並行起動し、返答は確認済み事実、`path:line`、想定変更先、直接関係するtest・検証command、未確認事項だけとする。claim packet、Evidence artifact、Markdown repair、supplement attemptは使わない。
 
+implementerは一体だけfresh contextで起動する。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はread-only surveyor、Red後のclean worktree、Git・外部通信・test実行を持たないimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、親による全実差分レビュー、Greenで構成する。
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`survey → scenario → red → subagent-green → review-green`を共有する。surveyは変更判断に必要な現在挙動、最寄りの同型実装、直接必要な入力・schema・test境界、検証commandを一つのclaimへ混ぜない。同じsource refと候補file群を読むclaimだけを最大3件まで同じpacketへまとめ、独立packetを最大3件並列にする。implementerには全要件を保持した設計または実装指示、Evidence、test_scenarios、Red要約、許可pathを必須入力とする。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`native survey → scenario → red → native implementer → review-green`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
+
+以下の外部worker契約はmeeting、preflight、cowlick、ponytail、unwind等にだけ適用する。TDD / errandのnative subagentフローには適用しない。
 
 上位モデルの判断境界は圧縮した`skills/worker/DELEGATION.md`、CLI、時間、claim-evidence、結果判定、再試行の機械的制約は`delegate.sh`を正本とする。session最初の委任前にhookが前者を一度注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
-上位モデルのfamily、性能tier、effortが変わっても、workerへの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。implementerのmodelとeffortはproject agent定義を正とし、検証済み証拠からの初回実装だけを担当する。
+上位モデルのfamily、性能tier、effortが変わっても、外部workerを使う設計workflowの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`と最終回答がある場合だけそのreportをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
@@ -138,8 +142,6 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
 
 通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
-
-implementerは親とworktreeを共有する。親はworker artifact、全要件を保持した実装指示、test_scenarios、Red、許可pathを構造化JSONへ入れ、`validate-implementation-request.sh`で出力契約とscope一致を検証する。専用agent設定をpreflightしてから`capture-scope.sh activate`で`subagent` modeを有効にし、一体だけ起動する。active中の読み取りは`implementer-read.sh`へ限定し、書き込みはmodeとsession ownerを組み合わせて許可path完全一致で検査する。cleanな再実行も失敗した場合はrequestとtest_pathsを残したまま`parent-fallback`へhandoffし、親だけが許可pathを実装できる。実装完了後にだけ`deactivate`する。
 
 隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
@@ -177,7 +179,7 @@ implementerは親とworktreeを共有する。親はworker artifact、全要件�
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
 | `commit-subject.sh` が生成・検証する契約に従うコミット | ✅ 自動 |
-| `tdd` 中にテストの無い ts/js コードを書く | 🚫 禁止 |
+| TDD / errandでRed確認前にnative implementerを起動する | 🚫 workflowで禁止 |
 | pipeline・loop・条件分岐・subshell・inline shellへ複数commandを集約する | 🚫 禁止 |
 | `find -delete/-exec`、`sort -o`、`rg --pre`など読み取りcommandの危険option | 🚫 禁止 |
 | `prisma migrate` / `prisma db push` / `prisma db execute`を実行する | 🚫 禁止 |
@@ -205,8 +207,8 @@ implementerは親とworktreeを共有する。親はworker artifact、全要件�
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
-| testの有無によるコード書き込み判定 | `hooks/shell/require-test.sh`。Claude Codeはtddのfrontmatter、Codexは常時配線と`session.sh`のmarkerでtdd中だけ執行 |
-| TDD実装scopeの所有・回収 | `hooks/shell/protect-implementation-scope.sh`、`hooks/shell/session.sh`、`skills/polish/capture-scope.sh`。Codexのowner終了時はrequestを保持したままorphan化し、新sessionは`status`後に`recover-to-parent`で引き継ぐ。Claude CodeまたはSessionEnd欠落時は1時間のlease失効後だけ回収可 |
+| TDD / errandのnative調査・初回実装 | `skills/tdd/SCENARIO_FLOW.md`、`claude/agents/{surveyor,implementer}.md`、`codex/agents/{surveyor,implementer}.toml` |
+| 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
 | 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
 | `.claude` / `.codex` / `.agents`の設定・skill自己改変防止（`prompt/`は直接編集可） | `hooks/shell/protect-config.sh` |
 | `.env` / `.env.*`の書き込み・削除防止 | `hooks/shell/protect-env.sh`。sandbox / permission profileとの二重層 |
