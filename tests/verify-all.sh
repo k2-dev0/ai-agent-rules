@@ -113,11 +113,10 @@ WORKER_RUNNER="$REPO/skills/worker/delegate.sh"
 SURVEY_REQUEST_VALIDATOR="$REPO/skills/worker/validate-survey-request.sh"
 CLAUDE_IMPLEMENTER="$REPO/claude/agents/implementer.md"
 CODEX_IMPLEMENTER="$REPO/codex/agents/implementer.toml"
-IMPLEMENTATION_SCOPE_HOOK="$REPO/hooks/shell/protect-implementation-scope.sh"
-IMPLEMENTER_READ_SCRIPT="$REPO/skills/tdd/implementer-read.sh"
+CLAUDE_SURVEYOR="$REPO/claude/agents/surveyor.md"
+CODEX_SURVEYOR="$REPO/codex/agents/surveyor.toml"
 IMPLEMENTER_PREFLIGHT_SCRIPT="$REPO/skills/tdd/preflight-implementer.sh"
 [ -x "$WORKER_RUNNER" ] || append_group_failure "exec bit: $WORKER_RUNNER"
-[ -x "$IMPLEMENTER_READ_SCRIPT" ] || append_group_failure "exec bit: $IMPLEMENTER_READ_SCRIPT"
 [ -x "$IMPLEMENTER_PREFLIGHT_SCRIPT" ] || append_group_failure "exec bit: $IMPLEMENTER_PREFLIGHT_SCRIPT"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$WORKER_RUNNER" && grep -q 'HARD_BUDGET_USD="40"' "$WORKER_RUNNER" && ok "外部ワーカー予算: soft=38 hard=40" || ng "外部ワーカー予算が不正"
@@ -150,7 +149,7 @@ TOO_MANY_SURVEY_REQUEST=$(printf '%s' "$MULTI_SURVEY_REQUEST" | jq -c '.claims +
 DENSE_SURVEY_REQUEST='{"purpose":"過密claimを拒否する","claims":[{"id":"C1","kind":"behavior","subject":"同期batch","question":"入口、入力、変換、保存、出力をすべて確認せよ","anchors":["sync"],"done_when":"全体の根拠がある","exclude":["test"]}]}'
 DENSE_SURVEY_ERROR=$(bash "$SURVEY_REQUEST_VALIDATOR" "$DENSE_SURVEY_REQUEST" 2>&1)
 DENSE_SURVEY_STATUS=$?
-if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && bash "$SURVEY_REQUEST_VALIDATOR" "$MULTI_SURVEY_REQUEST" | jq -e '.claims | length == 2' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$TOO_MANY_SURVEY_REQUEST" >/dev/null 2>&1 && [ "$DENSE_SURVEY_STATUS" -ne 0 ] && printf '%s' "$DENSE_SURVEY_ERROR" | grep -Fq 'C1.question has 4 enumerators (maximum 2)'; then
+if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALID_SURVEY_REQUEST" | jq -e '.claims[0].id == "C1" and .claims[0].kind == "behavior"' >/dev/null && bash "$SURVEY_REQUEST_VALIDATOR" "$MULTI_SURVEY_REQUEST" | jq -e '.claims | length == 2' >/dev/null && ! bash "$SURVEY_REQUEST_VALIDATOR" "$INVALID_SURVEY_REQUEST" >/dev/null 2>&1 && ! bash "$SURVEY_REQUEST_VALIDATOR" "$TOO_MANY_SURVEY_REQUEST" >/dev/null 2>&1 && [ "$DENSE_SURVEY_STATUS" -ne 0 ] && printf '%s' "$DENSE_SURVEY_ERROR" | jq -e '.errors[] | select(.path == "/claims/0/question" and .message == "C1.question exceeds 2 enumerators")' >/dev/null; then
   ok "worker survey validator: 最大3 claim packetとclaim内の列挙密度を外部実行前に強制"
 else
   ng "worker survey validatorのpacket上限または密度検証が不正"
@@ -258,7 +257,8 @@ ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/tdd/SCENARIO_FLOW.md"
 [ -f "$CLAUDE_IMPLEMENTER" ] && grep -q '^model: claude-sonnet-5$' "$CLAUDE_IMPLEMENTER" && grep -q '^effort: max$' "$CLAUDE_IMPLEMENTER" && grep -q '^tools: Read, Grep, Glob, Edit, Write$' "$CLAUDE_IMPLEMENTER" && ! grep -Eq '^tools:.*(Bash|Agent)' "$CLAUDE_IMPLEMENTER" && ok "Claude implementer: Sonnet 5 maxと非shell tool境界を固定" || ng "Claude implementerのmodel・effort・tool境界が不正"
 [ -f "$CODEX_IMPLEMENTER" ] && grep -q '^model = "gpt-5.6-luna"$' "$CODEX_IMPLEMENTER" && grep -q '^model_reasoning_effort = "max"$' "$CODEX_IMPLEMENTER" && grep -q '^sandbox_mode = "workspace-write"$' "$CODEX_IMPLEMENTER" && ok "Codex implementer: Luna maxとworkspace writeを固定" || ng "Codex implementerのmodel・effort・sandbox境界が不正"
-grep -Fq 'This is an implementation action, not a review, approval, or scenario-classification task' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'an omitted or rejected test scenario never removes a requirement' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Do not return only an explanation or classification' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Outcome: implemented' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && ok "implementer: test採否を実装省略に使わず分類回答を成功にしない" || ng "implementerの実装action・出力契約が不足"
+grep -Fq 'This is an implementation action, not a review, approval, or scenario-classification task' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'an omitted or rejected test scenario never removes a requirement' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Do not return only an explanation or classification' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq 'Outcome: implemented' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && grep -Fq '要求に直接必要なproduction code' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && ! grep -Fq 'implementer-read.sh' "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER" && ok "implementer: 要件内のproduction codeを調査・実装し分類回答を成功にしない" || ng "implementerの実装action・探索境界が不足"
+[ -f "$CLAUDE_SURVEYOR" ] && grep -q '^tools: Read, Grep, Glob$' "$CLAUDE_SURVEYOR" && ! grep -Eq '^tools:.*(Edit|Write|Bash|Agent)' "$CLAUDE_SURVEYOR" && [ -f "$CODEX_SURVEYOR" ] && grep -q '^sandbox_mode = "read-only"$' "$CODEX_SURVEYOR" && grep -Fq 'path:line' "$CLAUDE_SURVEYOR" "$CODEX_SURVEYOR" && ok "native surveyor: 読み取り専用で根拠を返す" || ng "native surveyorの読み取り専用境界が不正"
 grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: implementer定義の配布先が不足"
 for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
   if grep -Fq '半年後の保守者' "$IMPLEMENTER_FILE" && grep -Fq '不要なhelper分割、過度な抽象化、将来用の拡張点' "$IMPLEMENTER_FILE" && grep -Fq '`filter().map()`' "$IMPLEMENTER_FILE" && grep -Fq '`reduce()`' "$IMPLEMENTER_FILE" && grep -Fq '多少冗長でも読みやすい' "$IMPLEMENTER_FILE"; then
@@ -268,12 +268,12 @@ for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
   fi
 done
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq '必要な事実を単一claimへ分け' "$ERRAND_SKILL" && grep -Fq '最大3件まで一つのworker `survey`へまとめる' "$ERRAND_SKILL" && grep -Fq '`--source-ref <revision>`' "$ERRAND_SKILL" && ok "errand は識別子を保持してsource-localなclaim packetへ限定" || ng "errand の軽量調査境界が不正"
-grep -q 'AskUserQuestion' "$ERRAND_SKILL" && grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
-grep -Fq '独立packetは最大3件を同時に起動する' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$ERRAND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$ERRAND_SKILL" && grep -Fq 'implementerへ判断に使った検証済みsurvey task-idとartifact pathを全件渡し' "$ERRAND_SKILL" && grep -Fq 'implementerにテスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はworker調査と専用implementer実装を分離" || ng "errand のworker調査・implementer実装境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'source group単位' "$ERRAND_SKILL" && grep -Fq '独立した調査は最大3体を並行起動' "$ERRAND_SKILL" && ok "errand は識別子を保持してsource-localなnative調査へ限定" || ng "errand の軽量調査境界が不正"
+grep -q 'AskUserQuestion' "$ERRAND_SKILL" && ! grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
+grep -Fq 'native survey subagent' "$ERRAND_SKILL" && ! grep -Fq 'worker/delegate.sh' "$ERRAND_SKILL" && grep -Fq 'native implementer' "$ERRAND_SKILL" && grep -Fq 'テスト、設定、migration、Git、設計資産を変更させない' "$ERRAND_SKILL" && ok "errand はnative調査とnative初回実装を分離" || ng "errand のnative調査・実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q '親directoryが存在しない' "$REPO/skills/polish/capture-scope.sh" && grep -q 'ignoredされている' "$REPO/skills/polish/capture-scope.sh" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装、複数、または対応テストが未作成であることだけを理由に停止しない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
-grep -Fq '初回実装は専用`implementer` subagent' "$ERRAND_SKILL" && grep -Fq 'cleanな許可pathに限り一度だけ再起動' "$ERRAND_SKILL" && grep -Fq '修正をworkerまたはimplementerへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && ok "errand は専用subagent初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
+grep -Fq '初回実装は専用`implementer` subagent' "$ERRAND_SKILL" && grep -Fq '変更前worktreeがcleanな場合だけ一度再起動' "$ERRAND_SKILL" && grep -Fq '修正をsurveyorまたはimplementerへ再委任しない' "$ERRAND_SKILL" && grep -Fq '修正する／しない、部分採用、全体拒否の判断は上位モデル' "$ERRAND_SKILL" && ok "errand は専用subagent初回実装・上位モデル判断とfallbackへ固定" || ng "errand の初回実装・修正責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -300,14 +300,14 @@ grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKIL
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
 grep -Fq '外部ワーカーの`nesting` modeで検出だけを委任' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh nesting' "$UNWIND_SKILL" && grep -q '自力検出へ切り替えず' "$UNWIND_SKILL" && grep -q 'workerが検出した' "$POLISH_SKILL" && grep -Fq '上位モデルは返却された候補の修正・却下判断と検証だけを担当' "$UNWIND_SKILL" && ok "unwind はprepare・固定実行器で機械的検出を外部ワーカー、修正判断を上位へ固定" || ng "unwind のprepare・固定実行器または検出・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
-[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -x "$IMPLEMENTATION_SCOPE_HOOK" ] && bash -n "$IMPLEMENTATION_SCOPE_HOOK" && [ -x "$IMPLEMENTER_READ_SCRIPT" ] && [ -x "$IMPLEMENTER_PREFLIGHT_SCRIPT" ] && grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq 'preflight-implementer.sh [agent_name]' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh status' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh recover-to-parent <feature>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh activate <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh handoff-to-parent <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh deactivate <scope名>' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ok "tdd は開始scope・実装mode・安全な読み取り・実変更pathを固定" || ng "tdd のscope selectorまたは実装scope hookが不正"
-grep -Fq '最初のshell command' "$SCENARIO_FLOW" && grep -Fq '復旧調査用workerを起動しない' "$TDD_SKILL" && grep -Fq 'dirty_paths' "$SCENARIO_FLOW" && grep -Fq '`dirty_paths`が空なら、同じcommandがscopeを解除する' "$TDD_SKILL" && grep -Fq '間に別の読み取りを挟まない' "$TDD_SKILL" && ok "tdd は残留scopeをworkerなしで安全に回収" || ng "tdd の残留scope回収フローが不正"
+[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -x "$IMPLEMENTER_PREFLIGHT_SCRIPT" ] && grep -Fq 'capture-scope.sh <機能名> --auto' "$TDD_SKILL" && grep -Fq 'preflight-implementer.sh [agent_name]' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
+! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '入力された実変更pathだけが追跡済みかつclean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
-grep -Fq 'workerの`survey`へ委任' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$TDD_SKILL" && grep -Fq 'subagentが利用不能またはcleanな再実行も失敗した場合だけ可' "$TDD_SKILL" && grep -Fq '初回実装後の本体コード修正 | 可 | 禁止 | 禁止' "$TDD_SKILL" && ok "tdd はworker調査・専用subagent初回実装・上位fallbackと修正へ固定" || ng "tdd の調査・実装・fallback・修正境界が不正"
-grep -Fq '設計書を選んでから共通フローでimplementerの初回実装を受領するまで' "$TDD_SKILL" && grep -Fq '`evidence_status: verified`のコードがclaimを直接支え' "$TDD_SKILL" && grep -Fq '`--supplement-of`で初回を含む合計3回まで限定survey' "$TDD_SKILL" && grep -Fq '3回目までは保存範囲の不足自体を直接確認の理由にしない' "$TDD_SKILL" && grep -Fq '全file Read、path発見のためのRead' "$TDD_SKILL" && ok "tdd は検証済みevidenceを標準根拠、直接探索を例外へ固定" || ng "tdd が上位モデルの無条件再探索を許可"
-grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件や実装要否を提案・再分類しない' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'workerにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '旧revisionには`--source-ref <revision>`' "$SCENARIO_FLOW" && grep -Fq '独立packetは最大3件を同時に起動する' "$SCENARIO_FLOW" && grep -Fq 'validatorのstdoutを改変せず渡し' "$SCENARIO_FLOW" && grep -Fq '`fork_turns: "none"`' "$SCENARIO_FLOW" && grep -Fq '`reasoning_effort: "max"`' "$SCENARIO_FLOW" && grep -Fq 'generic agentによる代用は禁止' "$SCENARIO_FLOW" && grep -Fq 'child agent IDが空' "$SCENARIO_FLOW" && grep -Fq 'wait先が空' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなLuna maxを固定" || ng "共通フローのtest選択権・実装境界またはsubagent起動が不正"
+grep -Fq 'native survey subagent' "$TDD_SKILL" && ! grep -Fq 'worker/delegate.sh' "$TDD_SKILL" && grep -Fq 'native implementer' "$TDD_SKILL" && grep -Fq '初回実装後の本体コード修正 | 可 | 禁止 | 禁止' "$TDD_SKILL" && ok "tdd はnative調査・native初回実装・上位修正へ固定" || ng "tdd のnative調査・実装・修正境界が不正"
+grep -Fq 'source group単位' "$TDD_SKILL" && grep -Fq '最大3体を並行起動' "$TDD_SKILL" && grep -Fq '同じsurveyorへ一度だけ限定follow-up' "$TDD_SKILL" && grep -Fq 'path:line' "$TDD_SKILL" && ok "tdd はsource-localなnative調査と限定follow-upを使う" || ng "tdd のnative調査境界が不正"
+grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq 'surveyorにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '`fork_turns: "none"`' "$SCENARIO_FLOW" && grep -Fq '`reasoning_effort: "max"`' "$SCENARIO_FLOW" && grep -Fq 'child agent IDが空' "$SCENARIO_FLOW" && grep -Fq 'wait先が空' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなnative subagentを固定" || ng "共通フローのtest選択権・実装境界またはsubagent起動が不正"
 grep -Fq '半年後に負債にならないかを必ずレビュー' "$SCENARIO_FLOW" && grep -Fq '関数ジャンプ' "$SCENARIO_FLOW" && grep -Fq 'YAGNI' "$SCENARIO_FLOW" && grep -Fq '`filter().map()`' "$SCENARIO_FLOW" && grep -Fq '`reduce()`' "$SCENARIO_FLOW" && grep -Fq '多少冗長でも局所的に理解できる' "$SCENARIO_FLOW" && ok "上位モデルは半年後の負債と可読性を必須レビュー" || ng "上位モデルの保守性・可読性レビュー契約が不足"
 grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$SCENARIO_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$SCENARIO_FLOW" && grep -Fq '採用:' "$SCENARIO_FLOW" && grep -Fq '問題:' "$SCENARIO_FLOW" && grep -Fq '上位修正:' "$SCENARIO_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$SCENARIO_FLOW" && ok "上位モデルは実装差分の評価と修正理由を後続処理前に簡潔に報告" || ng "上位モデルの実装差分レビュー報告契約が不足"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
@@ -316,7 +316,7 @@ grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENAR
 grep -Fq '`scope-related`' "$SCENARIO_FLOW" && grep -Fq '`unrelated`' "$SCENARIO_FLOW" && grep -Fq '`uncertain`' "$SCENARIO_FLOW" && grep -Fq 'ignored / untracked test' "$SCENARIO_FLOW" && grep -Fq '対象外の失敗だけでタスクを未完了と決めない' "$ERRAND_SKILL" && grep -Fq 'どの分類もユーザーの完了マーク判断を代行しない' "$POLISH_SKILL" && grep -Fq 'どの分類が残っていてもそれから完了マークを自動判定せず' "$SCENARIO_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
 grep -Fq '開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない' "$POLISH_SKILL" && grep -Fq 'typecheckとPrisma検証はファイル単位で安全に分割できない' "$POLISH_SKILL" && grep -Fq '実変更pathだけを渡して`unwind`を必ず呼ぶ' "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
 grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq '開始scope全件ではなく、この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
-grep -Fq 'capture-scope.sh <機能名> -- <相対path>...' "$TDD_SKILL" && grep -Fq '変更前に次を1回実行' "$TDD_SKILL" && ok "tdd はpolish対象の基準commitとpathを変更前に固定" || ng "tdd のscope path固定が不正"
+grep -Fq 'capture-scope.sh <機能名> --auto' "$TDD_SKILL" && grep -Fq 'native implementer起動直前に次を1回実行' "$TDD_SKILL" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
 grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '上位モデルがコードを判断して修正した場合は全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
 
 echo "== 2. claude 配置シミュレーション =="
@@ -404,6 +404,17 @@ printf 'export const untouched = true\n' > src/untouched.ts
 git add src/rules.ts src/untouched.ts
 git commit -qm "test: scope path fixtureを追加"
 if bash "$CS" billing -- src/rules.ts src/untouched.ts src/planned.ts > quality-begin.out 2>&1; then ok "polish-scope: 基準commitと候補pathを固定"; else ng "polish-scope: 変更前scopeを記録できない"; cat quality-begin.out; fi
+if bash "$CS" native-auto --auto > native-auto-begin.out 2>&1; then
+  printf 'export function legacyNumber() { return 100 }\n' > src/rules.ts
+  printf 'export const discoveredDuringImplementation = true\n' > src/discovered.ts
+  git add src/rules.ts src/discovered.ts
+  git commit -qm "test: native subagentの実変更fixtureを追加"
+  NATIVE_CHANGED_PATHS=$(bash "$CS" list-changed native-auto)
+  if [ "$NATIVE_CHANGED_PATHS" = "src/discovered.ts
+src/rules.ts" ]; then ok "polish-scope: 事前許可pathなしで実変更fileを自動列挙"; else ng "polish-scope: auto baselineの実変更列挙が不正 [$NATIVE_CHANGED_PATHS]"; fi
+else
+  ng "polish-scope: auto baselineを記録できない"; cat native-auto-begin.out
+fi
 IMPLEMENTATION_TASK_DIR=".claude/tmp/worker/implementation-survey"
 mkdir -p "$IMPLEMENTATION_TASK_DIR"
 printf 'Outcome: fulfilled\n' > "$IMPLEMENTATION_TASK_DIR/report.md"
@@ -448,8 +459,6 @@ fi
 IMPLEMENTATION_HOOK=".claude/hooks/shell/protect-implementation-scope.sh"
 REQUIRE_TEST_HOOK=".claude/hooks/shell/require-test.sh"
 ALLOW_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
-DENY_SECOND_IMPLEMENTER_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL2",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
-WRITER_BOUND_STATUS=$(bash "$CS" status)
 ALLOW_NON_ADJACENT_TEST=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$REQUIRE_TEST_HOOK")
 DENY_PARENT_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/rules.ts")}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_EDIT=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:($cwd + "/src/untouched.ts")}}' | bash "$IMPLEMENTATION_HOOK")
@@ -464,8 +473,8 @@ ALLOW_PARENT_DEACTIVATE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",
 ALLOW_PARENT_HANDOFF=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"PARENT1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh handoff-to-parent implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
 DENY_SUBAGENT_HANDOFF=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"IMPL1",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/polish/capture-scope.sh handoff-to-parent implementation-check"}}' | bash "$IMPLEMENTATION_HOOK")
 IMPLEMENTER_READ_OUTPUT=$(bash .claude/skills/tdd/implementer-read.sh src/rules.ts)
-  if [ -z "$ALLOW_EDIT" ] && [ "$(printf '%s' "$WRITER_BOUND_STATUS" | jq -r '.writer_bound')" = "true" ] && [ "$(echo "$DENY_SECOND_IMPLEMENTER_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_NON_ADJACENT_TEST" ] && [ -z "$ALLOW_IMPLEMENTER_READ" ] && [ -z "$ALLOW_PARENT_READ" ] && printf '%s' "$IMPLEMENTER_READ_OUTPUT" | grep -Fq 'legacyNumber' && [ "$(echo "$DENY_PARENT_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_UNQUOTED_READ" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_QUOTED_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ] && [ -z "$ALLOW_PARENT_HANDOFF" ] && [ "$(echo "$DENY_SUBAGENT_HANDOFF" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
-  ok "implementation-scope: 最初のsubagent writerだけをbindし親は読み取りだけ可能"
+  if [ -z "$ALLOW_EDIT" ] && [ -z "$ALLOW_NON_ADJACENT_TEST" ] && [ -z "$ALLOW_IMPLEMENTER_READ" ] && [ -z "$ALLOW_PARENT_READ" ] && printf '%s' "$IMPLEMENTER_READ_OUTPUT" | grep -Fq 'legacyNumber' && [ "$(echo "$DENY_PARENT_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_EDIT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_UNQUOTED_READ" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_BASH" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_QUOTED_READ_CHAIN" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ "$(echo "$DENY_SUBAGENT_DEACTIVATE" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && [ -z "$ALLOW_PARENT_DEACTIVATE" ] && [ -z "$ALLOW_PARENT_HANDOFF" ] && [ "$(echo "$DENY_SUBAGENT_HANDOFF" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
+  ok "implementation-scope: 旧互換hookのsubagent境界を維持"
 else
   ng "implementation-scope: Claude hookのsubagent境界が不正"
 fi
@@ -482,25 +491,6 @@ else
   ng "implementation-scope: parent fallbackへhandoffできない"; cat implementation-handoff.out
 fi
 if bash "$CS" deactivate implementation-check > implementation-deactivate.out 2>&1 && ! bash .claude/skills/tdd/implementer-read.sh src/rules.ts >/dev/null 2>&1; then ok "implementation-scope: 完了後にactive receiptを解除"; else ng "implementation-scope: deactivate失敗"; cat implementation-deactivate.out; fi
-mkdir -p .codex/hooks/shell
-cp .claude/hooks/shell/protect-implementation-scope.sh .codex/hooks/shell/protect-implementation-scope.sh
-cp .claude/hooks/shell/hook-io.sh .codex/hooks/shell/hook-io.sh
-sed -i.bak 's/HOOK_AGENT="claude"/HOOK_AGENT="codex"/' .codex/hooks/shell/hook-io.sh
-rm -f .codex/hooks/shell/hook-io.sh.bak
-if bash "$IMPLEMENTATION_VALIDATOR" "$IMPLEMENTATION_REQUEST" >/dev/null 2>&1 && \
-   jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CODEX-SHARED",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .agents/skills/polish/capture-scope.sh activate implementation-check"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh >/dev/null && \
-   bash "$CS" activate implementation-check >/dev/null 2>&1; then
-  ALLOW_CODEX_SHARED_WRITER=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"CODEX-SHARED",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/rules.ts\n@@\n-old\n+new\n*** End Patch"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh)
-  DENY_CODEX_SECOND_WRITER=$(jq -n --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"OTHER",cwd:$cwd,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/rules.ts\n@@\n-old\n+new\n*** End Patch"}}' | bash .codex/hooks/shell/protect-implementation-scope.sh)
-  if [ -z "$ALLOW_CODEX_SHARED_WRITER" ] && [ "$(echo "$DENY_CODEX_SECOND_WRITER" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
-    ok "implementation-scope: Codex親子のshared sessionをwriterへbindして別sessionを拒否"
-  else
-    ng "implementation-scope: Codex shared-session writer認可が不正"
-  fi
-  bash "$CS" deactivate implementation-check >/dev/null 2>&1 || ng "implementation-scope: Codex shared writer確認後のdeactivate失敗"
-else
-  ng "implementation-scope: Codex shared-session fixtureをactivateできない"
-fi
 mkdir -p local-only-tests
 printf '/local-only-tests/\n' > .gitignore
 printf 'local ignored test fixture\n' > local-only-tests/implementation-flow.test.ts
@@ -1469,13 +1459,13 @@ printf '# Verified evidence\n' > "$CODEX_TASK_DIR/evidence.md"
 jq -n \
   --arg report_blob "$(git hash-object "$CODEX_TASK_DIR/report.md")" \
   --arg evidence_blob "$(git hash-object "$CODEX_TASK_DIR/evidence.md")" \
-  '{mode:"survey",task_id:"codex-implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
+  '{mode:"survey",task_id:"codex-implementation-survey",status:0,output_contract_status:"valid",outcome:"fulfilled",evidence_status:"verified",claim_results:[{id:"C1",status:"fulfilled",evidence_count:1,evidence_status:"verified"}],changed_paths:[],report_file:"report.md",evidence_file:"evidence.md",report_blob:$report_blob,evidence_blob:$evidence_blob}' \
   > "$CODEX_TASK_DIR/result.json"
 mkdir -p tests/codex
 printf 'test fixture\n' > tests/codex/implementation-flow.test.ts
 git add tests/codex/implementation-flow.test.ts
 git commit -qm "test: Codex implementation request fixture"
-CODEX_IMPLEMENTATION_REQUEST=$(jq -cn '{version:3,action:"implement",scope:"codex-implementation",spec:null,implementation_instruction:"対象機能の全要件を初回実装する",worker_tasks:[{task_id:"codex-implementation-survey",result:".codex/tmp/worker/codex-implementation-survey/result.json",report:".codex/tmp/worker/codex-implementation-survey/report.md",evidence:".codex/tmp/worker/codex-implementation-survey/evidence.md"}],test_scenarios:[{id:"S1",contract:"対象値を期待値へ変更する"}],test_paths:["tests/codex/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/codex-implementation.ts"]}')
+CODEX_IMPLEMENTATION_REQUEST=$(jq -cn '{version:4,action:"implement",scope:"codex-implementation",spec:null,implementation_instruction:"対象機能の全要件を初回実装する",worker_tasks:[{task_id:"codex-implementation-survey",result:".codex/tmp/worker/codex-implementation-survey/result.json",report:".codex/tmp/worker/codex-implementation-survey/report.md",evidence:".codex/tmp/worker/codex-implementation-survey/evidence.md",required_claim_ids:["C1"]}],test_scenarios:[{id:"S1",contract:"対象値を期待値へ変更する"}],test_paths:["tests/codex/implementation-flow.test.ts"],red:{command:"npm test",status:1,reason:"期待値差で失敗"},test_exemption:null,allowed_paths:["src/codex-implementation.ts"]}')
 CODEX_IMPLEMENTATION_HOOK=".codex/hooks/shell/protect-implementation-scope.sh"
 if bash "$CODEX_CAPTURE_SCOPE" codex-implementation -- src/codex-implementation.ts > codex-implementation-capture.out 2>&1 && \
    bash "$CODEX_IMPLEMENTATION_VALIDATOR" "$CODEX_IMPLEMENTATION_REQUEST" > codex-implementation-request.out 2>&1 && \
@@ -1621,7 +1611,7 @@ for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
 done
 report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURES"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "必須契約hookを apply_patch/Bash の両方へ配線" || ng "必須契約hookの配線漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' .codex/hooks.json)" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "実装scope hookを apply_patch/Bash の両方へ配線" || ng "実装scope hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' .codex/hooks.json)" = "0" ] && ok "Codexはexact実装scope hookを配線しない" || ng "Codexにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "migration禁止hookをBashへ配線" || ng "migration禁止hookの配線漏れ"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
@@ -1685,8 +1675,6 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/tdd/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/tdd/implementer-read.sh 'front/features/mypage/routes/contract/pages/-.[number]._index.tsx' 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 引用済みimplementer readを allow" || ng "rules: implementer read判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh user-api -- src/example.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/capture-scope.sh user-api -- src/example.ts 2>/dev/null)
@@ -1939,7 +1927,7 @@ jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq 
 jq -e '.permissions.allow | index("Bash(zat:*)")' "$SL" >/dev/null 2>&1 && grep -Fq 'worker | コードベースの読み取り専用調査と根拠収集' "$WORKER_CONTRACT" && grep -Fq '`research`、`survey`、`nesting`以外の仕事を渡さない' "$WORKER_CONTRACT" && grep -Fq 'EDIT_RULES='\''{"*":"deny"}'\''' "$WORKER_RUNNER" && ok "outline: workerを読み取り調査とzatへ限定" || ng "outline: workerの読み取り専用境界が不足"
 jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude実装scope hookをBash/Editへ配線" || ng "Claude実装scope hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && grep -Fq 'load-required-contract.sh cowlick-design' "$REPO/skills/cowlick/SKILL.md" && ok "Claude必須契約hookをworker/cowlickへ配線" || ng "Claude必須契約hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' "$SJ")" = "1" ] && jq -e '.permissions.ask | index("Edit(**/schema.prisma)") | not' "$SL" >/dev/null && ok "Claude: schema.prismaは自動編集・migrationはhook拒否" || ng "Claude: Prisma境界が不正"
 GROUP_FAILURES=
