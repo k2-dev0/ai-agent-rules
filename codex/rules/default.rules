@@ -21,7 +21,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["bash", ".agents/skills/polish/capture-scope.sh"],
     decision = "allow",
-    justification = "TDD開始時のHEADと対象pathだけを一時receiptへ記録します。",
+    justification = "実装直前のHEADをbaselineとして記録し、polish対象の実変更pathを列挙します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/worker/delegate.sh"],
