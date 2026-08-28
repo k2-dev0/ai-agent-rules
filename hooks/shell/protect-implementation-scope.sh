@@ -119,6 +119,9 @@ if [ "$TOOL" = "Bash" ]; then
       exit 0 ;;
   esac
   is_implementer_read_command "$COMMAND" && exit 0
+  if [ "$MODE" = "parent-fallback" ] && [ "$OWNER" = "$SESSION" ]; then
+    hook_deny "このsessionはparent-fallback ownerとして認識済みです。owner不一致ではありません。通常shellは意図的に禁止されています。request内pathはquoted implementer-read.sh、完了後はdeactivateを単独実行してください。"
+  fi
   hook_deny "実装scopeがactiveです。まずCodexでは 'bash .agents/skills/polish/capture-scope.sh status'、Claude Codeでは 'bash .claude/skills/polish/capture-scope.sh status' で状態を確認してください。許可されるshellはstatus、implementer-read.sh、ownerのhandoff/deactivate、回収可能時のrecover-to-parentだけです。"
 fi
 
