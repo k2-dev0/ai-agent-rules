@@ -25,6 +25,12 @@ load_scope() {
   [ "$EXPECTED_REPOSITORY" = "$REPOSITORY" ] || die "開始receiptのリポジトリが一致しない"
   git cat-file -e "$BASE^{commit}" >/dev/null 2>&1 || die "開始commitが存在しない: $BASE"
   git merge-base --is-ancestor "$BASE" HEAD || die "開始commitが現在HEADの祖先ではない"
+  AUTO_SCOPE=false
+  if [ "$(sed -n '3p' "$SCOPE_RECEIPT")" = "@auto" ]; then
+    AUTO_SCOPE=true
+    PATHS=()
+    return
+  fi
   PATHS=()
   while IFS= read -r path; do
     [ -n "$path" ] || continue
@@ -45,6 +51,14 @@ require_input_clean() {
 load_changed_paths() {
   local path status
   CHANGED_PATHS=()
+  if [ "$AUTO_SCOPE" = true ]; then
+    while IFS= read -r -d '' path; do
+      if [ -e "$REPOSITORY/$path" ] || [ -L "$REPOSITORY/$path" ]; then
+        CHANGED_PATHS+=("$path")
+      fi
+    done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$BASE" HEAD)
+    return
+  fi
   for path in "${PATHS[@]}"; do
     if git diff --quiet --no-ext-diff "$BASE" HEAD -- ":(literal)$path"; then
       continue
