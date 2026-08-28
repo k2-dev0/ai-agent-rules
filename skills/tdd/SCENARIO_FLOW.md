@@ -24,9 +24,9 @@ bash [skills_root]/polish/capture-scope.sh status
 `active: false`なら通常フローへ進む。`active: true`なら、状態確認のためにworkerやsubagentを起動せず、返却JSONだけで次を処理する。
 
 - `recoverable: false`: owner sessionまたは有効なleaseが残っている。通常探索、別scopeのactivate、推測した機能名でのdeactivateを行わず、`feature`、`mode`、`lease_age_seconds`を報告して停止する
-- `recoverable: true`: 返却された`feature`をそのまま使い、`bash [skills_root]/polish/capture-scope.sh recover-to-parent <feature>`を単独実行する
-  - `dirty_paths`が空: 同じsessionでdeactivateし、通常フローを先頭から開始する
-  - `dirty_paths`がある: active request、許可path、既存差分を捨てずparent-fallbackとして再開する。設計書選択、survey、シナリオ提示、テスト作成、Red、scope再取得、implementer再起動は繰り返さない。必要なrequest内artifactは`implementer-read.sh`で読み、許可pathの初回実装を親が完了してdeactivateした後、Step 6以降へ進む
+- `recoverable: true`: 返却された`feature`をそのまま使い、他の読み取りを挟まず`bash [skills_root]/polish/capture-scope.sh recover-to-parent <feature>`を一回だけ実行する。commandが実行時のdirty状態を再検査し、次をJSONで返す
+  - `next_action: "start-normal-flow"`: `dirty_paths`が空だったため、同じcommand内でactive requestとscopeを解除済み。別途deactivateせず、通常フローを先頭から開始する
+  - `next_action: "resume-active-request"`: `dirty_paths`があるため、active request、許可path、既存差分を捨てずparent-fallbackへ移譲済み。設計書選択、survey、シナリオ提示、テスト作成、Red、scope再取得、implementer再起動は繰り返さない。必要なrequest内artifactは`implementer-read.sh`で読み、許可pathの初回実装を親が完了してdeactivateした後、Step 6以降へ進む
 
 Codexで`SessionEnd`を受けたownerのscopeは即時に`orphaned`となる。Claude Codeまたは強制終了などで`SessionEnd`によるorphan化が行われなかったscopeは、許可済みの読み取り・書き込みで更新されるleaseが既定1時間失効した後だけ回収できる。回収時もrequestと差分は削除しない。
 
