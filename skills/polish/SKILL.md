@@ -1,13 +1,13 @@
 ---
 name: polish
-description: 実装完了後に変更済みコードへフォーマッタ・リンター・型検査を適用し、固定scopeのpath整合性を検証して、workerが検出した三段階以上の制御フローネストだけを unwind で見直す。
+description: 実装完了後にbaselineからの実変更コードへフォーマッタ・リンター・型検査を適用し、path整合性を検証して、workerが検出した三段階以上の制御フローネストだけをunwindで見直す。
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
 disable-model-invocation: true
 ---
 
 ## 目的
 
-呼び出し元が開始時に固定した候補のうち、実際に変更された本体コードだけを整形・静的検査し、診断をscopeへ帰属させてからscope path検査と`unwind`を通す。
+呼び出し元が実装直前に記録したbaselineから、実際に変更された本体コードだけを整形・静的検査し、診断をscopeへ帰属させてからpath検査と`unwind`を通す。
 
 ## 入力と対象
 
@@ -17,7 +17,7 @@ disable-model-invocation: true
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-開始scopeの基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済み本体コードだけがscope順で返る。この出力と完全一致する相対path全件を一括入力とし、開始scope全件、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`・scope path検査の対象外にする。出力が空なら実行表と`unwind`を省略し、scope path検査へ進む。
+`--auto`で記録したbaselineでは、基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済みfileがGitの順序で返る。従来の個別path receiptでは、候補のうち実際に変更されたfileだけがreceipt順で返る。この出力と完全一致する相対path全件を一括入力とし、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`・path検査の対象外にする。出力が空なら実行表と`unwind`を省略し、path検査へ進む。
 
 各実変更pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは実変更pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheckとPrisma検証はファイル単位で安全に分割できないため、実変更pathが属するpackageまたはschemaだけを起点に既存単位で実行する。ただしpackage単位の失敗全体を今回の失敗とは扱わない。
 
@@ -65,7 +65,7 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
 ```
 
-開始receiptのrepository・基準commit・候補path一覧を読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。入力された実変更pathだけが追跡済みかつcleanであることを検査する。完了receiptの記録や後続での再検証は行わない。path形式、directory、symlinkは開始時の`capture-scope.sh`が検査し、ここで同じ規則を重複実装しない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
+開始receiptのrepository・基準commit・modeを読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。個別path receiptでは候補一覧も照合する。入力された実変更pathだけが追跡済みかつcleanであることを検査する。完了receiptの記録や後続での再検証は行わない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
 
 ## 反復条件
 
