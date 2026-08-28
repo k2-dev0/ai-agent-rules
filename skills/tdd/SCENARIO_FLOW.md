@@ -60,7 +60,7 @@ surveyorにはシナリオ、期待値、assertion、fixture構成、テスト�
 
 ## 2. [agent_name]がテストを書く
 
-選択済みtest_scenariosと確認済み事実をテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象は1ファイルずつ即コミットする。`.gitignore`や`.git/info/exclude`で意図的にignoredなtestはローカルのRedとして使い、`git add -f`でignore規約を迂回しない。追跡済みでもignore対象でもない野良の未追跡testだけを不正として停止する。
+選択済みtest_scenariosと確認済み事実をテスト資産へ変換する。テストの意味を変えるために既存assertionを弱めない。追跡対象はリポジトリのGit規約どおりコミットする。`.gitignore`や`.git/info/exclude`で意図的にignoredなtestはローカルのRedとして使い、`git add -f`でignore規約を迂回しない。追跡済みでもignore対象でもない野良の未追跡testだけを不正として停止する。
 
 `.jsx` / `.tsx` componentとReact hookには、そのためだけの隣接unit testを新設しない。画面挙動は既存のintegration / E2E境界で検証する。
 
@@ -133,7 +133,7 @@ Green、formatter、lint、polish、本体コードのcommitより先に、次�
 - 問題: 問題箇所、影響、採用・修正・拒否の判断
 - 上位修正: 上位モデルが変更した内容と理由
 
-問題や上位修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。追跡対象の本体変更は、この報告後に1ファイルずつコミットする。
+問題や上位修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。追跡対象の本体変更は、この報告後にリポジトリのGit規約どおりコミットする。
 
 ## 7. Green・レビュー・修正を完了する
 
