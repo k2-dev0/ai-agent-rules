@@ -21,24 +21,18 @@ workerへは`delegate.sh`だけを使い、`research`、`survey`、`nesting`以�
 
 ### survey入力契約
 
-依頼JSONは`purpose`と`claims`だけを持ち、`purpose`は空でない文字列、`claims`は1〜3件とする。各claimは`id`、`kind`、`subject`、`question`、`anchors`、`done_when`、`exclude`だけを持つ。`id`は`C1`から連番、`subject`、`question`、`done_when`は空でない文字列、`anchors`と`exclude`は空でない文字列配列にする。
-
-```json
-{"purpose":"確認する事実","claims":[{"id":"C1","kind":"control_flow","subject":"対象境界","question":"どの経路で値が渡るか","anchors":["対象識別子"],"done_when":"直接の経路をpath:line付きで示せる","exclude":["無関係な範囲"]}]}
-```
-
-`kind`は質問の主題となる事実で次から一つを選ぶ。
+依頼JSONは空でない`purpose`と1〜3件の`claims`だけを持つ。各claimは`id`、`kind`、`subject`、`question`、`anchors`、`done_when`、`exclude`だけを持つ。`id`は`C1`から連番、`subject`、`question`、`done_when`は空でない文字列、`anchors`と`exclude`は空でない文字列配列にする。`kind`は質問の主題で選ぶ。
 
 | kind | 対象 |
 |---|---|
-| `behavior` | 観測できる入出力、変換規則、条件別の挙動 |
-| `control_flow` | caller / callee、分岐、return / await、実行中の値・型の伝播経路 |
-| `integration` | component、module、外部service間の直接の接続境界 |
-| `contract` | API、型、schema、設定、依存library、runtimeの契約 |
-| `test` | 既存testが立証する挙動、条件、coverage |
-| `test_absence` | tracked test / specにexact anchorが無いこと。単独claimだけで使う |
+| `behavior` | 入出力、変換規則、条件別挙動 |
+| `control_flow` | caller / callee、分岐、return / await、値・型の伝播経路 |
+| `integration` | module・外部service間の接続境界 |
+| `contract` | API、型、schema、設定、依存library・runtime契約 |
+| `test` | 既存testが立証する条件・coverage |
+| `test_absence` | tracked test / specにexact anchorが無いこと。単独で使う |
 
-`data_flow`と`runtime_contract`はkindではない。値・型を実行経路で追う場合は`control_flow`、依存libraryやruntimeの規則を確認する場合は`contract`を使う。kindへ合わせるために`question`や`done_when`の意味を変えず、主題が異なる事実はclaimを分ける。
+`data_flow`と`runtime_contract`はkindではない。値・型の経路は`control_flow`、依存library・runtime規則は`contract`を使う。kindへ合わせて`question`や`done_when`の意味を変えず、主題が違う事実はclaimを分ける。
 
 ## 結果の扱い
 
