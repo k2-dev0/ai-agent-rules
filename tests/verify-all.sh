@@ -320,6 +320,7 @@ grep -Fq '外部ワーカーの`nesting` modeで検出だけを委任' "$UNWIND_
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -x "$IMPLEMENTER_PREFLIGHT_SCRIPT" ] && grep -Fq 'capture-scope.sh <機能名> --auto' "$TDD_SKILL" && grep -Fq 'preflight-implementer.sh [agent_name]' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
 ! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '入力された実変更pathだけが追跡済みかつclean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
+grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は呼び出し元の状態遷移不備として停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq 'Prettier / ESLintだけの独自フォールバックへ置き換えない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../tdd/SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && ok "tddとerrandはシナリオ駆動実装を一つの共通契約へ集約" || ng "tddとerrandの共通フロー参照が不正"
 grep -Fq 'native survey subagent' "$TDD_SKILL" && ! grep -Fq 'worker/delegate.sh' "$TDD_SKILL" && grep -Fq 'native implementer' "$TDD_SKILL" && grep -Fq '初回実装後の本体コード修正 | 可 | 禁止 | 禁止' "$TDD_SKILL" && ok "tdd はnative調査・native初回実装・上位修正へ固定" || ng "tdd のnative調査・実装・修正境界が不正"
@@ -612,6 +613,38 @@ printf '\n// dirty\n' >> src/rules.ts
 if bash "$QG" billing -- src/rules.ts > quality-dirty.out 2>&1; then ng "quality-gate: dirtyな実変更pathを通した"; else ok "quality-gate: dirtyな実変更pathを拒否"; fi
 printf 'import legacy from "../../legacy"\nexport function legacyNumber() { return 99 }\nexport function errorCode() { return 404 }\n' > src/rules.ts
 if bash "$QG" billing -- src/rules.ts > quality-gate.out 2>&1; then ok "quality-gate: 実変更path一致とtracked・cleanだけを検査"; else ng "quality-gate: 最小path検査に失敗"; cat quality-gate.out; fi
+printf 'export const direct = true\n' > src/direct.ts
+if bash "$QG" direct-fix --direct-check -- src/direct.ts > direct-check.out 2>&1 && \
+   grep -Fq 'validated-direct: direct-fix scope-unverified' direct-check.out && \
+   ! bash "$QG" direct-fix --direct -- src/direct.ts > direct-untracked.out 2>&1; then
+  ok "quality-gate direct: 未追跡の明示fileを事前検査し最終gateでは拒否"
+else
+  ng "quality-gate directの事前検査または未追跡拒否が不正"; cat direct-check.out direct-untracked.out
+fi
+git add src/direct.ts
+git commit -qm "test: direct polish fixtureを追加"
+if bash "$QG" direct-fix --direct -- src/direct.ts > direct-clean.out 2>&1 && \
+   grep -Fq 'checked-direct: direct-fix scope-unverified' direct-clean.out; then
+  ok "quality-gate direct: receiptなしで明示pathのtracked・cleanを検査"
+else
+  ng "quality-gate directのtracked・clean検査が不正"; cat direct-clean.out
+fi
+if bash "$QG" direct-fix --direct-check -- > direct-empty.out 2>&1; then
+  ng "quality-gate direct: 空の明示pathを許可"
+elif bash "$QG" direct-fix --direct-check -- src/direct.ts src/direct.ts > direct-duplicate.out 2>&1; then
+  ng "quality-gate direct: 重複pathを許可"
+elif bash "$QG" direct-fix --direct-check -- src > direct-directory.out 2>&1; then
+  ng "quality-gate direct: directoryを許可"
+else
+  ok "quality-gate direct: 空入力・重複・directoryを拒否"
+fi
+if bash "$QG" missing-receipt -- src/direct.ts > verified-missing.out 2>&1; then
+  ng "quality-gate verified: receipt欠落をdirectへ暗黙降格"
+elif grep -Fq 'polish対象の開始receiptが無い: missing-receipt' verified-missing.out; then
+  ok "quality-gate verified: receipt欠落時もdirectへ暗黙降格しない"
+else
+  ng "quality-gate verifiedのreceipt欠落診断が不正"; cat verified-missing.out
+fi
 bash "$MD" billing > mark.out 2>&1
 grep -qE '^\- \[x\] branch-billing-prompt\.md$' .claude/prompt/.prompt.md && ok "mark-prompt-done: index を [x] に倒す" || { ng "mark-prompt-done: [x] に倒せない"; cat mark.out; }
 grep -q '^remaining: 0$' mark.out && ok "mark-prompt-done: 残件数を報告" || { ng "mark-prompt-done: 残件数の報告が無い"; cat mark.out; }
