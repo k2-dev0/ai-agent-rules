@@ -12,6 +12,10 @@ readonly MAX_ANCHOR_CHARACTERS="200"
 readonly MAX_DONE_WHEN_CHARACTERS="160"
 readonly MAX_EXCLUDES="8"
 readonly MAX_EXCLUDE_CHARACTERS="160"
+readonly REQUEST_FIELDS_JSON='["purpose","claims"]'
+readonly CLAIM_FIELDS_JSON='["id","kind","subject","question","anchors","done_when","exclude"]'
+readonly SUPPORTED_CLAIM_KINDS_JSON='["behavior","control_flow","integration","contract","test","test_absence"]'
+readonly SUPPORTED_CLAIM_KINDS_TEXT='behavior, control_flow, integration, contract, test, test_absence'
 
 fatal() {
   printf '{"errors":[{"path":"","message":"%s"}],"normalized_request":null}\n' "$1" >&2
@@ -49,8 +53,15 @@ json_test() {
 if ! json_test 'type == "object"'; then
   add_error "" "request must be a JSON object"
 else
-  json_test '(keys | sort) == ["claims", "purpose"]' ||
-    add_error "" "request must contain only purpose and claims fields"
+  REQUEST_KEYS=$(printf '%s' "$NORMALIZED_REQUEST" | jq -c 'keys') || fatal "cannot read request fields"
+  MISSING_REQUEST_FIELDS=$(jq -nr --argjson expected "$REQUEST_FIELDS_JSON" --argjson actual "$REQUEST_KEYS" \
+    '$expected - $actual | join(", ")') || fatal "cannot compare request fields"
+  UNSUPPORTED_REQUEST_FIELDS=$(jq -nr --argjson expected "$REQUEST_FIELDS_JSON" --argjson actual "$REQUEST_KEYS" \
+    '$actual - $expected | join(", ")') || fatal "cannot compare request fields"
+  [ -z "$MISSING_REQUEST_FIELDS" ] ||
+    add_error "" "request is missing required fields: $MISSING_REQUEST_FIELDS"
+  [ -z "$UNSUPPORTED_REQUEST_FIELDS" ] ||
+    add_error "" "request contains unsupported fields: $UNSUPPORTED_REQUEST_FIELDS"
 
   if ! json_test '.purpose | type == "string" and length > 0'; then
     add_error "/purpose" "purpose must be a non-empty string"
@@ -81,10 +92,27 @@ else
         continue
       fi
 
-      json_test ".claims[$CLAIM_INDEX] | (keys | sort) == [\"anchors\", \"done_when\", \"exclude\", \"id\", \"kind\", \"question\", \"subject\"]" ||
-        add_error "$CLAIM_PATH" "$CLAIM_ID requires only id, kind, subject, question, anchors, done_when, and exclude"
-      json_test ".claims[$CLAIM_INDEX].kind | type == \"string\" and IN(\"behavior\", \"control_flow\", \"integration\", \"contract\", \"test\", \"test_absence\")" ||
-        add_error "$CLAIM_PATH/kind" "$CLAIM_ID.kind is unsupported"
+      CLAIM_KEYS=$(printf '%s' "$NORMALIZED_REQUEST" | jq -c ".claims[$CLAIM_INDEX] | keys") || fatal "cannot read $CLAIM_ID fields"
+      MISSING_CLAIM_FIELDS=$(jq -nr --argjson expected "$CLAIM_FIELDS_JSON" --argjson actual "$CLAIM_KEYS" \
+        '$expected - $actual | join(", ")') || fatal "cannot compare $CLAIM_ID fields"
+      UNSUPPORTED_CLAIM_FIELDS=$(jq -nr --argjson expected "$CLAIM_FIELDS_JSON" --argjson actual "$CLAIM_KEYS" \
+        '$actual - $expected | join(", ")') || fatal "cannot compare $CLAIM_ID fields"
+      [ -z "$MISSING_CLAIM_FIELDS" ] ||
+        add_error "$CLAIM_PATH" "$CLAIM_ID is missing required fields: $MISSING_CLAIM_FIELDS"
+      [ -z "$UNSUPPORTED_CLAIM_FIELDS" ] ||
+        add_error "$CLAIM_PATH" "$CLAIM_ID contains unsupported fields: $UNSUPPORTED_CLAIM_FIELDS"
+
+      if ! printf '%s' "$NORMALIZED_REQUEST" | jq -e --argjson supported "$SUPPORTED_CLAIM_KINDS_JSON" \
+        ".claims[$CLAIM_INDEX].kind as \$kind | (\$kind | type) == \"string\" and (\$supported | index(\$kind) != null)" >/dev/null 2>&1; then
+        CLAIM_KIND=$(printf '%s' "$NORMALIZED_REQUEST" | jq -r ".claims[$CLAIM_INDEX].kind | if type == \"string\" then . else \"\" end") ||
+          fatal "cannot read $CLAIM_ID.kind"
+        KIND_HINT=""
+        case "$CLAIM_KIND" in
+          data_flow) KIND_HINT="; use control_flow when tracing an execution/data path" ;;
+          runtime_contract) KIND_HINT="; use contract for dependency or runtime rules" ;;
+        esac
+        add_error "$CLAIM_PATH/kind" "$CLAIM_ID.kind is unsupported; expected one of: $SUPPORTED_CLAIM_KINDS_TEXT$KIND_HINT"
+      fi
 
       for FIELD in subject question done_when; do
         if ! json_test ".claims[$CLAIM_INDEX].$FIELD | type == \"string\" and length > 0"; then
