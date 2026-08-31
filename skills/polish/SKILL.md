@@ -1,17 +1,26 @@
 ---
 name: polish
-description: 実装完了後にbaselineからの実変更コードへフォーマッタ・リンター・型検査・buildを適用し、path整合性を検証して、workerが検出した三段階以上の制御フローネストだけをunwindで見直す。
+description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、workerが検出した三段階以上の制御フローネストだけをunwindで見直す。
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
 disable-model-invocation: true
 ---
 
 ## 目的
 
-呼び出し元が実装直前に記録したbaselineから、実際に変更された本体コードだけを整形・静的検査・buildし、診断をscopeへ帰属させてからpath検査と`unwind`を通す。
+対象として確定したコードだけを整形・静的検査・buildし、診断をscopeへ帰属させてからpath検査と`unwind`を通す。実装前baselineがある変更はpath完全性まで検証し、気軽な直接修正は同じ品質処理を維持したまま完全性だけ未検証と明示する。
+
+## モード
+
+開始時に一つだけ選び、途中で黙って切り替えない。
+
+- **verified**: `tdd`、`errand`などの呼び出し元が実装前に`capture-scope.sh <機能名> --auto`でreceiptを作成済みの場合。receiptから実変更pathを決定し、最後にpathの完全一致まで検証する。receipt欠落は呼び出し元の状態遷移不備として停止し、directへ降格しない
+- **direct**: 通常の直接依頼で、呼び出し元が今回作成・変更した相対path全件を順序付きで渡す場合。receiptは要求せず、path完全性だけ`scope-unverified`とする。repository全体、directory、glob、`git diff`、`git status`から対象を推測・拡張しない。明示pathが無ければ実行しない
+
+どちらもformatter、lint、typecheck、Prisma検証、build、`unwind`を同じ条件で実行する。receiptが無いことを理由にPrettier / ESLintだけの独自フォールバックへ置き換えない。
 
 ## 入力と対象
 
-機能名を受け取り、最初に次を実行する。
+verifiedは機能名を受け取り、最初に次を実行する。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
@@ -19,7 +28,15 @@ bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 
 `--auto`で記録したbaselineでは、基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済みfileがGitの順序で返る。従来の個別path receiptでは、候補のうち実際に変更されたfileだけがreceipt順で返る。この出力と完全一致する相対path全件を一括入力とし、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`・path検査の対象外にする。出力が空なら実行表と`unwind`を省略し、path検査へ進む。
 
-各実変更pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは実変更pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheck・build・Prisma検証はファイル単位で安全に分割できないため、実変更pathが属するpackageまたはschemaだけを起点に既存単位で実行する。ただしpackage単位の失敗全体を今回の失敗とは扱わない。
+directは機能名と明示path全件を受け取り、formatter等を起動する前に次で個別file・重複・存在・symlink・ignoreを検査する。未追跡fileはこの時点では許可するが、最終gateまでに追跡・commitする。
+
+```bash
+bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示path>...
+```
+
+以降、verifiedの実変更pathまたはdirectの明示pathを**対象path**と呼ぶ。direct-check失敗時は対象を推測して再構成しない。
+
+各対象pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは対象pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheck・build・Prisma検証はファイル単位で安全に分割できないため、対象pathが属するpackageまたはschemaだけを起点に既存単位で実行する。ただしpackage単位の失敗全体を今回の失敗とは扱わない。
 
 ## 実行表
 
@@ -36,7 +53,7 @@ packageごとに上から実行する。既存scriptを第一選択にし、scri
 | TypeScript / JavaScriptを含み`typecheck` scriptあり | packageで`yarn typecheck` | package単位で1回 |
 | 上記scriptなし、`tsconfig.json`あり | `tsc -p <tsconfig> --noEmit` | package単位で1回 |
 | `schema.prisma`を含む | Prismaの`format`、`validate`、`generate` | schemaが属するpackage |
-| 実変更pathが属するpackageに`build` scriptあり | packageで`yarn build` | package単位で1回 |
+| 対象pathが属するpackageに`build` scriptあり | packageで`yarn build` | package単位で1回 |
 
 同じpathを複数formatterまたはlinter設定が支配し、既存scriptでも一意にならない場合は勝手に選ばず`not run`として返す。`build` scriptがないpackageのbuild commandは推測・発明しない。必要なtoolが未導入ならinstallせず、実行できなかった検査を`not run`として返す。
 
@@ -54,19 +71,31 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 
 ## 制御フローネストの品質ゲート
 
-実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
+実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、verifiedでは実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。directでも明示pathだけを渡して`unwind`を必ず呼び、pathを増減しない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
 
 `unwind` がコードを変更した場合は、対象テスト・型検査・lint・親スキルが実行した同じpackageのbuildを再実行し、通常の変更と同じ単位でコミットした後、外部ワーカーへ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返してから後続へ進む。
 
 ## scope path検査
 
-実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから、polish開始時に得た実変更pathを同じ順序で全件渡す。`list-changed`をもう一度実行しない。入力が空なら`--`の後へpathを付けない。
+実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから、polish開始時に得た対象pathを同じ順序で全件渡す。`list-changed`をもう一度実行しない。verifiedの入力が空なら`--`の後へpathを付けない。directの空入力は許可しない。
+
+verified:
 
 ```bash
 bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
 ```
 
-開始receiptのrepository・基準commit・modeを読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。個別path receiptでは候補一覧も照合する。入力された実変更pathだけが追跡済みかつcleanであることを検査する。完了receiptの記録や後続での再検証は行わない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
+開始receiptのrepository・基準commit・modeを読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。個別path receiptでは候補一覧も照合する。入力された実変更pathだけが追跡済みかつcleanであることを検査する。
+
+direct:
+
+```bash
+bash [skills_root]/polish/quality-gate.sh <機能名> --direct -- <明示path>...
+```
+
+明示pathの形式、重複、存在、symlink、ignoreに加え、全件が追跡済みかつcleanであることを検査する。成功しても対象pathの完全性は証明せず、最終結果を`scope-unverified`とする。
+
+どちらも完了receiptの記録や後続での再検証は行わない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
 
 ## 反復条件
 
@@ -81,4 +110,4 @@ bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
 | `unwind`による修正 | 上位モデルが修正し、必要なtestとcommit後にpolishを先頭から再実行 |
 | tool未導入、設定競合、実行不能 | 再実行で隠さず`not run`と理由を返し、後続のscope path検査へ進む |
 
-決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。上位モデルがコードを判断して修正した場合は全品質ゲートを再実行する。最終報告では実行済みcommandを`scope pass`、`scope fail`、`unrelated failure`、`uncertain`、`not run`へ分類し、ファイル単位の起動へ分割しない。
+決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。上位モデルがコードを判断して修正した場合は全品質ゲートを再実行する。最終報告ではモードと対象pathを示し、実行済みcommandを`scope pass`、`scope fail`、`unrelated failure`、`uncertain`、`not run`へ分類する。directではこれと別にpath完全性を`scope-unverified`と明記し、ファイル単位の起動へ分割しない。
