@@ -154,6 +154,22 @@ if [ -x "$SURVEY_REQUEST_VALIDATOR" ] && bash "$SURVEY_REQUEST_VALIDATOR" "$VALI
 else
   ng "worker survey validatorのpacket上限または密度検証が不正"
 fi
+SCHEMA_DIAGNOSTIC_REQUEST='{"purpose":"schema診断を確認する","packet":"survey","claims":[{"id":"C1","kind":"data_flow","subject":"値の伝播","question":"値はどの経路を通るか","anchors":["value"],"legacy":true},{"id":"C2","kind":"runtime_contract","subject":"runtime規則","question":"runtimeの契約は何か","anchors":["runtime"],"done_when":"runtime契約を直接示せる","exclude":["control flow"]}]}'
+SCHEMA_DIAGNOSTIC_ERROR=$(bash "$SURVEY_REQUEST_VALIDATOR" "$SCHEMA_DIAGNOSTIC_REQUEST" 2>&1)
+SCHEMA_DIAGNOSTIC_STATUS=$?
+if [ "$SCHEMA_DIAGNOSTIC_STATUS" -ne 0 ] && printf '%s' "$SCHEMA_DIAGNOSTIC_ERROR" | jq -e '
+  any(.errors[]; .path == "" and .message == "request contains unsupported fields: packet")
+  and any(.errors[]; .path == "/claims/0" and .message == "C1 is missing required fields: done_when, exclude")
+  and any(.errors[]; .path == "/claims/0" and .message == "C1 contains unsupported fields: legacy")
+  and any(.errors[]; .path == "/claims/0/kind" and .message == "C1.kind is unsupported; expected one of: behavior, control_flow, integration, contract, test, test_absence; use control_flow when tracing an execution/data path")
+  and any(.errors[]; .path == "/claims/1/kind" and .message == "C2.kind is unsupported; expected one of: behavior, control_flow, integration, contract, test, test_absence; use contract for dependency or runtime rules")
+  and .normalized_request.claims[0].kind == "data_flow"
+  and .normalized_request.claims[1].kind == "runtime_contract"
+' >/dev/null; then
+  ok "worker survey validator: schema不足・余剰・kind候補を意味変更なしで診断"
+else
+  ng "worker survey validatorのschema診断が不正"
+fi
 grep -Fq 'git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT"' "$WORKER_RUNNER" && grep -Fq -- '--source-ref is only valid for survey and research' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: revisionを固定し変更を機械拒否" || ng "workerのrevision snapshotまたは読み取り専用検査が不正"
 grep -Fq 'Evidenceのpath、開始行、終了行、件数は追加・削除・変更してはなりません' "$WORKER_RUNNER" && grep -Fq 'repair parent has invalid evidence; evidence selection requires supplement' "$WORKER_RUNNER" && grep -Fq 'repair parent must have formatting-only invalid_output' "$WORKER_RUNNER" && grep -q 'EVIDENCE_FAILURE_KIND="range_too_wide"' "$WORKER_RUNNER" && grep -q 'NEXT_ACTION="supplement"' "$WORKER_RUNNER" && grep -q 'FAILURE_CLASS="step_limit_exhausted"' "$WORKER_RUNNER" && ok "worker再試行: 形式修正と意味上の証拠補完を機械分離" || ng "worker再試行のrepair・supplement分類が不正"
 grep -q '^  show)' "$WORKER_RUNNER" && grep -q 'show mode requires task id' "$WORKER_RUNNER" && grep -q "cannot extract delegated report" "$WORKER_RUNNER" && ok "外部ワーカー結果: report抽出と固定showを提供" || ng "外部ワーカー結果の固定取得経路が不正"
@@ -205,6 +221,7 @@ else
 fi
 grep -Fq 'bash [skills_root]/worker/delegate.sh prepare' "$MEETING_SKILL" && grep -Fq '各内部skillで`prepare`を繰り返さない' "$MEETING_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PREFLIGHT_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh research' "$COWLICK_SKILL" && grep -Fq 'workerの`survey`へ委任' "$PONYTAIL_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh survey' "$PONYTAIL_SKILL" && grep -Fq 'worker/DELEGATION.md' "$REQUIRED_READING_HOOK" && ok "meetingが一度prepareして設計調査を固定実行器へ接続" || ng "meetingのprepareまたは設計調査の固定実行器が不正"
 grep -Fq '同じ調査を並行委任しない' "$WORKER_CONTRACT" && grep -Fq 'コード、test、schema、設定、設計書の作成・変更、実装案の生成' "$WORKER_CONTRACT" && grep -Fq '一つの変更判断に必要な最小の事実だけを聞く' "$WORKER_CONTRACT" && grep -Fq '初回を含め三回で止める' "$WORKER_CONTRACT" && grep -Fq 'smokeはユーザーが明示許可した時だけ実行する' "$WORKER_CONTRACT" && ok "worker共通契約は読み取り調査と上位モデルの判断境界へ限定" || ng "worker共通契約の読み取り専用境界が不足"
+grep -Fq '各claimは`id`、`kind`、`subject`、`question`、`anchors`、`done_when`、`exclude`だけを持つ' "$WORKER_CONTRACT" && grep -Fq '| `control_flow` | caller / callee、分岐、return / await、値・型の伝播経路 |' "$WORKER_CONTRACT" && grep -Fq '| `contract` | API、型、schema、設定、依存library・runtime契約 |' "$WORKER_CONTRACT" && grep -Fq '`data_flow`と`runtime_contract`はkindではない' "$WORKER_CONTRACT" && grep -Fq 'kindへ合わせて`question`や`done_when`の意味を変えず' "$WORKER_CONTRACT" && ok "worker共通契約はsurvey schemaとkind選択を生成前に明示" || ng "worker共通契約のsurvey schemaまたはkind選択が不足"
 grep -Fq 'claims_follow_contract "$report_path"' "$WORKER_RUNNER" && grep -Fq 'MAX_RENDERED_REPORT_LINES="300"' "$WORKER_RUNNER" && grep -Fq 'full artifact:' "$WORKER_RUNNER" && ! grep -Fq 'candidate.patch' "$WORKER_RUNNER" && grep -Fq -- '--repair-of' "$WORKER_RUNNER" && grep -Fq 'or $repair_of != "" then "deny"' "$WORKER_RUNNER" && ok "worker結果はrunnerが形式を検証し調査artifactだけを保持" || ng "worker結果の形式検証または調査artifact保持が不足"
 grep -Fq 'EVIDENCE_CONTEXT_LINES="8"' "$WORKER_RUNNER" && grep -Fq 'MAX_INFORMATION_ATTEMPTS="3"' "$WORKER_RUNNER" && grep -Fq '初回を含め三回で止める' "$WORKER_CONTRACT" && grep -Fq '広域探索やfile全体のReadはしない' "$WORKER_CONTRACT" && grep -Fq '再surveyより有利な理由を残す' "$WORKER_CONTRACT" && ok "worker不足は限定再調査と例外的な直接確認へ固定" || ng "worker再調査・上位直接確認の境界が不足"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
