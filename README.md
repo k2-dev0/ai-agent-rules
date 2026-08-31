@@ -28,7 +28,7 @@ ai-agent-rules/
 │   ├── tdd/                # testシナリオ選択後、テスト・委任実装・レビューを連続実行
 │   ├── errand/             # 設計書なしでtestシナリオ選択・Red・委任実装・Greenを実行
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
-│   ├── polish/             # 開始scope内の実変更pathだけを整形・静的検査・ネスト確認
+│   ├── polish/             # receipt付き実変更またはdirect明示pathを整形・静的検査・ネスト確認
 │   ├── unwind/             # 深い制御フローネストを構造的に縮退
 │   ├── dictionary/         # context-dictionary MCPによる知見の検索・保存・更新policy
 │   └── e2e/                # chrome-devtools-mcp による E2E テスト
@@ -209,6 +209,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
 | TDD / errandのnative調査・初回実装 | `skills/tdd/SCENARIO_FLOW.md`、`claude/agents/{surveyor,implementer}.md`、`codex/agents/{surveyor,implementer}.toml` |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
+| polishのpath検査 | `quality-gate.sh <機能名> -- <実変更path>...`はreceiptと完全一致を検証するverified mode。`--direct-check` / `--direct`は通常の直接修正で明示pathだけを検査し、完全性を`scope-unverified`とする |
 | 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
 | `.claude` / `.codex` / `.agents`の設定・skill自己改変防止（`prompt/`は直接編集可） | `hooks/shell/protect-config.sh` |
 | `.env` / `.env.*`の書き込み・削除防止 | `hooks/shell/protect-env.sh`。sandbox / permission profileとの二重層 |
