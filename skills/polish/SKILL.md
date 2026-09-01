@@ -1,6 +1,6 @@
 ---
 name: polish
-description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、workerが検出した三段階以上の制御フローネストだけをunwindで見直す。
+description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、上位モデルが検出した三段階以上の制御フローネストだけをunwindで見直す。
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
 disable-model-invocation: true
 ---
@@ -73,7 +73,7 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 
 実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、verifiedでは実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。directでも明示pathだけを渡して`unwind`を必ず呼び、pathを増減しない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
 
-`unwind` がコードを変更した場合は、対象テスト・型検査・lint・親スキルが実行した同じpackageのbuildを再実行し、通常の変更と同じ単位でコミットした後、外部ワーカーへ再検出を委任する。縮退できない候補がある場合も、下位モデルの task-id・結果パス・理由と却下案を最終報告用に返してから後続へ進む。
+`unwind` がコードを変更した場合は、対象テスト・型検査・lint・親スキルが実行した同じpackageのbuildを再実行し、通常の変更と同じ単位でコミットした後、上位モデルが同じ対象pathを再検出する。縮退できない候補がある場合も、理由と却下案を最終報告用に返してから後続へ進む。
 
 ## scope path検査
 
