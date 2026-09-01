@@ -1353,7 +1353,6 @@ if [ "$MODE" != "smoke" ]; then
   git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT" >/dev/null || fail "cannot create isolated worktree"
   WORKTREE_ADDED=1
   WORKTREE_PHYSICAL=$(cd "$WORKTREE" && pwd -P) || fail "cannot resolve isolated worktree path"
-  snapshot_ignored_agent_context
 fi
 
 if [ "$MODE" = "research" ] && [ -z "$REPAIR_OF" ]; then
