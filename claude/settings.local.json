@@ -35,6 +35,8 @@
       "Bash(bash .claude/skills/polish/capture-scope.sh:*)",
       "Bash(bash .claude/skills/rebase/rebase.sh)",
       "Bash(bash .claude/skills/rebase/rebase.sh:*)",
+      "Bash(bash .claude/skills/worker/delegate.sh nesting)",
+      "Bash(bash .claude/skills/worker/delegate.sh nesting:*)",
       "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh)",
       "Bash(bash .claude/skills/e2e/apply-e2e-plan.sh:*)",
       "Bash(./base/scripts/run-unit.sh)",
