@@ -4,11 +4,6 @@
 default_permissions = "distributed"
 approval_policy = "on-request"
 
-[agents]
-# implementerをgeneric spawnしてしまった場合も、親のmodel/effortを継承させない。
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
-
 [permissions.distributed]
 # workspace 全体を write にし、任意階層の保護対象は PreToolUse hook で書き込みだけ拒否する。
 # filesystem の read は任意階層 glob を受理しないため、配布設定には使用しない。
