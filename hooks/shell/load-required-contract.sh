@@ -56,16 +56,6 @@ load_contract_once() {
   exit 0
 }
 
-# workerの引数を確定する前に共通委任契約を必ずcontextへ入れる。
-if [ "$TOOL" = "Bash" ]; then
-  case "$(hook_command)" in
-    bash\ *skills/worker/delegate.sh*)
-      load_contract_once "worker-delegation" "worker/DELEGATION.md"
-      exit 0
-      ;;
-  esac
-fi
-
 # Claudeはcowlickのfrontmatterからmodeを渡す。Codexはmeeting/cowlickのsession markerで
 # 適用範囲を限定し、最初のprompt設計書編集前に設計形式を注入する。
 REQUIRE_COWLICK_FORMAT=false
