@@ -23,6 +23,11 @@ prefix_rule(
     decision = "allow",
     justification = "実装直前のHEADをbaselineとして記録し、polish対象の実変更pathを列挙します。",
 )
+prefix_rule(
+    pattern = ["bash", ".agents/skills/worker/delegate.sh", "nesting"],
+    decision = "allow",
+    justification = "確定済みの実変更pathだけを隔離した下位モデルの制御フローネストQAへ渡します。",
+)
 # TDDで承認済みの対象テストを個別実行・再実行する固定runner。引数はtest pathだけを
 # 受け取るrunner側で処理し、任意のshellや他scriptへ許可を広げない。
 prefix_rule(
