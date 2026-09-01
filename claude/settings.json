@@ -89,6 +89,8 @@
       "bash .claude/skills/polish/capture-scope.sh *",
       "bash .claude/skills/rebase/rebase.sh",
       "bash .claude/skills/rebase/rebase.sh *",
+      "bash .claude/skills/worker/delegate.sh nesting",
+      "bash .claude/skills/worker/delegate.sh nesting *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
       "bash .claude/skills/e2e/apply-e2e-plan.sh *",
       "./base/scripts/run-unit.sh",
