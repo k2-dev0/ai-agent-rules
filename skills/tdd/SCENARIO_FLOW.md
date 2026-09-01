@@ -1,38 +1,29 @@
 # シナリオ駆動の共通実装フロー
 
-`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書をnative調査・シナリオ・テスト・初回実装・Greenの正本とする。
+`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書を上位モデルの調査・シナリオ・テスト、下位implementerの初回実装、上位モデルのGreenの正本とする。
 
 ## 呼び出し元が渡すもの
 
 | 入力 | `tdd` | `errand` |
 |---|---|---|
-| 要求根拠 | 承認済み設計書とnative survey結果 | ユーザー依頼とnative survey結果 |
+| 要求根拠 | 承認済み設計書と上位モデルが確認した事実 | ユーザー依頼と上位モデルが確認した事実 |
 | implementerへの入力 | 全要件、確認済み事実、test_scenarios、Red、想定変更先 | 全要件、確認済み事実、test_scenarios、Red、想定変更先 |
 | scope名 | 設計書の機能名 | 呼び出し元が固定するASCII kebab-case名 |
 | 実装後の追加処理 | polishと必要ならindex更新 | 呼び出し元が定めた限定検証と完了報告 |
 
 想定変更先は調査とレビューの起点であり、書き込み認可リストではない。要件内で別のproduction fileが必要だと判明した場合、implementerは変更してよい。親が共有worktreeの実差分を全件レビューし、test/spec、fixture、設定、migration、依存関係、lockfile、agent設定、設計資産、Git管理ファイルへの変更を採用しない。
 
-## 0. native survey subagentへ調査を委任する
+## 0. [agent_name]が直接調査する
 
-最初に次を実行し、Claude CodeとCodexの専用`surveyor`・`implementer`定義を検査する。
+最初に次を実行し、Claude CodeとCodexの専用`implementer`定義を検査する。
 
 ```bash
 bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 ```
 
-必要な調査をsource group単位へ分け、独立した調査は最大3体を並行起動する。一体へリポジトリ全体を任せず、現在の対象、最寄りの同型実装、schema・test・routeなど、同じfile群を読む事実だけを一つのtaskへまとめる。Claude Codeではproject agent `surveyor`を、Codexではtask名`surveyor`、`fork_turns: "none"`、専用agent定義のread-only sandboxを使う。
+要求根拠にある識別子、path、番号、固有名詞から、現在の対象、最寄りの同型実装、schema・test・route、直接使える検証commandを[agent_name]がRead・Grep・Globまたは読み取り専用shell commandで確認する。下位モデル、surveyor subagent、外部workerへ調査を委任しない。
 
-surveyorには次を自然文で渡す。
-
-- 要求根拠と今回確認する一つの判断
-- 既知の識別子、path、番号、固有名詞
-- 読むsource groupと除外範囲
-- 返答に必要な、確認済み事実、根拠の`path:line`、想定変更先、直接関係するtest・検証command、未確認事項
-
-返答をMarkdown parser、claim ID、Evidence件数、artifact blobで検証しない。親が内容と`path:line`を読み、要求判断を直接支えるか採否する。必要な事実が一つだけ欠けた場合は、新しいtaskを作らず同じsurveyorへ一度だけ限定follow-upする。別source groupが必要なら別taskにする。native agentの完了通知を待ち、短周期pollや固定時間での打ち切りを行わない。
-
-surveyorにはシナリオ、期待値、assertion、fixture構成、テストコードを提案または変更させない。調査結果に矛盾がある、高リスク判断を独立確認する、未コミット状態やruntimeが対象である場合は、親が理由を明記して限定確認する。
+調査は要求判断を直接支える最小範囲から始め、根拠の`path:line`、想定変更先、直接関係するtest・検証command、未確認事項を保持する。事実と推測を分け、存在を確認できない実装やtestをあるものとして扱わない。必須事実が不足する場合は[agent_name]が追加調査し、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
 ## 1. テストシナリオ候補をまとめて提示する
 
@@ -71,7 +62,7 @@ surveyorにはシナリオ、期待値、assertion、fixture構成、テスト�
 対象テストをプロジェクトの既存test script経由で実行し、実装不足または期待値との差で失敗することを確認する。
 
 - syntax、import、型の失敗はシナリオを変えず[agent_name]が修正する
-- 未調査のリポジトリ事実が必要ならStep 0の限定follow-upへ戻す
+- 未調査のリポジリ事実が必要ならStep 0の直接調査へ戻す
 - 最初からGreenなら、テストが要求を検出できるか確認する
 - シナリオの変更が必要ならStep 1へ戻して再承認する
 
@@ -88,7 +79,7 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 機械検証用JSONやworker artifactを作らず、次を一つの実装briefとして渡す。
 
 - 設計書またはユーザー依頼の全要件
-- surveyorが確認した事実と`path:line`
+- [agent_name]が確認した事実と`path:line`
 - 選択済みtest_scenarios
 - Redのcommand、終了status、期待した理由での失敗要約
 - 想定変更先と、追加production fileを変更してよい条件
@@ -102,7 +93,7 @@ test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭
 
 実装subagentがテストの穴、矛盾、曖昧さ、偽陽性・偽陰性を報告した場合は[agent_name]が処理する。
 
-- 追加調査だけで一意に解決できる: 同じsurveyorへ一度だけ限定follow-upし、変更前worktreeがcleanな場合だけ一度再起動する
+- 追加調査だけで一意に解決できる: [agent_name]が直接確認し、変更前worktreeがcleanな場合だけimplementerを一度再起動する
 - 非ブロッキングな改善案: 記録して続行する
 - 新しい設計判断が必要: 呼び出し元の設計・要件確認へ戻す
 
@@ -125,7 +116,7 @@ subagentの自己申告や想定変更先ではなく、共有worktreeの実際�
 - `filter().map()`で意図が明確になる処理を短さだけで`reduce()`へ畳み込んでいない
 - 多少冗長でも局所的に理解できる名前と構造を選んでいる
 
-採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。通常の修正をsurveyorまたはimplementerへ再委任しない。
+採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。通常の修正をimplementerへ再委任しない。
 
 Green、formatter、lint、polish、本体コードのcommitより先に、次の3項目だけを簡潔に報告する。
 
@@ -142,12 +133,12 @@ Green、formatter、lint、polish、本体コードのcommitより先に、次�
 | 条件 | 実行 |
 |---|---|
 | 選択済みtest_scenariosから作ったtest | 全件 |
-| surveyorが`direct-regression`として確認した既存test | 全件 |
+| [agent_name]が`direct-regression`として確認した既存test | 全件 |
 | TypeScript / JavaScriptを変更 | 所属packageの既存typecheck。なければ`tsc -p <tsconfig> --noEmit` |
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-surveyorが確認する検証commandは`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、全要件へ合わせる本体コード修正を直接行う。
+[agent_name]が確認した検証commandは`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、全要件へ合わせる本体コード修正を直接行う。
 
 ## 8. 失敗をscopeに帰属させる
 
