@@ -6,7 +6,6 @@ allowed-tools:
   - Skill(cowlick *)
   - Skill(ponytail)
   - AskUserQuestion
-  - Bash
 disable-model-invocation: true
 ---
 
@@ -32,12 +31,10 @@ preflight → cowlick → ponytail
 | phase | 責務 |
 |---|---|
 | **preflight** | 要件の由来、既存機能との衝突、副作用、既存の実行方式、境界を新設しない基準案を読み取り専用で洗い出す |
-| **cowlick** | 確定した要件から `.[agent_name]/prompt/` の設計書を作り、下位モデルのコードベース調査を反映する |
+| **cowlick** | 確定した要件から `.[agent_name]/prompt/` の設計書を作り、上位モデルがコードベースと照合する |
 | **ponytail** | 設計書から不要な機能、重複実装、不要な依存、過剰な表現を削る |
 
-workerと調査subagentはコードベースの探索と根拠収集だけを担当する。設計判断、横断比較、設計書の採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。`ponytail`の最後の設計レビューを下位モデルへ渡してはならない。
-
-このpipelineで初めて外部ワーカーへ委任する前に`bash [skills_root]/worker/delegate.sh prepare`を実行し、hookが注入した共通契約を反映する。同一sessionのpreflight、cowlick、ponytailはこの一回の準備を共有し、各内部skillで`prepare`を繰り返さない。
+コードベースの探索、根拠収集、設計判断、横断比較、設計書の採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する。調査を下位モデル、subagent、外部workerへ委任しない。下位モデルは後段の初回実装にだけ使う。
 
 後段で前提が崩れた場合は、影響する phase まで戻す。
 
