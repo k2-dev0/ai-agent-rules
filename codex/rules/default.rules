@@ -23,12 +23,6 @@ prefix_rule(
     decision = "allow",
     justification = "実装直前のHEADをbaselineとして記録し、polish対象の実変更pathを列挙します。",
 )
-prefix_rule(
-    pattern = ["bash", ".agents/skills/worker/delegate.sh"],
-    decision = "allow",
-    justification = "予算・ZDR・編集先を固定検証してOpenRouter外部ワーカーを隔離worktreeで実行します。",
-)
-
 # TDDで承認済みの対象テストを個別実行・再実行する固定runner。引数はtest pathだけを
 # 受け取るrunner側で処理し、任意のshellや他scriptへ許可を広げない。
 prefix_rule(
@@ -45,23 +39,12 @@ prefix_rule(
     justification = "repository内のlocal ESLintで対象ファイルを検証します。",
 )
 
-# delegate.sh が長時間実行になった場合の完了確認。ps -p は指定PIDの状態を読むだけで
+# 長時間実行processの完了確認。ps -p は指定PIDの状態を読むだけで
 # filesystemやprocessへ変更を加えないため、動的PIDでも追加承認を不要にする。
 prefix_rule(
     pattern = ["ps", "-p"],
     decision = "allow",
     justification = "外部ワーカー委任processの完了状態を読み取り専用で確認します。",
-)
-prefix_rule(
-    pattern = ["bash", ".agents/skills/worker/delegate.sh", "smoke"],
-    decision = "prompt",
-    justification = "従量課金の下位モデルへhelloを送るsmoke testを実行するか確認します。",
-    match = [
-        "bash .agents/skills/worker/delegate.sh smoke",
-    ],
-    not_match = [
-        "bash .agents/skills/worker/delegate.sh research --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason scope=spec,difficulty=medium,basis=contract-review task-id spec.md",
-    ],
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/e2e/apply-e2e-plan.sh"],
