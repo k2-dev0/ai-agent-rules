@@ -122,7 +122,7 @@ implementerは一体だけfresh contextで起動する。想定変更先は探�
 
 外部workerは`delegate.sh nesting`による限定QAだけに使う。対象は上位モデルが先に確定した変更production pathであり、workerの役割は3段以上の制御フローネスト候補と位置の抽出までとする。修正要否、設計との整合、誤検出、修正、再テストは上位モデルが判断する。`delegate.sh research`と`delegate.sh survey`は入口で拒否する。
 
-`delegate.sh`の`prepare`、`smoke`、`show`は実行器の運用modeであり、調査委任ではない。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
+`delegate.sh`の`prepare`、`smoke`、`show`は実行器の運用modeであり、調査委任ではない。pollはprocess、出力byte、有効JSON eventを観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`と最終回答がある場合だけそのreportをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
@@ -140,9 +140,9 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認する。
 
-通常はスクリプトを直接操作せず、`unwind`または`polish`のネストQA手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部workerへ許可しない。
+通常はスクリプトを直接操作せず、`unwind`または`polish`のネストQA手順から呼ぶ。実行器はHEADから指定された本体コードだけを一時snapshotへ複製して読み取り専用にし、テスト、設計、設定、Git、外部plugin、任意shellを外部workerへ許可しない。
 
-隔離worktreeは現在のHEADを基準にする。無視されたagent資料はsnapshotせず、指定された変更pathだけをQA対象にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
+限定snapshotは現在のHEADを基準にし、指定された変更path以外を物理的に持ち込まない。無視されたagent資料、`.codex/tmp`、`.git/**`、`.env`系も含まれない。編集権限は与えず、実行後にファイル数とblob hashを検査する。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
 ## 注意
 
