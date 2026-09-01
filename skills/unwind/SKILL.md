@@ -1,6 +1,6 @@
 ---
 name: unwind
-description: "polish の最終品質ゲートから呼ばれ、上位モデルが変更済み本体コードの三段階以上の制御フローネストを直接検出・判断する。早期脱出・条件反転・分岐表などで構造的に修正し、ネストを隠す関数抽出は許可しない。"
+description: "polish の最終品質ゲートから呼ばれ、下位モデルに変更済み本体コードの三段階以上の制御フローネスト候補抽出だけを委任する。上位モデルが判断・修正・検証し、ネストを隠す関数抽出は許可しない。"
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 変更済みの本体コードについて、同じ実行経路に制御構造が3段階以上重なる箇所を、意味を保ったまま2段階以下へ減らす。`polish` の内部品質ゲートとしてだけ実行する。
 
-検出、修正・却下判断、検証はすべて上位モデルが行う。下位モデル、subagent、外部workerへネスト検出を委任しない。
+検出候補の抽出だけを下位モデルの読み取り専用・隔離workerへ委任する。機能の目的、要件、設計、変更範囲の調査は依頼しない。候補の採否、修正・却下判断、検証はすべて上位モデルが行う。
 
 ## 判定
 
@@ -19,18 +19,23 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 - `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
 - `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない
 - 関数・メソッド・callback の内部は独立して数える。関数境界を作って深さを隠してはならない
-- [agent_name]は各候補の実行経路を読み、機械的な括弧数だけで判定しない
+- 下位モデルは各候補の実行経路を読み、機械的な括弧数だけで判定しない
 
 ## 実行
 
-1. 親スキルが渡した検証済みの実変更pathを[agent_name]が直接読み、各関数・メソッド・callbackの実行経路ごとに制御フローの深さを確認する。
-2. 3段階以上の候補ごとに、ファイル、行、最大深さ、到達条件を記録する。候補がなければ「3段階以上の制御フローネストなし」として終了する。
+1. 現在のHEAD先頭12桁からtask-idを`nesting-<HEAD先頭12桁>`とし、親スキルが渡した検証済みの実変更pathだけを個別引数で渡す。次の固定形式で`nesting` modeを実行する。
+
+   ```bash
+   bash [skills_root]/worker/delegate.sh nesting --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 10 --timeout-reason scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa nesting-<HEAD先頭12桁> <対象path>...
+   ```
+
+2. `result.json`とreportを読み、3段階以上の候補ごとにファイル、行、最大深さ、到達条件があることを上位モデルが確認する。workerの失敗・中断・対象外変更では候補なしと扱わず品質ゲートを失敗にする。候補がなければ「3段階以上の制御フローネストなし」として終了する。
 3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
    - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause
    - 条件を反転し、主経路を左端へ置く
    - 相互排他的な分岐を `switch`、状態表、dispatch map、データ駆動の選択へ置き換える
    - ループの不要な反復を先に除外し、必要な処理だけを直線化する
-4. 振る舞いを保てる案があれば、検出済み箇所だけへ適用し、対象テスト・型検査・lintと、親の`polish`が実行した同じpackageのbuildを再実行する。親がbuildを`not run`とした場合はその理由を引き継ぎ、新しいbuild commandを発明しない。コードを変更してコミットした場合はStep 1から再検出する。
+4. 振る舞いを保てる案があれば、検出済み箇所だけへ適用し、対象テスト・型検査・lintと、親の`polish`が実行した同じpackageのbuildを再実行する。親がbuildを`not run`とした場合はその理由を引き継ぎ、新しいbuild commandを発明しない。コードを変更してコミットした場合は新しいHEADからtask-idを作り直し、Step 1から再検出する。
 5. 安全な縮退案が無い場合は、深さを残す根拠と却下した案を `polish` へ返す。未検討のまま最終報告へ進まない。
 
 ## 禁止する見せかけの縮退
@@ -45,4 +50,4 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## 返却内容
 
-`polish`へ候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行したテスト・型検査・lint・buildを返す。候補が無ければ、確認した対象pathを根拠に「3段階以上の制御フローネストなし」と明示する。
+`polish`へworkerのtask-id・結果path・候補ごとの最大深さ・到達条件・採用した縮退または残した根拠・実行したテスト・型検査・lint・buildを返す。候補が無ければ、workerの結果を根拠に「3段階以上の制御フローネストなし」と明示する。
