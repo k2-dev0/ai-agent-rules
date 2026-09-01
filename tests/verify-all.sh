@@ -120,23 +120,23 @@ IMPLEMENTER_PREFLIGHT_SCRIPT="$REPO/skills/tdd/preflight-implementer.sh"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 grep -q 'SOFT_BUDGET_USD="38"' "$WORKER_RUNNER" && grep -q 'HARD_BUDGET_USD="40"' "$WORKER_RUNNER" && ok "外部ワーカー予算: soft=38 hard=40" || ng "外部ワーカー予算が不正"
 grep -q 'DEFAULT_MODEL="openrouter/minimax/minimax-m3"' "$WORKER_RUNNER" && grep -Fq 'MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"' "$WORKER_RUNNER" && grep -Fq 'MODEL_ID="${MODEL#openrouter/}"' "$WORKER_RUNNER" && ok "外部ワーカーモデル: MiniMax M3を既定値として差し替え可能" || ng "外部ワーカーモデルの既定値または差し替えが不正"
-grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'OPENCODE_COMMAND+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
+grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'command+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
 if grep -Fq 'research and survey modes were removed; lower models are limited to bounded QA' "$WORKER_RUNNER" && grep -q 'mode must be nesting, prepare, smoke, or show' "$WORKER_RUNNER"; then
   ok "workerはnesting限定QAだけを公開"
 else
   ng "workerにresearch / survey入口が残存"
 fi
-grep -q 'XDG_DATA_HOME="\$OPENCODE_XDG_DATA_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="\$OPENCODE_XDG_STATE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="\$OPENCODE_XDG_CACHE_HOME"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="\$OPENCODE_XDG_CONFIG_HOME"' "$WORKER_RUNNER" && grep -q 'TMPDIR="\$OPENCODE_TMPDIR"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
-grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'requires explicit --hard-timeout-minutes' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q 'last_event_type' "$WORKER_RUNNER" && grep -q 'valid_event_observed' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'FINAL_STATUS=124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
+grep -q 'XDG_DATA_HOME="$TEMP_ROOT/xdg-data"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="$TEMP_ROOT/xdg-state"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="$TEMP_ROOT/xdg-cache"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="$TEMP_ROOT/xdg-config"' "$WORKER_RUNNER" && grep -q 'TMPDIR="$TEMP_ROOT/tmp"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
+grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^has_valid_event()' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'return 124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
 grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && ok "worker lifecycle: task状態と重複拒否を記録" || ng "worker lifecycle管理が不正"
 grep -q -- '--arg model_id "$MODEL_ID"' "$WORKER_RUNNER" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$WORKER_RUNNER" && ok "worker config: readonly定数をjq引数で受け渡す" || ng "worker config: readonly変数への再代入が残存"
 grep -q '"zdr":true' "$WORKER_RUNNER" && grep -q '"data_collection":"deny"' "$WORKER_RUNNER" && ok "worker routing: ZDRとdata collection拒否" || ng "worker routingのprivacy強制漏れ"
 grep -Fq 'EDIT_RULES='\''{"*":"deny"}'\''' "$WORKER_RUNNER" && grep -q '"external_directory":"deny"' "$WORKER_RUNNER" && grep -q 'opencode --pure run' "$WORKER_RUNNER" && ok "worker権限: edit・外部dir・pluginを拒否" || ng "workerの読み取り専用権限境界が不正"
-grep -Fq '".git/**":"deny"' "$WORKER_RUNNER" && grep -Fq '"**/.env.*":"deny"' "$WORKER_RUNNER" && [ "$(grep -c 'snapshot_ignored_agent_context' "$WORKER_RUNNER")" = "1" ] && ok "worker読み取り: Git・envを拒否しignored agent contextを持ち込まない" || ng "workerのGit・env・agent context境界が不正"
+grep -Fq '".git/**":"deny"' "$WORKER_RUNNER" && grep -Fq '"**/.env.*":"deny"' "$WORKER_RUNNER" && ! grep -q 'snapshot_ignored_agent_context' "$WORKER_RUNNER" && ok "worker読み取り: Git・envを拒否しignored agent contextを持ち込まない" || ng "workerのGit・env・agent context境界が不正"
 grep -Fq 'trap cleanup EXIT' "$WORKER_RUNNER" && grep -Fq "trap 'exit 130' INT" "$WORKER_RUNNER" && grep -Fq "trap 'exit 143' TERM" "$WORKER_RUNNER" && ok "worker中断: cleanup後に処理を継続しない" || ng "workerのsignal終了処理が不正"
-grep -q 'SMOKE_PROMPT="hello"' "$WORKER_RUNNER" && grep -q 'if \$mode == "smoke" then "deny"' "$WORKER_RUNNER" && ok "worker smoke: hello固定・tool全拒否" || ng "worker smokeのpromptまたは権限が不正"
-grep -q '^  nesting)' "$WORKER_RUNNER" && grep -q '修正案・コード変更は不要です' "$WORKER_RUNNER" && grep -q 'nesting path must be tracked' "$WORKER_RUNNER" && ok "worker nesting: 本体コードだけを読み取り検出" || ng "worker nesting検出モードが不正"
-grep -Fq 'git worktree add --detach "$WORKTREE" "$SOURCE_COMMIT"' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: HEADを固定し変更を機械拒否" || ng "workerのHEAD snapshotまたは読み取り専用検査が不正"
+grep -q 'SMOKE_PROMPT="hello"' "$WORKER_RUNNER" && grep -q 'read_rules='\''"deny"'\''' "$WORKER_RUNNER" && grep -q '"bash":"deny"' "$WORKER_RUNNER" && ok "worker smoke: hello固定・tool全拒否" || ng "worker smokeのpromptまたは権限が不正"
+grep -q '^  nesting)' "$WORKER_RUNNER" && grep -q '機能調査、要件判断、設計判断、修正案、コード変更は禁止' "$WORKER_RUNNER" && grep -q 'nesting path must be tracked' "$WORKER_RUNNER" && ok "worker nesting: 本体コードだけを読み取り検出" || ng "worker nesting検出モードが不正"
+grep -Fq 'git -C "$REPO_ROOT" show "$SOURCE_COMMIT:$path" > "$WORKTREE/$path"' "$WORKER_RUNNER" && grep -Fq 'cd "$execution_root" || exit 72' "$WORKER_RUNNER" && grep -Fq 'bounded_snapshot_unchanged' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: HEADの指定pathだけを固定し変更を機械拒否" || ng "workerの限定snapshotまたは読み取り専用検査が不正"
 if [ ! -e "$REPO/skills/worker/validate-survey-request.sh" ] && [ ! -e "$REPO/skills/worker/DELEGATION.md" ]; then
   ok "worker旧調査契約とvalidatorを削除"
 else
@@ -398,7 +398,7 @@ src/rules.ts" ]; then ok "polish-scope: 事前許可pathなしで実変更file�
 else
   ng "polish-scope: auto baselineを記録できない"; cat native-auto-begin.out
 fi
-if [ ! -e .claude/skills/tdd/validate-implementation-request.sh ] && [ ! -e .claude/skills/tdd/implementer-read.sh ] && [ ! -e .claude/hooks/shell/protect-implementation-scope.sh ]; then
+if [ ! -e .claude/skills/tdd/validate-implementation-request.sh ] && [ ! -e .claude/skills/tdd/implementer-read.sh ] && [ ! -e .claude/hooks/shell/protect-implementation-scope.sh ] && [ ! -e .claude/skills/polish/implementation-scope-state.sh ]; then
   ok "旧調査artifact・quoted reader・exact実装scopeを配布しない"
 else
   ng "旧実装委任資産がClaude配置へ残存"
@@ -498,6 +498,9 @@ printf '%s\n' \
   'jq -e '\''.permission.edit["*"] == "deny" and (.permission.bash == "deny" or .permission.bash["*"] == "deny") and .permission.external_directory == "deny"'\'' "$OPENCODE_CONFIG" >/dev/null || exit 40' \
   'last="${!#}"' \
   'if [ "$last" = "hello" ]; then jq -cn --arg text hello '\''{type:"text",text:$text}'\''; exit; fi' \
+  '[ -f src/subject.ts ] || exit 41' \
+  '[ ! -e .claude ] || exit 42' \
+  '[ "$(find . -type f | wc -l | tr -d " ")" = "1" ] || exit 43' \
   'text='\''Outcome: fulfilled
 ## Claims
 ### C1
@@ -642,7 +645,7 @@ printf 'export const codexImplementation = true\n' > src/codex-implementation.ts
 printf 'export const codexUntouched = true\n' > src/codex-untouched.ts
 git add src/codex-implementation.ts src/codex-untouched.ts
 git commit -qm "test: Codex implementation scope fixture"
-if [ ! -e .agents/skills/tdd/validate-implementation-request.sh ] && [ ! -e .agents/skills/tdd/implementer-read.sh ] && [ ! -e .codex/hooks/shell/protect-implementation-scope.sh ]; then
+if [ ! -e .agents/skills/tdd/validate-implementation-request.sh ] && [ ! -e .agents/skills/tdd/implementer-read.sh ] && [ ! -e .codex/hooks/shell/protect-implementation-scope.sh ] && [ ! -e .agents/skills/polish/implementation-scope-state.sh ]; then
   ok "旧実装委任資産をCodex配置へ残さない"
 else
   ng "旧実装委任資産がCodex配置へ残存"
