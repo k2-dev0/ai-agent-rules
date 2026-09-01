@@ -1,5 +1,6 @@
 #!/bin/bash
-# OpenCode + OpenRouter の外部モデルを、読み取り専用調査として隔離実行する。
+# OpenCode + OpenRouter の外部モデルを、機械的な読み取り専用QAとして隔離実行する。
+# 機能調査と設計根拠収集のresearch / surveyは公開しない。
 set -u
 
 readonly SOFT_BUDGET_USD="38"
@@ -1007,7 +1008,10 @@ if [ "$#" -gt 0 ]; then
 fi
 
 case "$MODE" in
-  research|survey|nesting)
+  research|survey)
+    fail "research and survey modes were removed; lower models are limited to bounded QA"
+    ;;
+  nesting)
     [ "$#" -ge 8 ] || fail "$MODE mode requires explicit --hard-timeout-minutes, --idle-timeout-seconds, --poll-seconds, and --timeout-reason"
     [ "$1" = "--hard-timeout-minutes" ] || fail "$MODE mode requires --hard-timeout-minutes first"
     HARD_TIMEOUT_MINUTES="$2"
@@ -1053,31 +1057,6 @@ case "$MODE" in
 esac
 
 case "$MODE" in
-  research)
-    TASK_ID="${1:-}"
-    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    if [ -n "$REPAIR_OF" ]; then
-      [ "$#" -eq 1 ] || fail "research format repair requires only a task id"
-      shift
-    else
-      SPEC_PATH="${2:-}"
-      [ "$#" -eq 2 ] || fail "research mode requires task id and spec path"
-      shift 2
-    fi
-    ;;
-  survey)
-    TASK_ID="${1:-}"
-    [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
-    if [ -n "$REPAIR_OF" ]; then
-      [ "$#" -eq 1 ] || fail "survey format repair requires only a task id"
-      shift
-    else
-      SURVEY_REQUEST_JSON="${2:-}"
-      [ "$#" -eq 2 ] || fail "survey mode requires task id and one structured request JSON argument"
-      [ -n "$SURVEY_REQUEST_JSON" ] || fail "survey request JSON must not be empty"
-      shift 2
-    fi
-    ;;
   nesting)
     TASK_ID="${1:-}"
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
@@ -1096,7 +1075,7 @@ case "$MODE" in
     [[ "$TASK_ID" =~ $TASK_ID_PATTERN ]] || fail "task id must be lowercase kebab-case"
     [ "$#" -eq 1 ] || fail "show mode requires task id"
     ;;
-  *) fail "mode must be research, survey, nesting, prepare, smoke, or show" ;;
+  *) fail "mode must be nesting, prepare, smoke, or show" ;;
 esac
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
