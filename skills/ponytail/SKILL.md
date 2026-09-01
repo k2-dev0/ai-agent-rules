@@ -1,7 +1,7 @@
 ---
 name: ponytail
 description: "cowlick が `.[agent_name]/prompt/` に作った設計書を全設計書横断で監査し、要件へのtraceability、境界を新設しない代替案、原因除去、既存の実行方式の再利用を比較して、過剰な実装計画を削る"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 user-invocable: false
 ---
 
@@ -57,20 +57,15 @@ bug修正を含む設計書では、報告された症状とroot causeを分け�
 
 監査は表で簡潔に書く。一つのfindingはIDを付けて一度だけ説明し、他fieldではIDを参照する。同じ要件・原因・判断・置換先を持つ要素は一行へまとめる。具体的な差がある場合だけ分ける。`not_applicable`は一行、失敗モードは比較結果を変えるものだけに限定し、同じtopologyや根拠を別fieldで言い換えない。
 
-## 調査の委任
+## 調査の責務
 
-既存実装、実行方式、標準・native機能、導入済み依存の調査はworkerの`survey`へ委任する。設計判断、横断比較、採否、設計書の修正は[agent_name]が行う。
-`survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
+既存実装、実行方式、標準・native機能、導入済み依存の調査、設計判断、横断比較、採否、設計書の修正はすべて[agent_name]が行う。下位モデル、subagent、外部workerへ調査を委任しない。
 
-各claimは一つの監査境界に保つ。同じsource refと候補file群を読むclaimだけを共通validator上限の3件まで一つのsurveyへまとめ、独立packetは最大3件を同時に起動する。既存経路、runtime境界、個別要素、counterexampleは別claimにし、file群が離れるものと`test_absence`は固有task-idへ分ける。
-
-1. 個別設計書より先に設計書一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索させる
-2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探させる
-3. 各新設要素が別の新設要素のためだけに必要になっていないか、現設計を不要とする反証を探させる
-4. 残った個別論点だけを固有のtask-idで固定実行器へ委任し、claim-evidence、再利用候補の契約、適用できない理由、未確認事項を返させる
-5. 検証済みevidenceがclaimを直接支える場合は同じ箇所を再読せず、証拠不備・矛盾・snapshot不一致は欠落claimの限定surveyへ戻す
-
-下位モデルへ設計書の変更を許可しない。探索結果を受けて設計を変える責任は上位モデルが持つ。
+1. 個別設計書より先に設計書一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索する
+2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探す
+3. 各新設要素が別の新設要素のためだけに必要になっていないか、現設計を不要とする反証を探す
+4. 残った個別論点は対象の契約、適用できない理由、未確認事項を根拠の`path:line`とともに確認する
+5. 根拠不備または矛盾がある場合は[agent_name]が対象境界を追加調査し、推測で穴埋めしない
 
 ## 実行フロー
 
@@ -103,7 +98,7 @@ red flagを残すには、対応する明示要件または既存制約、触ら
 
 ### Step 4: 削除仮説をコードベースで検証する
 
-Step 2と3の探索を下位モデルへ委任する。現設計の成立確認ではなく、現設計を不要にする反証を優先する。名前の一致だけで再利用可能と判断せず、引数、戻り値、副作用、error、運用範囲が要件と一致するか確認する。
+Step 2と3の探索を[agent_name]が直接行う。現設計の成立確認ではなく、現設計を不要にする反証を優先する。名前の一致だけで再利用可能と判断せず、引数、戻り値、副作用、error、運用範囲が要件と一致するか確認する。
 
 標準・native機能は対象 runtime、browser support、database、framework version で利用可能か確認する。導入済み依存は lockfile だけでなく、実際の利用 pattern と保守境界も確認する。
 
@@ -149,6 +144,6 @@ Summary / Changes / 対象ファイル / 参照ルール / 完了条件の必須
 |---|---|
 | `ponytail_ready` | ready gateをすべて満たし、現在のdesign revisionが確認済みの最小案と一致する |
 | `consultation_required` | 挙動を変える候補があり、ユーザー判断が必要 |
-| `blocked` | 設計書の不整合、要件由来の欠落、委任失敗、根拠不足により監査を完了できない |
+| `blocked` | 設計書の不整合、要件由来の欠落、参照先の不足、根拠不足により監査を完了できない |
 
 ponytail が加えた単純化は `.[agent_name]/prompt/` の正本へ直接反映される。meeting は最終承認や反映phaseを置かない。
