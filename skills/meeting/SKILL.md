@@ -87,6 +87,8 @@ preflight の要件由来、既存の実行方式、境界を新設しない基�
 
 現在の design revision に ponytail を実行する。
 
+ponytailへpreflightの調査結果、cowlickの作成経緯、ユーザーとの会話要約を入力として渡さない。ponytailは現在の`.[agent_name]/prompt/.prompt.md`と参照先設計書だけから対象機能と要件を復元し、コードベースを独立に再調査する。meetingはponytailの結果を受け取った後にだけ、保持している要件revisionとの不一致を判定する。
+
 - 挙動を変えない単純化は設計書へ反映させる
 - 機能、公開契約、data、security、互換性を変える候補は、一件だけユーザーへ質問する
 - 回答で目的または対象範囲が変われば Step 2 へ戻す
