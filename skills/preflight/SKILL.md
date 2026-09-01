@@ -1,7 +1,7 @@
 ---
 name: preflight
 description: "新規機能、既存機能の修正、別リポジトリからの移植などの要件を cowlick へ渡す前に、コードベースを読み取り専用で調査し、既存機能との衝突、副作用、暗黙の前提、移植元の問題、未決定事項を洗い出す"
-allowed-tools: Read, Grep, Glob, Bash, Agent
+allowed-tools: Read, Grep, Glob, Bash
 user-invocable: false
 ---
 
@@ -19,23 +19,17 @@ user-invocable: false
 - ユーザーの意見をそのまま前提にせず、目的、手段、制約、受け入れる副作用に分けて検討する
 - 既存コードも正解とはみなさない。実装、テスト、文書、履歴が食い違う可能性を調べる
 
-## 調査の委任
+## 調査の責務
 
-コードベースの事実確認はworkerの`survey`へ委任する。設計・要件・採否判断は[agent_name]が行う。
-`survey`は必ず`bash [skills_root]/worker/delegate.sh survey`で実行する。
+コードベースの事実確認、反証、設計・要件・採否判断はすべて[agent_name]が行う。下位モデル、subagent、外部workerへ調査を委任しない。下位モデルは後段の確定済み要件の初回実装にだけ使う。
 
-このskillでBashを使ってよいのは`delegate.sh prepare`、`survey`、`show`だけとする。path探索やproduction code調査へBash、shell loop、条件分岐、pipelineを使わず、上位モデルのRead、Grep、Globによる広域調査へも切り替えない。Bashが同じ理由で一度拒否された工程ではBash探索を再試行しない。
+1. 確認したい仮説、探索範囲、期待する根拠を具体化する
+2. 要件に現れる識別子、path、固有名詞から読み、必要な場合だけcaller、callee、schema、test、runtime境界へ広げる
+3. 移植では移植元と移植先の事実を分け、差分を[agent_name]が比較する
+4. 確認済み事実は`path:line`とともに保持し、推測・未確認と混ぜない
+5. 根拠が不足、矛盾、または参照先がない場合は調査不能な範囲を報告し、推測で穴埋めしない
 
-1. 上位モデルが、確認したい仮説、探索範囲、期待する根拠を具体的な調査項目へ分ける
-2. 移植では移植元と移植先を別task-idにし、test、runtime、schemaを同じclaimへ混ぜない
-3. 共通契約のschemaに従い、各claimを一つの事実に保つ。同じsource refと候補file群を読むclaimだけを最大3件まで一つのJSONへまとめ、独立packetは最大3件を同時に起動する。自由文の調査指示はworkerへ渡さない
-4. `validate-survey-request.sh`に拒否された依頼は外部実行せず、source localityに沿ってpacketを分け直す。`test_absence`は単独にする
-5. 下位モデルには変更系 tool を与えず、依頼JSONと同じclaim IDのclaim-evidence、確認できない事項、反証候補だけを返させる
-6. `worker-result`の`next-action`が`repair`の場合だけ形式修正し、Evidence範囲、path、件数の不正では限定surveyへ戻す
-7. `evidence_status: verified`のコードがclaimを直接支え、blobが現在も一致する場合は同じ箇所を再読しない。不足時はclaimを指定して限定surveyへ戻す
-8. 共通契約の代替調査も使えない、または参照先がない場合は調査不能な範囲を報告し、推測で穴埋めしない
-
-上位モデル自身による広範なコード探索を避ける。証拠不備、snapshot不一致、矛盾は欠落claimの限定surveyを先に行う。直接確認は共通契約の条件を満たす場合だけとし、理由を残して全file Readではなく既知の行範囲を読む。
+Read、Grep、Glob、読み取り専用shell commandを使い、要求判断を直接支える最小範囲から始める。単語一致だけで終えず責務とdata flowを追うが、無関係なfile全件を読まない。
 
 ## 実行フロー
 
@@ -120,4 +114,4 @@ user-invocable: false
 |---|---|
 | `preflight_ready` | 重大な未決定事項がなく、cowlick へ渡せる |
 | `consultation_required` | ユーザー判断が必要な論点がある |
-| `blocked` | 委任手段、参照先、根拠が不足し、監査を続行できない |
+| `blocked` | 参照先または根拠が不足し、監査を続行できない |
