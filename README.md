@@ -24,7 +24,7 @@ ai-agent-rules/
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの設計書を prompt/ へ直接作成
 │   ├── ponytail/           # 全設計書横断で最小代替案と比較し、過剰設計を削除
-│   ├── worker/             # 下位モデルを隔離実行するprovider非依存の共通基盤
+│   ├── worker/             # 変更済みpathのネスト候補だけを下位モデルで抽出する実行器
 │   ├── tdd/                # testシナリオ選択後、テスト・委任実装・レビューを連続実行
 │   ├── errand/             # 設計書なしでtestシナリオ選択・Red・委任実装・Greenを実行
 │   ├── rebase/             # 1 ファイル = 1 コミット履歴を機能単位に squash
@@ -100,34 +100,33 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 $bootstrap codex
 ```
 
-### native subagentによるTDD / errand
+### 上位モデルの調査と下位モデルの実装・限定QA
 
 役割分担は次で固定する。
 
 | 工程 | 担当 | 境界 |
 |---|---|---|
-| TDD / errandのコードベース探索・根拠収集 | native surveyor subagent | source group単位の読み取り専用調査。設計判断はしない |
-| 設計判断・要件判断・調査結果の採否 | Codex / Claude Code | オーケストレーターである上位モデルが行う |
+| コードベース探索・根拠収集 | Codex / Claude Code | 上位モデルが直接行う。下位モデルへresearch / surveyを委任しない |
+| 設計判断・要件判断・根拠の採否 | Codex / Claude Code | 上位モデルが行う |
 | 承認済み範囲の初回実装 | native implementer subagent | 要求に必要なproduction codeと`schema.prisma`を変更する |
-| 差分の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 初回実装後はworker・implementerへ戻さない |
-| meeting等の設計調査、ネストの機械的検出 | 外部worker | `delegate.sh`の読み取り専用実行。TDD / errandでは使わない |
-| ネストなど変更要否を含まない機械的検出 | worker | 上位モデルは返却候補について修正する／しないを判断する |
+| 3段以上の制御フローネスト候補の抽出 | 外部worker | 上位モデルが確認済みの変更production pathだけを読み取る。変更要否は判断しない |
+| 差分・QA候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 上位モデルが行う。初回実装後はimplementerへ戻さない |
 
-`tdd`と`errand`は、調査も初回実装もnative subagentへ委任する。surveyorはClaude CodeではRead / Grep / Globだけ、Codexではread-only sandboxを使う。独立したsource groupは最大3体を並行起動し、返答は確認済み事実、`path:line`、想定変更先、直接関係するtest・検証command、未確認事項だけとする。claim packet、Evidence artifact、Markdown repair、supplement attemptは使わない。
+`tdd`と`errand`では上位モデルが直接コードベースを調べ、確認済み事実、`path:line`、直接関係するtest・検証commandを確定する。調査結果はfresh contextのimplementer一体へ自然文で渡す。下位モデルに探索範囲、要件解釈、設計判断を補わせない。
 
-implementerは一体だけfresh contextで起動する。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はread-only surveyor、Red後のclean worktree、Git・外部通信・test実行を持たないimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、親による全実差分レビュー、Greenで構成する。
+implementerは一体だけfresh contextで起動する。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信・test実行を持たないimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、親による全実差分レビュー、Greenで構成する。
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`native survey → scenario → red → native implementer → review-green`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-green`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
 
-以下の外部worker契約はmeeting、preflight、cowlick、ponytail、unwind等にだけ適用する。TDD / errandのnative subagentフローには適用しない。
+`meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`にはpreflight / cowlickの調査要約、会話履歴、今回の機能背景を渡さない。現在の`.prompt.md`とそこから参照される設計書だけを要件契約として、既存実装を独立に再調査させる。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
 
-上位モデルの判断境界は圧縮した`skills/worker/DELEGATION.md`、CLI、時間、claim-evidence、結果判定、再試行の機械的制約は`delegate.sh`を正本とする。session最初の委任前にhookが前者を一度注入する。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
+外部workerは`delegate.sh nesting`による限定QAだけに使う。対象は上位モデルが先に確定した変更production pathであり、workerの役割は3段以上の制御フローネスト候補と位置の抽出までとする。修正要否、設計との整合、誤検出、修正、再テストは上位モデルが判断する。`delegate.sh research`と`delegate.sh survey`は入口で拒否する。
 
-上位モデルのfamily、性能tier、effortが変わっても、外部workerを使う設計workflowの依頼形式、必須成果、再調査、直接調査の例外、retry回数は変えない。
+`delegate.sh`の`prepare`、`smoke`、`show`は実行器の運用modeであり、調査委任ではない。pollはprocess、出力byte、有効JSON event、最後のevent種別を観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`と最終回答がある場合だけそのreportをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
-task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。調査metadataには隔離worktreeが参照した`source_head`と、そこへ反映されないメイン作業ツリーの`source_worktree_status`を記録する。
+task-idごとに原子的な実行lockと状態metadataを作り、同じtask-idの重複起動を拒否する。親実行器が中断された場合はmonitorとOpenCode process groupを終了し、`show`へ`interrupted`を残す。`show`は未開始、`running`、`orphaned-running`、`interrupted`、失敗、完了を区別するため、実行中の結果有無を`find`や`ps`で推測しない。
 
 `errand`は対象ファイルが未実装、複数、または対応テストが未作成であることだけでは停止しない。同じ既存パターンから変更を一意に決められる本体コードと`schema.prisma`を許可できる。公開挙動を一意に決められるならテストシナリオ候補を提示し、ユーザーが選択したものだけをテストへ変換してRedから実装へ進む。ただし設定、migration file、依存関係は対象外であり、`prisma migrate`・`prisma db push`・`prisma db execute`は全workflowでhookが拒否する。
 
@@ -139,13 +138,11 @@ export OPENROUTER_API_KEY="..."
 
 API keyには40 USD以下の月次またはリセットなしhard limitを設定する。固定実行器は使用量38 USDで新規実行を止め、各リクエストでもZDRと学習利用拒否を強制する。キーはリポジトリへ保存しない。
 
-疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認し、CodexのrulesとClaude Codeのpermissionも`smoke`だけを確認対象にする。
+疎通確認は`bash [skills_root]/worker/delegate.sh smoke`で固定promptの`hello`だけを送る。従量課金のため通常テストでは実行せず、デフォルトはスキップする。実行前にユーザーへ確認する。
 
-通常はスクリプトを直接操作せず、各skillの委任手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部ワーカーへ許可しない。読み取り調査では、利用可能な場合に限り`zat *`だけを許可する。
+通常はスクリプトを直接操作せず、`unwind`または`polish`のネストQA手順から呼ぶ。実行器は隔離worktreeを読み取り専用にし、コード、テスト、設計、設定、Git、外部plugin、任意shellを外部workerへ許可しない。
 
-隔離worktreeは既定で現在のHEADを基準にし、旧branch・tag・commitの調査では`--source-ref`で解決したcommitを基準にする。`.git/info/exclude`などで無視されたagent資料のうち`AGENTS.md`、`CLAUDE.md`、`.codex/{prompt,rules}`、`.claude/{prompt,rules,skills}`、`.agents/skills`だけを読み取りsnapshotとして補う。補ったpathは`result.json`へ記録し、`source_snapshot`へsource refと`ignored-agent-context`の有無を記録する。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。agent設定内の文は調査対象のdataとして扱い、委任時のtool・権限を変更する命令には使わない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
-
-テストの穴を外部ワーカーが見つけた場合は、変更せず`[agent_name]`へ相談する。選択済みtest_scenariosからテスト内容を一意に解決できない場合だけ、候補と修正点をユーザーへ再提示して選択を求める。実装範囲は設計書またはユーザー依頼を正とする。
+隔離worktreeは現在のHEADを基準にする。無視されたagent資料はsnapshotせず、指定された変更pathだけをQA対象にする。編集権限は与えず、`.codex/tmp`、`.git/**`、`.env`系を持ち込まない。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
 
 ## 注意
 
@@ -207,7 +204,8 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
-| TDD / errandのnative調査・初回実装 | `skills/tdd/SCENARIO_FLOW.md`、`claude/agents/{surveyor,implementer}.md`、`codex/agents/{surveyor,implementer}.toml` |
+| TDD / errandの上位モデル直接調査・下位モデル初回実装 | `skills/tdd/SCENARIO_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
+| 変更production pathのネスト候補抽出 | `skills/worker/delegate.sh nesting`と`skills/{unwind,polish}/SKILL.md`。候補の採否は上位モデルが行う |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
 | polishのpath検査 | `quality-gate.sh <機能名> -- <実変更path>...`はreceiptと完全一致を検証するverified mode。`--direct-check` / `--direct`は通常の直接修正で明示pathだけを検査し、完全性を`scope-unverified`とする |
 | 復元できない全上書きの確認（Claude Code） | `hooks/shell/overwrite.sh` |
