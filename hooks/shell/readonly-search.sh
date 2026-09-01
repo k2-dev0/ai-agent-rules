@@ -95,32 +95,6 @@ invokes_inline_shell() {
   '
 }
 
-normalize_default_delegate_model() {
-  local default_assignment='DELEGATE_MODEL=openrouter/minimax/minimax-m3 '
-  local wrapped_prefix
-  local rewritten
-
-  # 既定値の明示は冗長であり、Codexがzsh -lcへ包むと固定runnerのallowから外れる。
-  # 既定値だけを外して、レビュー済みの裸のdelegate.sh呼び出しへ戻す。別モデルは触らない。
-  case "$1" in
-    "$default_assignment"bash\ .agents/skills/worker/delegate.sh*|"$default_assignment"bash\ .claude/skills/worker/delegate.sh*)
-      hook_rewrite_command "${1#"$default_assignment"}"
-      ;;
-  esac
-
-  for wrapped_prefix in \
-    '/bin/zsh -lc "DELEGATE_MODEL=openrouter/minimax/minimax-m3 ' \
-    'zsh -lc "DELEGATE_MODEL=openrouter/minimax/minimax-m3 '; do
-    case "$1" in
-      "$wrapped_prefix"bash\ .agents/skills/worker/delegate.sh*\"|"$wrapped_prefix"bash\ .claude/skills/worker/delegate.sh*\")
-        rewritten=${1#"$wrapped_prefix"}
-        rewritten=${rewritten%\"}
-        hook_rewrite_command "$rewritten"
-        ;;
-    esac
-  done
-}
-
 dangerous_read_reason() {
   local command_without_quote_splits
 
@@ -259,8 +233,6 @@ if DANGEROUS_REASON=$(dangerous_read_reason "$CMD"); then
   [ "$EVENT" = "PermissionRequest" ] && exit 0
   hook_deny "$DANGEROUS_REASON"
 fi
-
-[ "$EVENT" = "PermissionRequest" ] || normalize_default_delegate_model "$CMD"
 
 if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
   [ "$EVENT" = "PermissionRequest" ] && exit 0
