@@ -49,7 +49,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["ps", "-p"],
     decision = "allow",
-    justification = "外部ワーカー委任processの完了状態を読み取り専用で確認します。",
+    justification = "長時間実行processの完了状態を読み取り専用で確認します。",
 )
 prefix_rule(
     pattern = ["bash", ".agents/skills/e2e/apply-e2e-plan.sh"],
