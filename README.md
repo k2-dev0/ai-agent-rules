@@ -117,7 +117,7 @@ $bootstrap codex
 
 implementerは初回実装と各再実装で一体だけをfresh context・effort `max`で起動し、並列に動かさない。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信を持たず上位モデル指定のtestだけ実行できるimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、上位モデルによる全実差分レビューと独立したGreenで構成する。
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。大小判定は`skills/tdd/REVIEW_FLOW.md`を正本とし、「1ファイル・差分10行以下・修正が一意・ロジックや契約を変えない」の全条件を満す指摘だけを上位モデルが直接修正する。それ以外は下位モデルが再実装し、上位モデルが再レビュー・テスト・最終レビューする。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。大小判定は`skills/tdd/REVIEW_FLOW.md`を正本とし、「1ファイル・差分10行以下・修正が一意・ロジックや契約を変えない」の全条件を満たす指摘だけを上位モデルが直接修正する。それ以外は下位モデルが再実装し、上位モデルが再レビュー・テスト・最終レビューする。
 
 `meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`にはpreflight / cowlickの調査要約、会話履歴、今回の機能背景を渡さない。現在の`.prompt.md`とそこから参照される設計書だけを要件契約として、既存実装を独立に再調査させる。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
 
