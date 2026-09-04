@@ -143,12 +143,15 @@ check_bash_rewrite "readonly-search: quote済みrgのglob引数を保持" \
   "'rg' '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'"
 check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow readonly-search.sh \
   "rg 'foo|bar' src" \
+  "rg --files src -g *.ts" \
   "find src -maxdepth 2 -type f -print" \
-  "cat src/foo.ts" \
+  "find src -name *.ts -print" \
+  "cat src/*.ts" \
   "nl -ba src/foo.ts" \
   "sort src/files.txt"
 check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty readonly-search.sh \
   "sed -n '1,240p' src/foo.ts" \
+  "rm src/*.ts" \
   'echo "$VALUE" 2>&1'
 check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny readonly-search.sh \
   "rg --files src | sort" \
