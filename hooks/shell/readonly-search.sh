@@ -5,6 +5,7 @@
 #      検証済みの読み取りコマンドに限って許可し、不要な承認と不要な診断出力を避ける。
 #      未quoteのglobも読み取りコマンドでだけ許可する。書き込みcommandはexecpolicyの
 #      opaque shell promptに残し、globで破壊的commandを迂回させない。
+#      awsはdaresuma-readonly profileを明示した単一commandだけ、service/actionを限定せず許可する。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
@@ -138,6 +139,55 @@ is_safe_readonly_command() {
   esac
 }
 
+uses_daresuma_readonly_aws_profile() {
+  printf '%s\n' "$1" | awk '
+    function finish_token() {
+      if (token != "") {
+        count++
+        tokens[count] = token
+        token = ""
+      }
+    }
+    BEGIN { state = "plain"; sq = sprintf("%c", 39) }
+    NR != 1 { invalid = 1 }
+    {
+      for (i = 1; i <= length($0); i++) {
+        ch = substr($0, i, 1)
+        if (state == "single") {
+          if (ch == sq) state = "plain"
+          else token = token ch
+          continue
+        }
+        if (state == "double") {
+          if (ch == "\"") state = "plain"
+          else token = token ch
+          continue
+        }
+        if (ch == sq) { state = "single"; continue }
+        if (ch == "\"") { state = "double"; continue }
+        if (ch ~ /[[:space:]]/) { finish_token(); continue }
+        token = token ch
+      }
+      finish_token()
+    }
+    END {
+      if (invalid || state != "plain" || tokens[1] != "aws") exit 1
+      found = 0
+      for (i = 2; i <= count; i++) {
+        if (tokens[i] == "--profile") {
+          if (i == count || tokens[i + 1] != "daresuma-readonly") exit 1
+          found = 1
+          i++
+        } else if (tokens[i] ~ /^--profile=/) {
+          if (tokens[i] != "--profile=daresuma-readonly") exit 1
+          found = 1
+        }
+      }
+      exit(found ? 0 : 1)
+    }
+  '
+}
+
 normalize_readonly_executable() {
   local readonly_command=$1
   local executable
@@ -242,6 +292,10 @@ if has_compound_shell_syntax "$CMD" || invokes_inline_shell "$CMD"; then
 fi
 
 NORMALIZED_CMD=$(normalize_readonly_executable "$CMD") || exit 0
+
+if has_safe_shell_syntax "$NORMALIZED_CMD" && uses_daresuma_readonly_aws_profile "$NORMALIZED_CMD"; then
+  complete_safe_readonly_command "$NORMALIZED_CMD"
+fi
 
 normalize_safe_dev_null "$NORMALIZED_CMD"
 
