@@ -1,13 +1,13 @@
 ---
 name: errand
-description: "ユーザーが$errandを明示し、設計書を作らず、既存パターンから一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、上位モデルの調査とテストシナリオ選択、Red、下位implementerの初回実装、上位モデルのGreenまで完了したいときだけ使う。新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
+description: "ユーザーが$errandを明示し、設計書を作らず、既存パターンから一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、上位モデルの調査とテストシナリオ選択、Red、下位implementerの初回実装・大きい修正の再実装、上位モデルの最終レビューまで完了したいときだけ使う。新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
 ---
 
 ## 目的
 
-設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・完了条件を一意に確定できる実装を、`direct survey → scenario → red → lower-model implementer → review-green`で完了する。新しいテストが必要でも停止せず、[agent_name]が候補を提示し、ユーザーが選択したものだけをテストへ変換する。
+設計書を作る価値がないほど小さく、依頼と最寄りの既存パターンから変更内容・完了条件を一意に確定できる実装を、`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`で完了する。新しいテストが必要でも停止せず、[agent_name]が候補を提示し、ユーザーが選択したものだけをテストへ変換する。
 
 開始時に[シナリオ駆動の共通実装フロー](../tdd/SCENARIO_FLOW.md)を全文読み、上位モデルの調査とテストシナリオ選択、Red、下位implementerの初回実装、上位モデルのGreenの正本として従う。
 
@@ -15,9 +15,10 @@ disable-model-invocation: true
 
 - 初回実装とは、このerrandで依頼された挙動について最初に加えるproduction code変更を指す
 - 初回実装は専用`implementer` subagentが共有worktreeへ直接作る。上位モデルが先にstub、雛形、部分実装を作らない
-- implementerの初回実装後は、上位モデルがユーザー依頼の全要件、test_scenarios、テスト、型検査、lintに基づいて直接修正する。修正をimplementerへ再委任しない
+- implementerの初回実装後は、上位モデルがユーザー依頼の全要件、test_scenarios、テスト、型検査、lintに基づいて全差分をレビューする。小さい問題だけ直接修正し、大きい問題は下位モデルへ再実装を委任する
+- 初回実装と再実装の下位モデルはeffort `max`とし、上位モデルが指定したtest commandを実行する。上位モデルはその結果で代用せず独立に検証する
 - implementerが未変更のまま中断・無応答なら、変更前worktreeがcleanな場合だけ一度再起動する。再実行も失敗した場合だけ上位モデルが初回実装を引き継ぐ
-- 修正する／しない、部分採用、全体拒否の判断は上位モデルが行う
+- 修正する／しない、問題の大小、部分採用、全体拒否、最終完了の判断は上位モデルが行う
 
 ## 起動境界
 
@@ -63,4 +64,4 @@ disable-model-invocation: true
 
 ## 完了報告
 
-依頼、選択済みtest_scenarios、Red、Green、[agent_name]が調査した範囲、implementerの結果、実差分の採否、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。
+依頼、選択済みtest_scenarios、Red、Green、[agent_name]が調査した範囲、implementerの結果、実差分の採否、大小判定と修正主体、最終レビュー、実行した検証と`scope-related` / `unrelated` / `uncertain` / `not run`の分類、コミットを簡潔に報告して停止する。対象外の失敗だけでタスクを未完了と決めない。
