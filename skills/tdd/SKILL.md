@@ -1,13 +1,13 @@
 ---
 name: tdd
-description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚を上位モデルが調査・テストし、下位implementerに初回実装だけを委任し、上位モデルがレビュー・修正・polishを完了するときに使う。
+description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚を上位モデルが調査・テストし、下位implementerに初回実装と大きい修正の再実装を委任し、上位モデルがレビュー・polishを完了するときに使う。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 ---
 
 ## 目的
 
-`.prompt.md`の先頭未完了設計書1枚を`direct survey → scenario → red → lower-model implementer → review-green → polish`で完了する。調査、シナリオ、テスト、Red、初回実装、Greenは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、上位モデルの調査、polish、index更新だけを追加する。
+`.prompt.md`の先頭未完了設計書1枚を`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review → polish`で完了する。調査、シナリオ、テスト、Red、初回実装、再実装、Green、最終レビューは[シナリオ駆動の共通実装フロー](SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、上位モデルの調査、polish、index更新だけを追加する。
 
 ## 対象の選択
 
@@ -24,8 +24,10 @@ disable-model-invocation: true
 | 設計資産の変更 | meetingで作成・更新したprompt正本だけ可 | 禁止 |
 | 本体コード、schema、既存test、同型実装の調査 | 可 | 要求に直接必要な範囲で可 |
 | production codeと`schema.prisma`の初回実装 | implementerが利用不能またはcleanな再実行も失敗した場合だけ可 | 可 |
-| 初回実装後の本体コード修正 | 可 | 禁止 |
-| テスト実行・レビュー・Git | 可 | 禁止 |
+| 初回実装後の小さい本体コード修正 | 可 | 禁止 |
+| 初回実装後の大きい本体コード再実装 | 2回連続失敗時だけ可 | 可 |
+| テスト実行 | 可 | 上位モデルが指定したcommandだけ可 |
+| レビュー・最終判断・Git | 可 | 禁止 |
 
 テスト資産にはtest/spec、fixture、factory、mock、stub、fake、snapshot、golden file、テスト設定、CI上のテスト実行設定を含める。implementerへはこれらと、一般設定、migration、依存関係、lockfile、agent設定、設計資産、Git管理ファイルを変更させない。
 
@@ -70,7 +72,7 @@ bash [skills_root]/polish/capture-scope.sh <機能名> --auto
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`を実変更pathだけへ適用し、最後にbaselineからの実変更pathと入力の完全一致を検査する。formatterの自動修正は必要範囲だけ再確認し、上位モデルがコードを判断して修正した場合は全品質ゲートを先頭から再実行する。
+この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。`polish`はformatter・lint・`unwind`を実変更pathだけへ適用し、最後にbaselineからの実変更pathと入力の完全一致を検査する。formatterとlinterの自動修正は必要範囲だけ再確認し、コードの判断を伴う修正は共通フローの大小判定へ戻す。修正後は全品質ゲートを先頭から再実行する。
 
 実装差分、検証結果、`unrelated`・`uncertain`・`not run`を先にユーザーへ報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ次を単独実行する。
 
@@ -90,7 +92,7 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 - 対象設計書と選択済みtest_scenarios
 - RedとGreen、またはtest除外
 - [agent_name]が調査した範囲と確認した事実
-- implementerの結果、実差分の採否、上位修正
+- implementerの結果、実差分の採否、大小判定、修正主体、最終レビュー
 - polish結果とscope帰属
 - リポジトリ規約に従ったコミット
 - indexの残件数。完了マークはユーザーが明示した場合だけ更新
