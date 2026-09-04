@@ -171,6 +171,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 既存ファイルを全面Writeする | 🙋 Claude Codeで確認 |
 | workspace sandbox内で空ディレクトリを作る（`mkdir`） | ✅ 自動 |
 | TDDで承認済みの対象testを`./base/scripts/run-unit.sh`で実行・再実行する | ✅ 自動 |
+| 単一のAWS CLI commandで`--profile daresuma-readonly`または`--profile=daresuma-readonly`を明示する | ✅ service / actionを限定せず自動 |
 | `package.json` / CI / migration file / Docker / Terraform を書き換える | 🙋 確認 |
 | `schema.prisma`を書き換え、`prisma format` / `validate` / `generate`を実行する | ✅ 自動 |
 | shellでファイル作成・上書き・metadata変更する（`cp` `touch` `chmod` `sed -i` 等） | 🙋 確認 |
@@ -204,7 +205,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | Codexのpermission profile / network / MCP承認 / hook有効化 | `codex/config.toml` |
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
-| 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
+| 単一読み取りcommand、`daresuma-readonly`を明示したAWS CLI、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
 | TDD / errandの上位モデル直接調査・レビューと下位モデル初回実装・再実装 | `skills/tdd/SCENARIO_FLOW.md`、`skills/tdd/REVIEW_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
 | 変更production pathのネスト候補抽出 | `skills/worker/delegate.sh nesting`と`skills/{unwind,polish}/SKILL.md`。候補の採否は上位モデルが行う |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
