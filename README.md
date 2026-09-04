@@ -108,15 +108,16 @@ $bootstrap codex
 |---|---|---|
 | コードベース探索・根拠収集 | Codex / Claude Code | 上位モデルが直接行う。下位モデルへresearch / surveyを委任しない |
 | 設計判断・要件判断・根拠の採否 | Codex / Claude Code | 上位モデルが行う |
-| 承認済み範囲の初回実装 | native implementer subagent | 要求に必要なproduction codeと`schema.prisma`を変更する |
+| 承認済み範囲の初回実装 | 下位モデルのnative implementer | 要求に必要なproduction codeと`schema.prisma`を変更し、指定済みtestを実行する |
+| レビューで見つけた大きい問題の再実装 | 下位モデルのnative implementer | 上位モデルの確定済み指摘だけを修正し、指定済みtestを実行する |
 | 3段以上の制御フローネスト候補の抽出 | 外部worker | 上位モデルが確認済みの変更production pathだけを読み取る。変更要否は判断しない |
-| 差分・QA候補の採否、レビュー、修正、テスト、Git | Codex / Claude Code | 上位モデルが行う。初回実装後はimplementerへ戻さない |
+| 差分・QA候補の採否、大小判定、小修正、テスト、最終レビュー、Git | Codex / Claude Code | 上位モデルが行う。大きい問題は修正briefを下位モデルへ戻す |
 
 `tdd`と`errand`では上位モデルが直接コードベースを調べ、確認済み事実、`path:line`、直接関係するtest・検証commandを確定する。調査結果はfresh contextのimplementer一体へ自然文で渡す。下位モデルに探索範囲、要件解釈、設計判断を補わせない。
 
-implementerは一体だけfresh contextで起動する。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信・test実行を持たないimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、親による全実差分レビュー、Greenで構成する。
+implementerは初回実装と各再実装で一体だけをfresh context・effort `max`で起動し、並列に動かさない。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信を持たず上位モデル指定のtestだけ実行できるimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、上位モデルによる全実差分レビューと独立したGreenで構成する。
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-green`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。初回実装後のレビューや修正は上位モデルが行う。
+`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。大小判定は`skills/tdd/REVIEW_FLOW.md`を正本とし、「1ファイル・差分10行以下・修正が一意・ロジックや契約を変えない」の全条件を満す指摘だけを上位モデルが直接修正する。それ以外は下位モデルが再実装し、上位モデルが再レビュー・テスト・最終レビューする。
 
 `meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`にはpreflight / cowlickの調査要約、会話履歴、今回の機能背景を渡さない。現在の`.prompt.md`とそこから参照される設計書だけを要件契約として、既存実装を独立に再調査させる。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
 
@@ -204,7 +205,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
-| TDD / errandの上位モデル直接調査・下位モデル初回実装 | `skills/tdd/SCENARIO_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
+| TDD / errandの上位モデル直接調査・レビューと下位モデル初回実装・再実装 | `skills/tdd/SCENARIO_FLOW.md`、`skills/tdd/REVIEW_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
 | 変更production pathのネスト候補抽出 | `skills/worker/delegate.sh nesting`と`skills/{unwind,polish}/SKILL.md`。候補の採否は上位モデルが行う |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
 | polishのpath検査 | `quality-gate.sh <機能名> -- <実変更path>...`はreceiptと完全一致を検証するverified mode。`--direct-check` / `--direct`は通常の直接修正で明示pathだけを検査し、完全性を`scope-unverified`とする |
