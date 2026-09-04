@@ -17,6 +17,7 @@ case "$1" in
     grep -Fxq 'model_reasoning_effort = "max"' "$AGENT_FILE" || die "Codex implementer effortが不正"
     grep -Fxq 'sandbox_mode = "workspace-write"' "$AGENT_FILE" || die "Codex implementer sandboxが不正"
     grep -Fq '要求に直接必要なproduction code' "$AGENT_FILE" || die "Codex implementerの探索契約が無い"
+    grep -Fq 'briefに列挙したtest command' "$AGENT_FILE" || die "Codex implementerの指定test実行契約が無い"
     ! grep -Fq 'implementer-read.sh' "$AGENT_FILE" || die "Codex implementerに旧quoted reader契約が残存"
     ;;
   claude)
@@ -25,8 +26,9 @@ case "$1" in
     grep -Fxq 'name: implementer' "$AGENT_FILE" || die "Claude implementer名が不正"
     grep -Fxq 'model: claude-sonnet-5' "$AGENT_FILE" || die "Claude implementer modelが不正"
     grep -Fxq 'effort: max' "$AGENT_FILE" || die "Claude implementer effortが不正"
-    grep -Fxq 'tools: Read, Grep, Glob, Edit, Write' "$AGENT_FILE" || die "Claude implementer toolsが不正"
+    grep -Fxq 'tools: Read, Grep, Glob, Edit, Write, Bash' "$AGENT_FILE" || die "Claude implementer toolsが不正"
     grep -Fq '要求に直接必要なproduction code' "$AGENT_FILE" || die "Claude implementerの探索契約が無い"
+    grep -Fq 'briefに列挙したtest command' "$AGENT_FILE" || die "Claude implementerの指定test実行契約が無い"
     ;;
   *) die "agentはclaudeまたはcodexに限定する" ;;
 esac
