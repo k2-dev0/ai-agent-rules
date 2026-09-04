@@ -1,13 +1,15 @@
 ---
 name: polish
-description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、下位モデルが抽出した三段階以上の制御フローネスト候補だけをunwindで上位モデルが見直す。
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Skill(unwind)
+description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、コード修正は上位モデルの大小判定と下位モデルの再実装へ戻す。
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Agent, Skill(unwind)
 disable-model-invocation: true
 ---
 
 ## 目的
 
 対象として確定したコードだけを整形・静的検査・buildし、診断をscopeへ帰属させてからpath検査と`unwind`を通す。実装前baselineがある変更はpath完全性まで検証し、気軽な直接修正は同じ品質処理を維持したまま完全性だけ未検証と明示する。
+
+診断または`unwind`がコードの判断を伴う修正を要求した場合は、[上位モデルのレビューと下位モデルの再実装](../tdd/REVIEW_FLOW.md)を全文読み、大小判定、修正主体、再検証、最終レビューの正本とする。
 
 ## モード
 
@@ -67,7 +69,7 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 - 無関係な未変更file、今回作成・変更していないignored / untracked test、checkout前のbranchの残留testが消えた実装を参照する失敗は`unrelated`
 - 因果関係を確定できない失敗は`uncertain`
 
-`scope-related`だけを修正と再検証の対象にする。承認範囲内の修正を尽くしても残る場合は`scope fail`として返す。`unrelated`はファイルを修正・削除せず、command、diagnostic、対象外と判断した根拠を返して後続へ進む。`uncertain`は推測で成功または失敗に倒さず返す。どの分類もユーザーの完了マーク判断を代行しない。
+`scope-related`だけを修正と再検証の対象にする。自動修正ではないコード修正は`REVIEW_FLOW.md`で大小を判定し、小さい問題だけ上位モデルが直接修正する。大きい問題は下位モデルをeffort `max`で起動し、診断、期待する不変条件、修正方針、変更禁止範囲、必要なtest commandを渡す。承認範囲内の修正を尽くしても残る場合は`scope fail`として返す。`unrelated`はファイルを修正・削除せず、command、diagnostic、対象外と判断した根拠を返して後続へ進む。`uncertain`は推測で成功または失敗に倒さず返す。どの分類もユーザーの完了マーク判断を代行しない。
 
 ## 制御フローネストの品質ゲート
 
@@ -105,9 +107,9 @@ bash [skills_root]/polish/quality-gate.sh <機能名> --direct -- <明示path>..
 |---|---|
 | formatterがformat差分を自動修正 | 再起動せず後続のlintへ進む |
 | linterが自動修正 | formatterとlintを再確認して後続へ進む |
-| `scope-related`な型error、構文error、非自動修正のlint error、Prisma整合性error、build error | 上位モデルが修正し、必要な検証とcommit後にpolishを先頭から再実行 |
+| `scope-related`な型error、構文error、非自動修正のlint error、Prisma整合性error、build error | `REVIEW_FLOW.md`で大小判定し、対応する主体が修正。必要な検証とcommit後にpolishを先頭から再実行 |
 | `unrelated`または`uncertain`な失敗 | 対象外fileを変更せず分類根拠を返し、後続のscope path検査へ進む |
-| `unwind`による修正 | 上位モデルが修正し、必要なtestとcommit後にpolishを先頭から再実行 |
+| `unwind`による修正 | `REVIEW_FLOW.md`で大小判定し、対応する主体が修正。必要なtestとcommit後にpolishを先頭から再実行 |
 | tool未導入、設定競合、実行不能 | 再実行で隠さず`not run`と理由を返し、後続のscope path検査へ進む |
 
-決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。上位モデルがコードを判断して修正した場合は全品質ゲートを再実行する。最終報告ではモードと対象pathを示し、実行済みcommandを`scope pass`、`scope fail`、`unrelated failure`、`uncertain`、`not run`へ分類する。directではこれと別にpath完全性を`scope-unverified`と明記し、ファイル単位の起動へ分割しない。
+決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。コードの判断を伴う修正は、上位モデルと下位モデルのどちらが修正しても全品質ゲートを再実行し、上位モデルが最終レビューする。最終報告ではモードと対象pathを示し、実行済みcommandを`scope pass`、`scope fail`、`unrelated failure`、`uncertain`、`not run`へ分類する。directではこれと別にpath完全性を`scope-unverified`と明記し、ファイル単位の起動へ分割しない。
