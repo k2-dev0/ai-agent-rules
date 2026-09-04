@@ -149,9 +149,17 @@ check_bash_group "readonly-search: 安全な単一コマンドを明示allow" al
   "cat src/*.ts" \
   "nl -ba src/foo.ts" \
   "sort src/files.txt"
+check_bash_group "readonly-search: daresuma-readonlyのAWS単一commandを全action許可" allow readonly-search.sh \
+  "aws sts get-caller-identity --profile daresuma-readonly --region ap-northeast-1 --output json" \
+  "aws lambda update-function-code --function-name heartbeat --profile daresuma-readonly" \
+  "aws s3 cp s3://bucket/key ./local --profile=daresuma-readonly" \
+  "'aws' 'logs' 'filter-log-events' '--profile' 'daresuma-readonly'"
 check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty readonly-search.sh \
   "sed -n '1,240p' src/foo.ts" \
   "rm src/*.ts" \
+  "aws sts get-caller-identity" \
+  "aws sts get-caller-identity --profile default" \
+  "aws sts get-caller-identity --profile daresuma-readonly --profile default" \
   'echo "$VALUE" 2>&1'
 check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny readonly-search.sh \
   "rg --files src | sort" \
@@ -166,6 +174,7 @@ check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny rea
   "env bash -c 'pwd; ls'" \
   "/usr/bin/env zsh -lc 'pwd; ls'" \
   "bash --noprofile -c 'pwd; ls'" \
+  "aws sts get-caller-identity --profile daresuma-readonly | jq ." \
   "sleep 1 & echo done" \
   'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
 check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny readonly-search.sh \
