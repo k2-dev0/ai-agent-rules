@@ -3,6 +3,8 @@
 # Why: pipelineごとの安全例外は組み合わせの数だけ増える。loop・条件分岐・pipeline・
 #      subshellは一律拒否し、危険optionもコマンド単体で拒否する。/dev/nullへの出力だけは
 #      検証済みの読み取りコマンドに限って許可し、不要な承認と不要な診断出力を避ける。
+#      未quoteのglobも読み取りコマンドでだけ許可する。書き込みcommandはexecpolicyの
+#      opaque shell promptに残し、globで破壊的commandを迂回させない。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 [ "$(hook_tool_name)" = "Bash" ] || exit 0
@@ -38,7 +40,7 @@ has_safe_shell_syntax() {
         }
         if (ch == sq) { state = "single"; continue }
         if (ch == "\"") { state = "double"; continue }
-        if (ch == "\\" || index(";&|<>`$(){}#*?[]", ch) > 0) valid = 0
+        if (ch == "\\" || index(";&|<>`$(){}#", ch) > 0) valid = 0
       }
     }
     END {
