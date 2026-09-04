@@ -1,6 +1,8 @@
 # シナリオ駆動の共通実装フロー
 
-`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書を上位モデルの調査・シナリオ・テスト、下位implementerの初回実装、上位モデルのGreenの正本とする。
+`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書を上位モデルの調査・シナリオ・テスト、下位implementerの初回実装と再実装、上位モデルのレビューの正本とする。
+
+初回実装後の修正主体、問題の大小判定、再実装、最終レビューは[上位モデルのレビューと下位モデルの再実装](REVIEW_FLOW.md)を全文読み、正本とする。
 
 ## 呼び出し元が渡すもの
 
@@ -82,12 +84,13 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 - [agent_name]が確認した事実と`path:line`
 - 選択済みtest_scenarios
 - Redのcommand、終了status、期待した理由での失敗要約
+- 実装後に下位モデルが実行する確認済みtest command
 - 想定変更先と、追加production fileを変更してよい条件
 - 変更禁止カテゴリ
 
 test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭めない。
 
-`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動する。child agent IDが空、wait先が空、または専用agent定義を使えない場合はwriterを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。
+`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`の`effort: max`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動する。child agent IDが空、wait先が空、または専用agent定義を使えない場合はwriterを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。下位モデルは実装後に指定済みtest commandを実行し、終了statusとdiagnosticを返す。
 
 ## 5. 相談・無変更・中断を処理する
 
@@ -97,7 +100,7 @@ test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭
 - 非ブロッキングな改善案: 記録して続行する
 - 新しい設計判断が必要: 呼び出し元の設計・要件確認へ戻す
 
-`Outcome: implemented`でも実差分が0なら実装失敗として扱う。説明・分類だけを返した場合も成功に数えない。implementerが一部でも変更した後は再委任しない。subagentが中断・無応答で、cleanな状態からの再実行も一度失敗した場合だけ親が初回実装を引き継ぐ。active scope、owner session、lease、handoff、recoverは使わない。
+`Outcome: implemented`でも実差分が0なら実装失敗として扱う。説明・分類だけを返した場合も成功に数えない。implementerが一部でも変更した後は、初回実装として再起動せずStep 6のレビューへ進む。subagentが中断・無応答で、cleanな状態からの初回実装再実行も一度失敗した場合だけ上位モデルが初回実装を引き継ぐ。レビュー指摘に対する再実装はこの再起動制限でなく`REVIEW_FLOW.md`に従う。active scope、owner session、lease、handoff、recoverは使わない。
 
 ## 6. 実装差分を検証する
 
@@ -116,17 +119,17 @@ subagentの自己申告や想定変更先ではなく、共有worktreeの実際�
 - `filter().map()`で意図が明確になる処理を短さだけで`reduce()`へ畳み込んでいない
 - 多少冗長でも局所的に理解できる名前と構造を選んでいる
 
-採否は上位モデルのレビュー責務とする。安全に修正できる問題は差分を土台に[agent_name]が直接直す。通常の修正をimplementerへ再委任しない。
+採否は上位モデルのレビュー責務とする。`REVIEW_FLOW.md`に従い、すべての指摘を大小判定する。小さい問題だけを上位モデルが直接修正し、大きい問題は下位モデルへ再実装briefを渡す。再実装の起動はStep 4と同じ専用agent、fresh context、1体だけ、foreground、effort `max`を必須とする。再実装後は上位モデルが共有worktreeの実差分を再レビューする。
 
 Green、formatter、lint、polish、本体コードのcommitより先に、次の3項目だけを簡潔に報告する。
 
 - 採用: 実装者が変更した内容と採用理由
 - 問題: 問題箇所、影響、採用・修正・拒否の判断
-- 上位修正: 上位モデルが変更した内容と理由
+- 修正主体: 大小判定、上位モデルの小修正または下位モデルの再実装、その理由
 
-問題や上位修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。追跡対象の本体変更は、この報告後にリポジトリのGit規約どおりコミットする。
+問題や修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。追跡対象の本体変更は、この報告後にリポジトリのGit規約どおりコミットする。
 
-## 7. Green・レビュー・修正を完了する
+## 7. Green・最終レビュー・修正を完了する
 
 次を上から実行し、無関係なpackageのtestやproject全体のtestを追加しない。
 
@@ -138,7 +141,9 @@ Green、formatter、lint、polish、本体コードのcommitより先に、次�
 | `schema.prisma`を変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の完了条件に追加commandがある | そのcommand |
 
-[agent_name]が確認した検証commandは`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。利用可能なcommandがなければ発明せず、未実行として報告する。初回実装後は[agent_name]が差分をレビューし、全要件へ合わせる本体コード修正を直接行う。
+[agent_name]が確認した検証commandは`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。利用可能なcommandがなければ発明せず、未実行として報告する。下位モデルのtest結果で代用せず、上位モデルがこの実行表を独立に確認する。
+
+検証後に上位モデルが全差分を最終レビューする。未解決の指摘、検証が見つけた新規問題、最終レビューの新規指摘はすべて`REVIEW_FLOW.md`で大小を再判定する。修正後は影響する検証と最終レビューを再実行する。
 
 ## 8. 失敗をscopeに帰属させる
 
