@@ -142,6 +142,10 @@ validate_nesting_path() {
   local path=$1
 
   validate_repo_path "$path"
+  case "/$path/" in
+    */.git/*|*/.codex/*|*/.claude/*|*/.agents/*|*/node_modules/*|*/vendor/*|*/generated/*)
+      fail "configuration and generated paths cannot be delegated: $path" ;;
+  esac
   case "$path" in
     *.test.*|*.spec.*|*_test.*|*_spec.*|test_*.*|spec_*.*|test/*|tests/*|__tests__/*|*/test/*|*/tests/*|*/__tests__/*|*.snap|*fixture*|*mock*|*stub*|*fake*)
       fail "test assets cannot be inspected for nesting: $path" ;;
@@ -291,7 +295,7 @@ check_budget() {
   command -v curl >/dev/null 2>&1 || fail "curl is required"
   [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is required"
   printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nfail\n' "$OPENROUTER_API_KEY" > "$curl_config" || fail "cannot prepare budget request"
-  key_info=$(curl --config "$curl_config" "$OPENROUTER_KEY_ENDPOINT") || fail "cannot read OpenRouter key usage"
+  key_info=$(curl --connect-timeout 10 --max-time 30 --config "$curl_config" "$OPENROUTER_KEY_ENDPOINT") || fail "cannot read OpenRouter key usage"
   key_limit=$(printf '%s' "$key_info" | jq -er '.data.limit') || fail "OpenRouter API key must have a hard limit"
   key_reset=$(printf '%s' "$key_info" | jq -r '.data.limit_reset // "none"') || fail "cannot read OpenRouter key reset period"
   case "$key_reset" in
@@ -372,12 +376,13 @@ create_opencode_config() {
     }' > "$TEMP_ROOT/opencode.json" || fail "cannot create OpenCode config"
 }
 
-has_valid_event() {
-  jq -Rse '
-    split("\n")
-    | map(select(length > 0) | (try fromjson catch null))
-    | any(type == "object")
-  ' "$1" >/dev/null 2>&1
+count_valid_events() {
+  jq -Rn '
+    reduce inputs as $line (0;
+      (try ($line | fromjson) catch null) as $event
+      | if ($event | type) == "object" and ($event.type | type) == "string"
+        then . + 1 else . end)
+  ' < "$1" 2>/dev/null
 }
 
 monitor_opencode() {
@@ -386,6 +391,8 @@ monitor_opencode() {
   local started_at=$3
   local last_activity=$started_at
   local last_bytes=0
+  local last_events=0
+  local events
   local now
   local bytes
 
@@ -394,8 +401,12 @@ monitor_opencode() {
     now=$(date +%s)
     bytes=$(wc -c < "$output_path" 2>/dev/null | tr -d ' ')
     case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
-    if [ "$bytes" -gt "$last_bytes" ] && has_valid_event "$output_path"; then
-      last_activity=$now
+    if [ "$bytes" -gt "$last_bytes" ]; then
+      events=$(count_valid_events "$output_path") || events=$last_events
+      if [ "$events" -gt "$last_events" ]; then
+        last_activity=$now
+        last_events=$events
+      fi
       last_bytes=$bytes
     fi
     if [ "$((now - started_at))" -ge "$HARD_TIMEOUT_SECONDS" ]; then
