@@ -51,7 +51,7 @@ packageごとに上から実行する。既存scriptを第一選択にし、scri
 | 上記なし、Biome設定あり | `biome format --write <paths>` | 同上 |
 | `lint` scriptがpathを受ける | `yarn lint -- <paths>` | 対象pathだけ |
 | 上記なし、ESLint設定あり | `eslint --fix <paths>` | 同上 |
-| 上記なし、Biome設定あり | `biome lint --apply <paths>` | 同上 |
+| 上記なし、Biome設定あり | 導入済みBiomeのhelpで確認した修正optionで`biome lint <paths>` | 同上 |
 | TypeScript / JavaScriptを含み`typecheck` scriptあり | packageで`yarn typecheck` | package単位で1回 |
 | 上記scriptなし、`tsconfig.json`あり | `tsc -p <tsconfig> --noEmit` | package単位で1回 |
 | `schema.prisma`を含む | Prismaの`format`、`validate`、`generate` | schemaが属するpackage |
@@ -73,7 +73,7 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 
 ## 制御フローネストの品質ゲート
 
-実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、verifiedでは実変更pathだけを渡して`unwind`を必ず呼ぶ。開始scopeの未変更pathを混ぜない。directでも明示pathだけを渡して`unwind`を必ず呼び、pathを増減しない。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
+実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、確定済みの対象pathから本体コードだけを選び、`unwind`を必ず呼ぶ。test、設定、文書、Prisma schema、生成物、vendor、依存物はネスト検査から除外し、除外理由を返す。本体コードが無ければ`unwind`と外部workerを省略する。開始scopeの未変更pathを混ぜず、対象を新たに探索しない。この選別はネスト検査だけに適用し、最後のscope path検査には元の全件を渡す。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
 
 `unwind` がコードを変更した場合は、対象テスト・型検査・lint・親スキルが実行した同じpackageのbuildを再実行し、通常の変更と同じ単位でコミットした後、同じ対象pathを下位モデルの`nesting` QAへ再度渡す。縮退できない候補がある場合も、workerのtask-id・結果path・理由と却下案を最終報告用に返してから後続へ進む。
 
