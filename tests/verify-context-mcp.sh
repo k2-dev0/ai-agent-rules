@@ -59,11 +59,15 @@ sed "s|$PLACEHOLDER|$FIXTURE_ROOT|g" "$CLAUDE_MCP" > "$TMP/.mcp.json"
 sed "s|$PLACEHOLDER|$FIXTURE_ROOT|g" "$CODEX_MCP" > "$TMP/config.toml"
 mkdir -p "$TMP/codex-home"
 cp "$TMP/config.toml" "$TMP/codex-home/config.toml"
-if ! grep -Rq "$PLACEHOLDER" "$TMP" && jq -e . "$TMP/.mcp.json" >/dev/null 2>&1 &&
-   CODEX_HOME="$TMP/codex-home" codex mcp list >/dev/null 2>&1; then
-  ok "setup-agent path injection keeps JSON/TOML valid"
+if ! grep -Rq "$PLACEHOLDER" "$TMP" && jq -e . "$TMP/.mcp.json" >/dev/null 2>&1; then
+  ok "setup-agent path injection keeps JSON valid and resolves placeholders"
 else
   ng "setup-agent path injection"
+fi
+if command -v codex >/dev/null 2>&1; then
+  CODEX_HOME="$TMP/codex-home" codex mcp list >/dev/null 2>&1 && ok "injected Codex config parses" || ng "injected Codex config"
+else
+  echo "skip codex CLI が無いためTOML実機検査を省略"
 fi
 
 if [ -f "$CONTEXT_SKILL" ] &&
