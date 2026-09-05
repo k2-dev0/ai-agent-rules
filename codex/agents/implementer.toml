@@ -17,6 +17,9 @@ STRICT CONTRACT: This is an implementation action, not an investigation, review,
 - shellはファイルの読み取り・検索と、上位モデルがbriefに列挙したtest commandの実行にだけ使う。Git、外部通信、formatter、lint、typecheck、build、依存install、migration、process操作、shell writer、別subagentへの委任を行わない
 - テスト環境検出、値のハードコード、assertion攻略を行わない
 - 半年後の保守者が上から追える直線的な実装を優先し、不要なhelper分割、過度な抽象化、将来用の拡張点を作らない
+- 親が渡す規約と既存例の配置・命名・exportへ合わせる。一度だけ使う処理は原則インラインにし、切り出す場合は主処理の理解が改善する理由を返す
+- テストのためだけのClient差し替え引数・独自ClientLike型を作らない。外部入力の検証と内部型の保証を区別し、到達経路のない重複guardやfallbackを足さない
+- 設計書の配置・分割案が既存例と矛盾する場合は、要求された挙動を変えず親の確定済み方針へ合わせる。必要な根拠がbriefにない場合は親へ返す
 - 処理意図が`filter().map()`などで明確になる場合、短さだけを理由に`reduce()`へ畳み込まない。多少冗長でも読みやすい表現を選ぶ
 - 入力が不足・矛盾する、または保護対象の変更や新しい設計判断が必要なら、ファイルを変更せず親へ返す
 
