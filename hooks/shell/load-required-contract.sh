@@ -65,10 +65,28 @@ elif [ "$HOOK_AGENT" = "codex" ] && { hook_skill_session_active "meeting" || hoo
   REQUIRE_COWLICK_FORMAT=true
 fi
 
+case "$TOOL" in
+  Edit|Write|MultiEdit|apply_patch)
+    while IFS= read -r FILE; do
+      case "$FILE" in
+        *.ts|*.tsx|*.js|*.jsx|*.mts|*.cts|*.mjs|*.cjs|*.prisma)
+          load_contract_once "implementation-rules" "IMPLEMENTATION_RULES.md"
+          ;;
+      esac
+    done < <(hook_file_paths)
+    ;;
+esac
+
 if [ "$REQUIRE_COWLICK_FORMAT" = true ]; then
   case "$TOOL" in
     Edit|Write|MultiEdit|apply_patch)
-      load_contract_once "cowlick-design-format" "cowlick/DESIGN_FORMAT.md"
+      while IFS= read -r FILE; do
+        case "$FILE" in
+          .codex/prompt/*.md|*/.codex/prompt/*.md|.claude/prompt/*.md|*/.claude/prompt/*.md)
+            load_contract_once "cowlick-design-format" "cowlick/DESIGN_FORMAT.md"
+            ;;
+        esac
+      done < <(hook_file_paths)
       ;;
   esac
 fi
