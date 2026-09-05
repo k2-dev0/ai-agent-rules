@@ -17,7 +17,12 @@ case "$TOOL" in
   Edit|Write|NotebookEdit|apply_patch)
     while IFS= read -r FILE; do
       [ -z "$FILE" ] && continue
-      echo "$FILE" | grep -qE "$PROMPT_PATH_RE" && continue
+      if echo "$FILE" | grep -qE "$PROMPT_PATH_RE"; then
+        case "/$FILE/" in
+          */../*) hook_deny "$CONFIG_MSG" ;;
+        esac
+        continue
+      fi
       echo "$FILE" | grep -qE "$CONFIG_PATH_RE" && hook_deny "$CONFIG_MSG"
     done < <(hook_file_paths)
     exit 0
