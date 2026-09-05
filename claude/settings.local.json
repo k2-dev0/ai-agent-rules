@@ -115,8 +115,7 @@
       "Edit(**/package-lock.json)",
       "Edit(**/pnpm-lock.yaml)",
       "Edit(**/.git/hooks/**)",
-      "Edit(**/.git/config)",
-      "Edit(.claude/**)"
+      "Edit(**/.git/config)"
     ],
     "additionalDirectories": []
   },
