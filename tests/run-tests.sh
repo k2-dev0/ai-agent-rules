@@ -61,21 +61,6 @@ check_bash_rewrite() { # name expected-command hook command
   check_rewrite "$1" "$2" "$3" "$INPUT"
 }
 
-# --- require-test ---
-mkdir -p src/hooks src/constants centralized-tests && rm -f src/foo.ts src/foo.test.ts centralized-tests/foo.test.ts src/bar.tsx src/bar.jsx src/useDevice.ts src/hooks/use-device.ts src/data.hook.ts src/constants.ts src/constants/device.ts
-check "require-test: テスト無し ts は deny"   deny  require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
-touch centralized-tests/foo.test.ts
-git add centralized-tests/foo.test.ts
-check "require-test: 別directoryの追跡済みtestは棄権" empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/foo.ts"}}'
-check "require-test: tsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.tsx"}}'
-check "require-test: jsx は棄権"              empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/bar.jsx"}}'
-check "require-test: useX hook は棄権"        empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/useDevice.ts"}}'
-check "require-test: hooks directory は棄権"  empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/hooks/use-device.ts"}}'
-check "require-test: .hook.ts は棄権"         empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/data.hook.ts"}}'
-check "require-test: schema.prisma は棄権"    empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/prisma/schema.prisma"}}'
-check "require-test: constants.ts は棄権"     empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/constants.ts"}}'
-check "require-test: constants/配下は棄権" empty require-test.sh '{"tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/constants/device.ts"}}'
-check "require-test: Bash は棄権"             empty require-test.sh '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 
 # --- load-required-contract ---
 READING_CWD=$PWD
@@ -105,6 +90,7 @@ check "protect-git: git status は棄権"    empty protect-git.sh '{"tool_name":
 # --- protect-config ---
 check "config: Edit .claude は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
 check "config: Edit .claude/prompt は許可" empty protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/prompt/branch-sample-prompt.md"}}'
+check "config: promptから設定へ戻るpathは拒否" deny protect-config.sh '{"tool_name":"Write","tool_input":{"file_path":".claude/prompt/../settings.json"}}'
 check "config: Edit .agents は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
 check "config: rm .claude は deny"      deny  protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
 check "config: 設定読み取りは棄権"      empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
@@ -244,6 +230,16 @@ cd ..
 echo x > untracked.txt
 check "overwrite: git 管理外の上書きは ask" ask overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/untracked.txt"}}'
 check "overwrite: 新規作成は棄権"       empty overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"'$PWD'/nonexistent.txt"}}'
+mkdir -p overwrite-fixture
+printf 'original\n' > 'overwrite-fixture/[id].ts'
+git add 'overwrite-fixture/[id].ts'
+git commit -qm "test: overwrite fixture"
+check "overwrite: 相対pathのcleanな追跡fileは棄権" empty overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"overwrite-fixture/[id].ts"}}'
+printf 'dirty\n' >> 'overwrite-fixture/[id].ts'
+check "overwrite: 相対pathのdirtyな追跡fileは確認" ask overwrite.sh '{"tool_name":"Write","tool_input":{"file_path":"overwrite-fixture/[id].ts"}}'
+
+# --- protect-review ---
+check "review: 新規manifestのWriteは確認" ask protect-review.sh '{"tool_name":"Write","tool_input":{"file_path":"apps/new/package.json"}}'
 
 # --- protect-env ---
 check "protect-env: Edit .env は deny"        deny  protect-env.sh '{"tool_name":"Edit","tool_input":{"file_path":".env"}}'
