@@ -8,7 +8,7 @@
 
 - **規約の一元管理**: コーディング規約やパターン集を `AGENTS.md` と `rules/` に集約し、どのエージェントから参照しても同じ振る舞いになるようにする。
 - **エージェント間の差分を placeholder で吸収**: テンプレートでは `[agent_name]`（エージェント名）と `[skills_root]`（skills 配置先）を使って書いておき、`bootstrap` スキルで対象エージェントに合わせて実体化する。hook の入出力スキーマ差分は `hooks/shell/hook-io.sh` が吸収する。
-- **必要な統制をフックで強制**: 編集系ツール呼び出しの前にテストの存在を要求するなど、人間側の運用に頼らない仕組みを置く。
+- **必要な統制をフックで強制**: 設定・秘密情報の変更防止やコミット契約を実行時に確認する。設計の妥当性と必要なテストは、規約とレビュー工程で判断する。
 
 ## 構成
 
@@ -19,7 +19,7 @@ ai-agent-rules/
 ├── rules/              # AGENTS.md から分離したパターン別の規約
 │   └── typescript/         # TypeScript プロジェクト固有のルール
 ├── skills/             # スキル（スラッシュコマンド相当）の定義
-│   ├── bootstrap/          # placeholder と [NOTE] を解決し、成功後に配置先から自己削除
+│   ├── bootstrap/          # placeholder を解決し、成功後に配置先から自己削除
 │   ├── meeting/            # 要件監査・設計作成・単純化を統括するユーザー向け入口
 │   ├── preflight/          # 要件の由来・既存経路・境界ゼロ案を設計前に調査
 │   ├── cowlick/            # 機能ごとの設計書を prompt/ へ直接作成
@@ -65,7 +65,7 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 
 1. `setup-agent`で配置し、`__CONTEXT_DICTIONARY_ROOT__`をlocalの`context-dictionary`実pathへ解決する。手動配置では同じplaceholderを実pathへ置換する。
 2. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
-3. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）と `[NOTE]: bootstrap 対象` を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
+3. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
 4. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
 5. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。context-dictionaryの`search` / `get`は自動承認、`upsert` / `follow_up`は毎回確認する。
 
@@ -115,15 +115,15 @@ $bootstrap codex
 
 `tdd`と`errand`では上位モデルが直接コードベースを調べ、確認済み事実、`path:line`、直接関係するtest・検証commandを確定する。調査結果はfresh contextのimplementer一体へ自然文で渡す。下位モデルに探索範囲、要件解釈、設計判断を補わせない。
 
-implementerは初回実装と各再実装で一体だけをfresh context・effort `max`で起動し、並列に動かさない。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信を持たず上位モデル指定のtestだけ実行できるimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、上位モデルによる全実差分レビューと独立したGreenで構成する。
+implementerは初回実装と各再実装で一体だけをfresh context・effort `max`で起動し、並列に動かさない。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信を指示で禁止し、上位モデル指定のtestだけを実行するimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、上位モデルによる全実差分レビューと独立したGreenで構成する。
 
 `errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。大小判定は`skills/tdd/REVIEW_FLOW.md`を正本とし、「1ファイル・差分10行以下・修正が一意・ロジックや契約を変えない」の全条件を満たす指摘だけを上位モデルが直接修正する。それ以外は下位モデルが再実装し、上位モデルが再レビュー・テスト・最終レビューする。
 
-`meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`にはpreflight / cowlickの調査要約、会話履歴、今回の機能背景を渡さない。現在の`.prompt.md`とそこから参照される設計書だけを要件契約として、既存実装を独立に再調査させる。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
+`meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`は同じ会話内で設計書を読み直すため、過去の文脈が隔離されるとは主張しない。preflight / cowlickの結論を根拠として流用せず、現在の`.prompt.md`と参照設計書を要件契約とし、適用規約と既存実装を再確認する。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
 
 外部workerは`delegate.sh nesting`による限定QAだけに使う。対象は上位モデルが先に確定した変更production pathであり、workerの役割は3段以上の制御フローネスト候補と位置の抽出までとする。修正要否、設計との整合、誤検出、修正、再テストは上位モデルが判断する。`delegate.sh research`と`delegate.sh survey`は入口で拒否する。
 
-`delegate.sh`の`prepare`、`smoke`、`show`は実行器の運用modeであり、調査委任ではない。pollはprocess、出力byte、有効JSON eventを観測し、有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
+`delegate.sh`の`prepare`、`smoke`、`show`は実行器の運用modeであり、調査委任ではない。pollはprocess、出力byte、有効JSON eventを観測し、前回より増えた有効eventだけでidleを更新する。推測的な意味判定は実ログで安全性を確認するまでkill条件へ使わない。
 
 timeout時はprocess groupへTERMを送り、10秒後も残るprocessだけをKILLする。途中tool出力から結論を生成せず、生の`opencode.jsonl`と最終回答がある場合だけそのreportをpublishする。`smoke`だけは固定疎通確認なので30秒無通信・1分総時間・5秒間隔を使う。
 
@@ -144,6 +144,22 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 通常はスクリプトを直接操作せず、`unwind`または`polish`のネストQA手順から呼ぶ。実行器はHEADから指定された本体コードだけを一時snapshotへ複製して読み取り専用にし、テスト、設計、設定、Git、外部plugin、任意shellを外部workerへ許可しない。
 
 限定snapshotは現在のHEADを基準にし、指定された変更path以外を物理的に持ち込まない。無視されたagent資料、`.codex/tmp`、`.git/**`、`.env`系も含まれない。編集権限は与えず、実行後にファイル数とblob hashを検査する。OpenCodeのdata・state・cache・config・tmp領域もtaskごとの一時directoryへ分離し、並列worker間でSQLiteを共有しない。
+
+既存配置へ更新するときは、ユーザーが編集した設定・設計書を先に比較する。新しいファイルを上書きコピーするだけでは削除済みファイルは消えない。旧`require-test.sh`とその登録、旧bootstrapの`[NOTE]`処理を残さず、今回の設定・hook・skillを整合する版で配置する。配布先の`AGENTS.override.md`の有無も確認する。外部の`setup-agent`実装による更新・削除処理は、このリポジトリのテスト対象に含まれない。
+
+## 規約を実際の作業へ適用する
+
+明示起動用のskillは、Claudeの`disable-model-invocation`に加え、Codex用の`agents/openai.yaml`で`allow_implicit_invocation: false`を設定する。両者を同じ設定と見なさない。Codex側の根拠は[skillの起動policy](https://learn.chatgpt.com/docs/build-skills#optional-metadata)。
+
+AGENTS.mdは全行動へ共通する短い指示だけにする。配置・命名・インライン化などの判断基準は`skills/IMPLEMENTATION_RULES.md`へ置き、設計・実装・レビューskillが必要時に読む。TypeScript/JavaScript/Prismaの初回編集では、既存の`load-required-contract.sh`がこの資料を一度注入して編集を止め、規約を反映した再試行へ進める。秘密情報・設定・lockfile等の操作禁止は専用hookが強制し、AGENTSへの注意書きで代用しない。
+
+Codexの実装委任は専用定義を選べるnative APIの`agent_type: "implementer"`、Claudeは`subagent_type: "implementer"`を指定する。汎用agentのtask名だけを変えたり、Luna/maxの指定だけで代用したりしない。TDD/errand中の誤ったroleは`require-implementer.sh`が起動前に拒否する。
+
+Huygens等はUI用のnicknameで、roleとは別である。実際のログでもHuygensのroleはimplementer、Luna/maxだった。親のread-onlyが継承されていたことが承認増加に直結する。専用定義のworkspace-writeが親の実行時権限を解除するとは考えない。hookで分かるplan/read-onlyでは起動を止め、親側で権限を一度確認する。nicknameを変える目的でagentを再起動しない。根拠は[Codexのsubagent仕様](https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls)。hookは起動後のSubagentStartでは停止できないため、起動前のPreToolUse（Agent）で検査する。[hookの対応範囲](https://learn.chatgpt.com/docs/hooks#tool-coverage)。
+
+`polish`のpath完全性検査には全対象を渡すが、ネストQAはその中の本体コードだけを使う。文書・設定・Prisma schemaだけなら外部workerを省略する。同じHEADの再検査でもworkerのtask-idを分け、前回の結果を上書きしない。
+
+今回の全体監査の修正内容・削除判断・残る代替候補は[AUDIT.md](AUDIT.md)に記録する。監査記録は配布対象ではない。
 
 ## 注意
 
@@ -191,7 +207,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 | 操作 | Claude Code | Codex |
 |---|---|---|
 | localhost を含むHTTP request | sandbox外承認 | permission profileのnetwork無効化によりsandbox外承認 |
-| `package.json` / CI / migration 等のpath単位確認 | settingsのaskで強制 | rulesのpromptで1回限りの変更tokenを発行 |
+| `package.json` / CI / migration 等のpath単位確認 | settingsとEdit / Write / NotebookEditのhookでask | rulesのpromptで1回限りの変更tokenを発行 |
 | 既存ファイルの全面Write | `overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
 | local ESLint（`yarn eslint`） | 既定確認 | rulesの固定prefixで自動 |
@@ -226,8 +242,10 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 bash tests/verify-all.sh
 ```
 
-- `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`bootstrap` の placeholder 置換・`[NOTE]` 解決を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
+- `tests/verify-all.sh` — 統合スイート。一時ディレクトリに claude / codex の配置を再現し、`bootstrap` の placeholder 置換を実行したうえで全 hook を検証する。最後に `PASS=n FAIL=0` を出す
+- `tests/verify-regressions.sh` — 空白入り配置先での実hook配線、必要時の規約注入、専用agent選択と親権限、親symlink、履歴整理中の並行編集・commit、workerの無通信判定を検証する
 - `tests/run-tests.sh` — hook 全数の deny / ask / 棄権テスト（`verify-all.sh` から呼ばれる。単体では動かない）
 - 検証範囲: 構文 / 実行ビット / 配置シミュレーション（claude・codex）/ 権限パスマトリクス / MCP version・tool承認 / Codex config strict読込 / execpolicy判定 / commit契約 / hook参照先・timeout / placeholder置換漏れ / hook決定JSON / `session`の発火スコープ / 固定宛先スクリプト / `rebase` E2E
 - 前提: `jq` と `git`。Codex CLI があれば 0.138.0 以上であることと config / rules の実機検査を行い、無い環境ではその部分だけskipする
+- skill形式検査は`SKILL_VALIDATOR`または標準配置のvalidatorがある場合だけ実行する。個人の絶対pathは前提にしない
 - 作業ファイルは一時ディレクトリに作られ、終了時に削除される。`tests/` 自体は配布対象外
