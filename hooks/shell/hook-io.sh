@@ -1,8 +1,7 @@
 #!/bin/bash
 # hook-io: PreToolUse hook の入出力スキーマ差分をエージェント種別ごとに吸収するアダプタ。
 # 各 hook は stdin の JSON や決定 JSON の形式に直接触れず、本ファイルの関数だけを使う。
-# Why: [NOTE] 機構が吸収するのはツール名の差分だけで、入力(.tool_name / .tool_input)と
-#      出力(hookSpecificOutput)のスキーマは Claude Code 固有のまま各 hook に散っていた。
+# Why: 入力(.tool_name / .tool_input)と出力(hookSpecificOutput)を共通化する。
 #      スキーマの読み書きを本ファイルへ集約し、エージェント追加時はここへの分岐追加だけで
 #      済ませる。
 # 使い方: hook 冒頭で `. "$(dirname "$0")/hook-io.sh"` と source する。
@@ -24,8 +23,7 @@ HOOK_INPUT=$(cat)
 # 各 hook は冒頭で stderr を捨てるため、原因はこの理由文でしかエージェントに届かない。
 # PreToolUse 以外（session.sh の UserPromptSubmit / SessionEnd）で同じ JSON を
 # 出すと、exit 0 の stdout がプロンプトへの追加コンテキストとして注入されるので棄権する。
-# 棄権しても、marker 生成の失敗で緩む require-test.sh 自身が PreToolUse 側で deny
-# されるため fail-open にはならない。
+# PreToolUse側も同じ初期化検査を通るため、設定不備はその呼び出しで拒否する。
 hook_io_fatal() {
   case "$HOOK_INPUT" in
     *'"hook_event_name"'*'"PreToolUse"'*)
@@ -59,6 +57,11 @@ command -v jq >/dev/null 2>&1 || \
 
 # 呼び出し元ツールの名前を返す関数
 hook_tool_name() { echo "$HOOK_INPUT" | jq -r '.tool_name'; }
+
+# native Agentのroleと親タスクの権限情報。nickname/task名はroleの代用にしない。
+hook_agent_type() { echo "$HOOK_INPUT" | jq -r '.tool_input.agent_type // .tool_input.subagent_type // empty'; }
+hook_permission_mode() { echo "$HOOK_INPUT" | jq -r '.permission_mode // empty'; }
+hook_transcript_path() { echo "$HOOK_INPUT" | jq -r '.transcript_path // empty'; }
 
 # 編集対象のファイルパスを改行区切りで列挙する関数（0 件なら何も出さない）。
 # claude: file_path / notebook_path の単一パス。
