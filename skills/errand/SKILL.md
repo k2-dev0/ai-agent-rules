@@ -3,6 +3,12 @@ name: errand
 description: "ユーザーが$errandを明示し、設計書を作らず、既存パターンから一意に決まる小さな本体コード修正・定型ファイル追加・Prisma schema追加を、上位モデルの調査とテストシナリオ選択、Red、下位implementerの初回実装・大きい修正の再実装、上位モデルの最終レビューまで完了したいときだけ使う。新機能設計、要件判断、設定・migration・依存関係の変更には使わない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      hooks:
+        - type: command
+          command: .[agent_name]/hooks/shell/require-implementer.sh workflow
 ---
 
 ## 目的
