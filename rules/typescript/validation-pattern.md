@@ -1,16 +1,16 @@
-# schema.ts の編集ルール
+# 入力検証・schema の編集ルール
 
 ## スキーマ定義ツールの選定
 
-1. 新しくスキーマを定義するときは **yup** を使用すること
-  - zod で定義済みの既存スキーマを編集する場合はそのまま zod を使用してよい
+1. 対象packageの依存関係と同じ責務の既存schemaを確認し、実際に使われている検証ライブラリと定義方式へ合わせる。Zod使用箇所へyupを新規導入するなど、規約の例だけを根拠に別方式を増やさない。
+2. `schema.ts`の配置・exportを既存例と照合する。schema objectを置く流儀なら、手書きの検証関数を一般的な意味だけで`schema.ts`と命名しない。
+3. HTTP、ファイル、外部APIなどの未検証入力を受け取る境界で検証する。内部型で保証済みの値へ、実際の到達経路がない追加guard、型拡張、黙ったfallbackを足さない。
 
 ## nullable 必須フィールドのユーティリティ
 
-1. 以下の条件を **すべて** 満たすフィールドには、自前でスキーマを書かず
-   `@front/modules/yup/utils.ts`（または `@front/modules/zod/utils.ts`）のユーティリティを使うこと
+1. 以下の条件を **すべて** 満たすフィールドには、同じ契約の既存ユーティリティが存在する場合に再利用する。import先とexportを確認し、存在しない`modules/yup/utils.ts`や`modules/zod/utils.ts`を想定しない。
   - 入力（選択）が必須である
   - placeholder を設定する
   - 初期値が null である
     - Why: 「未選択状態（null）→ placeholder 表示 → 送信時に必須バリデーション」というパターンを統一的に扱うため
-    - 主なユーティリティ: requiredNullableString, requiredNullableNumber, requiredNullableEnum, requiredNullableDate
+    - 該当する既存処理がなければ、その入力境界で必要なschemaだけを定義する。将来用のユーティリティ一式を作らない。
