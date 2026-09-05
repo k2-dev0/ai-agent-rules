@@ -2,7 +2,7 @@
 
 ## 全体方針
 
-1. ORM やデータソースはプロジェクトの方針に合わせること
+1. ORM やデータソースはプロジェクトの方針に合わせること。以下のPrisma・MySQL系の例は該当する構成だけに適用し、既存schema・単位・mappingを確認する。他のproviderへnative型を持ち込まない。
 
 ## 命名ルール
 
@@ -22,7 +22,7 @@
 | 上限が大きい可変長text | `String @db.Text` |
 | 日付 | `DateTime @db.Date` |
 | 日時 | `DateTime @db.DateTime(0)`または`DateTime @db.Timestamp(0)` |
-| 金額 | `Int`で税込・税抜・消費税を分けて保持。`Float` / `Decimal`は丸め誤差のriskがあるため使わない |
+| 金額 | 単位と必要精度を確認し、整数の最小通貨単位または精度・scaleを定めた`Decimal`を既存契約に合わせて使う。`Float`は二進浮動小数点の丸めを伴う。`Decimal`を同じ理由で禁止しない |
 | 構造化data | `Json @db.Json`。検索・filter対象は正規columnとして定義 |
 
 ## 主キー・一意制約
@@ -38,8 +38,8 @@
 1. 外部キーフィールドとリレーションオブジェクトを分けて記述すること
   - 例: `contractNumber String?` + `contract Contract? @relation(...)`
 2. 1対多は親モデル側に子モデルの配列フィールドを定義すること
-3. 多対多は明示的な中間テーブルで管理すること
-  - Why: 将来の変更に対応しにくいため
+3. 多対多で関係自体の属性・制約が必要なら、明示的な中間テーブルで管理する
+  - relation自体の属性・制約が必要な場合に使う。単純な関係は既存方式を維持し、将来の可能性だけで中間modelを増やさない
 4. 外部キーが任意の場合はリレーションフィールドを Optional（`?`）にすること
 
 ## ステータス・マスタ管理
@@ -64,5 +64,5 @@
 
 ## 同期メタデータ
 
-1. 外部DB同期テーブルには同期日時フィールドを持たせること（`sync_at DateTime?` / `sync_reply_at DateTime?`）
+1. 外部DB同期テーブルには同期日時フィールドを持たせること。元columnが`sync_at`なら、fieldは`syncAt DateTime? @map("sync_at")`とし、上のcamelCase規約と揃える。`sync_reply_at`も同様にmappingする。
 2. アプリ管理テーブルには `createdAt DateTime @default(now())` と `updatedAt DateTime @updatedAt` を必ず付与すること
