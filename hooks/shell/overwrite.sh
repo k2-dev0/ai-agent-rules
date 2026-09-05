@@ -16,8 +16,8 @@ while IFS= read -r FILE; do
 
   # git 管理下かつ未コミット差分なし = 上書きしても git で復元可能(可逆)。棄権して allow に委ねる
   DIR=$(dirname "$FILE")
-  if git -C "$DIR" ls-files --error-unmatch "$FILE" >/dev/null 2>&1; then
-    [ -z "$(git -C "$DIR" status --porcelain -- "$FILE")" ] && continue
+  if git -C "$DIR" ls-files --error-unmatch -- ":(literal)$(basename "$FILE")" >/dev/null 2>&1; then
+    [ -z "$(git -C "$DIR" status --porcelain -- ":(literal)$(basename "$FILE")")" ] && continue
     hook_ask "未コミット差分がある既存ファイルの全上書き(Write)です。承認すると未コミット分は復元できません。部分修正は Edit を使ってください。意図的な全面再生成であれば承認してください。"
   fi
 
