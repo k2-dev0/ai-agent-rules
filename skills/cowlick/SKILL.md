@@ -11,11 +11,15 @@ hooks:
           command: .[agent_name]/hooks/shell/load-required-contract.sh cowlick-design
 ---
 
+開始時に[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)を読み、対象に該当する規約と既存例だけを確認する。
+
 ## 目的
 
 確定要件から `.[agent_name]/prompt/` の設計書を直接作成・更新する。要件監査、質問、単純化はmeetingが統括する。設計書の配置を承認のために二重化しない。
 
 ## 実行
+
+開始時に[設計書形式](DESIGN_FORMAT.md)を全文読む。hookの有効化・信頼状態に依存せず、形式と設計根拠を入力へ含める。
 
 1. 同じ要件revisionの`preflight_ready`が現在の会話にあることを確認する。欠落、対象変更、重大な未回答があれば`preflight_required`を返す。
 2. **明示要件**、**禁止・制約**、**受入済みtrade-off**、**既存制約**だけを固定条件にし、**設計選択**を要件へ昇格させない。
@@ -32,6 +36,7 @@ hooks:
 - 設計書ごと削除できる既存経路
 - 新しいendpointやruntime resourceを使わない入口
 - 既存のdeployment、scheduling、failure recovery pattern
+- 新設する関数・型・ファイルの実際のconsumer、配置先の責務、同名fileのexport、導入済み検証・mock方式。名前の一般的な意味だけで配置を決めない
 - 新設要素が生んだ失敗モードと緩和策をまとめて消せる反証
 
 参照先または必須根拠が得られない場合は、理由と未調査範囲を含む`research_blocked`をmeetingへ返す。要件revisionと異なる判断が必要なら、選択肢、挙動差、推奨を含む`consultation_required`をmeetingへ返す。
