@@ -17,6 +17,7 @@ die(){ echo "ERROR: $1" >&2; exit 1; }
 [[ "$NAME" =~ $NAME_RE ]] || die "invalid 機能名: $NAME (ASCII kebab-case only)"
 ENTRY="branch-$NAME-prompt.md"
 
+[ ! -L ".[agent_name]" ] && [ ! -L ".[agent_name]/prompt" ] || die "index parent is a symlink"
 [ -L "$INDEX" ] && die "index is a symlink: $INDEX"
 [ -f "$INDEX" ] || die "index not found: $INDEX"
 
