@@ -5,6 +5,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 user-invocable: false
 ---
 
+開始時に[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)を読み、対象に該当する規約と既存例だけを確認する。
+
 ## 目的
 
 実装前の設計から、不要な機能、実行境界、対象ファイル、失敗対策、依存、抽象化を削る。
@@ -12,7 +14,7 @@ user-invocable: false
 
 ## 独立監査の前提
 
-ponytailは、cowlickまでの調査内容、設計書の作成経緯、ユーザーとの会話、今回がどの機能の追加・修正かという事前知識を何も持たない状態で開始する。現在の`.[agent_name]/prompt/.prompt.md`と、そこから参照される設計書だけを要求契約とし、コードベースを独立に再調査する。
+同じエージェントの会話履歴は消せないため、前段の知識がないとは主張しない。現在の`.[agent_name]/prompt/.prompt.md`と参照先設計書を要求契約とし、前段の結論を証拠として使わずコードベースを独立に再調査する。今回の判断基準と関連規約は引き続き適用する。
 
 過去phaseの結論、会話の含意、ファイル名から目的や対象を補完しない。設計書だけから目的、明示要件、禁止・制約、受入済みtrade-off、対象機能、Changes、完了条件を特定できない場合は、以前の文脈で穴埋めせず`blocked`を返す。
 
@@ -25,7 +27,7 @@ ponytailは、cowlickまでの調査内容、設計書の作成経緯、ユー�
 - 標準 library にその機能があるなら、それを使う
 - native platform 機能でカバーできないか。picker library より `<input type="date">`、JS より CSS、application code より DB constraint を優先する
 - 既に導入済みの依存関係で解決できるなら、それを使う。数行で済む処理のために新しい依存関係を追加しない
-- 一行でいいなら、一行で書く
+- インラインで主処理を追えるなら、その場に書く。短さだけで処理を詰め込まない
 - ここまでで成立しない場合だけ、要件を満たす最小の独自実装を選ぶ
 
 この順序は、新しい abstraction や依存関係を正当化する checklist ではない。より上の選択肢で解決できた時点で、下の選択肢を検討しない。
@@ -52,14 +54,14 @@ bug修正を含む設計書では、報告された症状とroot causeを分け�
 | `revision` | 対象design revision |
 | `requirements` | 明示要件、禁止・制約、受入済みtrade-off、既存制約、設計選択を区別した表 |
 | `topology` | 全設計書の入口、caller・consumer、共有責務、永続化、外部副作用、既存・新設境界。bug修正では症状とroot cause |
-| `elements` | 新設するfile・export・関数・定数・型・class、対応要件、直接の外部consumer、単純な代替、新設要素が生む失敗と緩和策、残す・統合・削除の判断、根拠 |
+| `elements` | 新設するfile・export・関数・定数・型・class、対応要件、直接のconsumer、インライン等の単純な代替、配置・命名・exportの既存例、新設要素が生む失敗と緩和策、残す・統合・削除の判断、根拠 |
 | `minimalAlternative` | runtime boundaryとglobal/shared変更を増やさない案と、要件充足、trade-off、新しい失敗、運用負荷の比較 |
 | `counterexamples` | 数値・順序・選択規則ごとの具体値、期待結果、根拠。等号、混在、同値、入力順、より少ない候補を該当分だけ含める |
 | `limitsAndTests` | 既知の上限と測定可能な再検討条件、非自明な処理を守る最小の実行可能なtest |
 | `changesContract` | guard順、式、境界、where・sort・tie-break、正常・error返却、状態遷移、副作用、dataの権威がChangesに残ること |
 | `unresolved` | 未決定事項。ready時は空配列 |
 
-同一file内の呼び出しを外部consumerに数えず、別の値から導ける定数と設計選択だけに対応する要素は削除候補にする。明示されていない即時性や性能を現設計の利点にしない。該当しないfieldは省略せず、理由付きの`not_applicable`にする。
+同一file内の呼び出しも実際のconsumerとして扱う。local helperを残す場合は、インライン化で主処理が読みにくくなる理由を示し、外部consumerを作るためだけにexportや別fileを増やさない。別の値から導ける定数と設計選択だけに対応する要素は削除候補にする。明示されていない即時性や性能を現設計の利点にしない。該当しないfieldは理由付きの`not_applicable`にする。
 
 監査は表で簡潔に書く。一つのfindingはIDを付けて一度だけ説明し、他fieldではIDを参照する。同じ要件・原因・判断・置換先を持つ要素は一行へまとめる。具体的な差がある場合だけ分ける。`not_applicable`は一行、失敗モードは比較結果を変えるものだけに限定し、同じtopologyや根拠を別fieldで言い換えない。
 
@@ -106,7 +108,7 @@ Step 2と3の探索を[agent_name]が直接行う。現設計の成立確認で�
 
 標準・native機能は対象 runtime、browser support、database、framework version で利用可能か確認する。導入済み依存は lockfile だけでなく、実際の利用 pattern と保守境界も確認する。
 
-未実装の新設要素は、設計書に記した直接の外部consumerを設計契約として監査し、既存の入口と責務配置に矛盾しないかコードベースで照合する。実装ファイルがまだ存在しないことだけを理由に `blocked` にしない。
+未実装の新設要素は、設計書に記した直接のconsumerを設計契約として監査し、既存の入口と責務配置に矛盾しないかコードベースで照合する。実装ファイルがまだ存在しないことだけを理由に `blocked` にしない。
 
 ### Step 5: 設計書を単純化する
 
@@ -122,7 +124,7 @@ Step 2と3の探索を[agent_name]が直接行う。現設計の成立確認で�
 - 新設要素が生んだ問題への緩和策は、原因側と対で削除する
 - 症状別の修正を、全経路が通るroot causeの一箇所へ統合する
 
-Summary / Changes / 対象ファイル / 参照ルール / 完了条件の必須 section は維持する。短さのために error処理、副作用、data integrity、security条件を省略しない。
+Summary / Changes / 対象ファイル / 参照ルール / 設計根拠 / 完了条件の必須 section は維持する。短さのために error処理、副作用、data integrity、security条件を省略しない。
 
 ### Step 6: 変更と比較を報告する
 
@@ -140,7 +142,7 @@ Summary / Changes / 対象ファイル / 参照ルール / 完了条件の必須
 
 ### Step 7: ready gateを確認してmeetingへ戻す
 
-`ponytail_audit`の全fieldが埋まり、`unresolved`が空で、`revision`が現在のdesignと一致し、設計書が`elements`と`changesContract`の判断を反映するまで`ponytail_ready`を返さない。残した要素は対応要件、外部consumer、単純な代替では満たせない根拠を持たなければならない。
+`ponytail_audit`の全fieldが埋まり、`unresolved`が空で、`revision`が現在のdesignと一致し、設計書が`elements`と`changesContract`の判断を反映するまで`ponytail_ready`を返さない。残した要素は対応要件、実際のconsumer、単純な代替では満たせない根拠を持たなければならない。
 
 結果を次の status とともに meeting へ返す。
 
