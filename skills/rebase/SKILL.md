@@ -15,6 +15,7 @@ disable-model-invocation: true
 履歴操作はレビュー済みの `rebase.sh` に閉じ込める。スクリプトは temp worktree で
 リプレイを完走させ、「plan が対象範囲を exactly-once で消費」「squash 後の tree が元 HEAD と
 同一（diff 空）」の二重検証に合格して初めて本体ブランチを 1 回だけ動かす。
+切り替えは旧HEADを照合する`update-ref`で行い、検証中に加わったindex・作業ファイルの変更を保持する。並行commitがあれば更新を拒否する。
 **検証前に本体ブランチと作業ツリーには一切触れない**ため、失敗時は temp が消えるだけで
 本体は無傷 — 復元という工程そのものが存在しない。
 
