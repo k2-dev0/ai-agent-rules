@@ -12,12 +12,12 @@
 # 安全設計（verify-then-swap）:
 #   temp worktree で base から cherry-pick -n によるリプレイを完走させ、
 #   「plan が対象範囲を exactly-once で消費」「squash 後の tree が元 HEAD と同一」の
-#   二重検証に合格して初めて、本体ブランチを 1 回の reset --hard で切り替える。
+#   二重検証に合格して初めて、本体ブランチを旧HEAD照合付きのupdate-refで切り替える。
 #   検証前に本体ブランチと作業ツリーには一切触れないため、失敗時は temp worktree を
 #   消すだけでよく、復元パスが存在しない。
 # 失敗の扱い: 検査・リプレイ・検証のどこで落ちても ERROR を stderr へ出して exit 1
 #   （成功したふりの禁止）。push は本スクリプトは行わない。
-# backup ブランチ: swap（reset --hard）の間だけ ORIG へ名前を張る一時的な足場であり、
+# backup ブランチ: swap（update-ref）の間だけ ORIG へ名前を張る一時的な足場であり、
 #   swap 成功後は削除する。成功時に残さないので、backup が残っていれば swap 失敗の証拠になる。
 set -u
 
@@ -68,6 +68,7 @@ git status --porcelain | grep -qv '^??' && \
   die "作業ツリーが dirty。コミットするか退避してから実行すること"
 
 ORIG=$(git rev-parse HEAD)
+ORIGINAL_BRANCH=$(git symbolic-ref -q HEAD) || die "現在のbranchを確定できない"
 
 # base の決定: --base 指定 > @{upstream}。upstream なしで --base も無ければ動かない
 if [ -n "$BASE_ARG" ]; then
@@ -208,11 +209,13 @@ NEWCOUNT=$(git rev-list --count "$EFFECTIVE_BASE..$NEW_TIP")
   { cleanup; die "検証失敗: 生成コミット数($NEWCOUNT) が groups($NGROUPS) と一致しない"; }
 
 # verify-then-swap: backup を切ってから、本体を 1 回だけ動かす。
-# tree は検証済みで元 HEAD と同一なので、この reset --hard は作業ファイルを 1 byte も変えない
+# 検証中に変更されたindex・作業ファイルを失わせないよう、同一treeのrefだけを更新する。
+# 旧HEADの照合に失敗した場合は、並行して積まれたcommitを上書きせず停止する。
+[ "$(git symbolic-ref -q HEAD)" = "$ORIGINAL_BRANCH" ] || { cleanup; die "検証中にbranchが切り替わった"; }
 git branch "$BACKUP" "$ORIG" || { cleanup; die "backup ブランチを作れない: $BACKUP"; }
-if ! git reset --hard "$NEW_TIP" >/dev/null 2>&1; then
+if ! git update-ref -m "rebase: squash verified history" "$ORIGINAL_BRANCH" "$NEW_TIP" "$ORIG"; then
   cleanup
-  die "swap(reset --hard) に失敗。ブランチは $BACKUP と reflog から復旧できる"
+  die "swap(update-ref) に失敗。並行変更は上書きせず、元HEADは $BACKUP と reflog に保持した"
 fi
 # swap 成功。backup はここまでの足場であり、成果物ではないので削除する。
 # 削除に失敗しても swap 自体は成功しているので、警告に留めて成功扱いにする
