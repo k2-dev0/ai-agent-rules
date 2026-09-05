@@ -5,6 +5,8 @@ allowed-tools: Read, Grep, Glob, Bash
 user-invocable: false
 ---
 
+開始時に[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)を読み、対象に該当する規約と既存例だけを確認する。
+
 ## 目的
 
 ユーザーの要件には未発見の穴があると仮定し、設計前に反証的な調査を行う。
