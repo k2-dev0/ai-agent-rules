@@ -27,6 +27,8 @@ bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 
 調査は要求判断を直接支える最小範囲から始め、根拠の`path:line`、想定変更先、直接関係するtest・検証command、未確認事項を保持する。事実と推測を分け、存在を確認できない実装やtestをあるものとして扱わない。必須事実が不足する場合は[agent_name]が追加調査し、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
+[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)と、そこから案内する関連規約・設計書の参照ルールを実際に読む。新設予定の関数・型・ファイルについて、consumer、配置先の責務、同名fileのexport、依存関係、既存testのmock方式を照合する。参照path・ライブラリが存在しない場合は現行実装を根拠に訂正する。明示された挙動と変更可能な配置・命名・分割案を区別し、後者の調整だけで再承認へ戻らない。
+
 ## 1. テストシナリオ候補をまとめて提示する
 
 [agent_name]が要求根拠と確認済み事実から、今回テストする正常系、境界値、異常系、副作用、回帰リスクを候補として選び、各シナリオの前提・操作・期待結果だけをまとめて提示する。実装要件や実装要否を提案・再分類しない。既存テストを正解として盲目的に模倣せず、どの候補を採用・不採用・修正するかはユーザーが決める。選択が確定するまでファイルを変更しない。
@@ -82,6 +84,7 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 
 - 設計書またはユーザー依頼の全要件
 - [agent_name]が確認した事実と`path:line`
+- 読んだ規約と適用箇所、配置・命名・exportの既存例、新設要素のconsumerとインライン案を採らない理由
 - 選択済みtest_scenarios
 - Redのcommand、終了status、期待した理由での失敗要約
 - 実装後に下位モデルが実行する確認済みtest command
@@ -90,7 +93,13 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 
 test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭めない。
 
-`implementer` subagentを一体だけforegroundで起動して完了まで待つ。Claude Codeではproject agent `implementer`の`effort: max`を使う。Codexではtask名`implementer`、`fork_turns: "none"`、`model: "gpt-5.6-luna"`、`reasoning_effort: "max"`を明示してfresh contextで起動する。child agent IDが空、wait先が空、または専用agent定義を使えない場合はwriterを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。下位モデルは実装後に指定済みtest commandを実行し、終了statusとdiagnosticを返す。
+専用定義を選択できるnative APIで、Codexは`agent_type: "implementer"`、Claude Codeは`subagent_type: "implementer"`を明示する。Codexでは`fork_context: false`で起動し、modelとeffortは専用定義のLuna / maxを使う。`task_name`だけをimplementerにした汎用agent、default/workerへのmodel上書き、指示本文のコピーによる代用は禁止する。現在のtoolにrole選択欄が無ければ、利用可能なnative toolを探し、それでも専用定義を選べなければ実装を委任しない。
+
+起動前に親タスクの実効権限がworkspaceへの書き込みを許可していることを確認する。親がread-onlyまたはplanなら、専用定義のworkspace-writeで解除できると思って起動しない。権限が必要であることを親側で一度報告し、ユーザーが親タスクの権限を変更するまで委任を保留する。global設定の書き換えやsandbox無効化で代用しない。
+
+`implementer` subagentを一体だけforegroundで起動して完了まで待つ。child agent IDが空、wait先が空、または専用agent定義を選択できない場合はwriterを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。下位モデルは実装後に指定済みtest commandを実行し、終了statusとdiagnosticを返す。
+
+返された`agent_role`でimplementerを識別する。Huygensなどの`agent_nickname`はUI用の別名で、別roleや別の性能設定を意味しない。ユーザーへの報告は「implementer（表示名: Huygens）」のようにroleを先に示す。roleや実効権限が要求と違えば編集前に止める。
 
 ## 5. 相談・無変更・中断を処理する
 
@@ -111,9 +120,12 @@ subagentの自己申告や想定変更先ではなく、共有worktreeの実際�
 - テスト環境検出、値のハードコード、assertion攻略がない
 - 全要件に一致し、test_scenariosの採否を実装省略へ流用していない
 
-正しい処理であることに加え、半年後に負債にならないかを必ずレビューする。
+正しい処理であることに加え、半年後に負債にならないかを必ずレビューする。テスト・型検査の成否と、以下の構造評価を別々に判定する。新設・変更した境界は、利用箇所、単純な代替との比較、配置・命名の既存例を根拠に採用する。
 
 - 独立した業務責務を持たないhelperや薄いwrapperで関数ジャンプを増やしていない
+- 一度だけ使う処理を切り出す場合、インライン化で主処理の理解が難しくなる理由を具体的に示せる
+- ファイルの役割とexportが、同じ配置・名前の既存例に合う。検証関数というだけでschema.ts、処理を提供するというだけでserviceへ置いていない
+- テスト専用のClient差し替え引数・ClientLike型や、外部境界ですでに検証した内部値の重複防御がない
 - 現在の要件に不要な共通化、設定可能性、将来用拡張点を作らずYAGNIに従っている
 - 制御フローとデータ変換を上から自然に追える
 - `filter().map()`で意図が明確になる処理を短さだけで`reduce()`へ畳み込んでいない
