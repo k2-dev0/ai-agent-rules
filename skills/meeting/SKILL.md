@@ -95,7 +95,7 @@ ponytailへpreflightの調査結果、cowlickの作成経緯、ユーザーと�
 - 回答で設計または完了条件が変われば Step 3 へ戻す
 - ponytail が新しい実装要素を加えた場合は Step 3 のコードベース調査からやり直す
 
-`ponytail_ready`の文字列だけでは通過させない。`ponytail_audit`の必須field、現在のdesignと同じrevision、空の`unresolved`、`not_applicable`の理由を確認する。さらに、topologyが入口から副作用まで繋がること、残した各要素に対応要件と直接の外部consumerがあること、数値・順序・選択規則に具体値の反例があることを独立に確認する。不一致ならStep 4を再実行する。
+`ponytail_ready`の文字列だけでは通過させない。`ponytail_audit`の必須field、現在のdesignと同じrevision、空の`unresolved`、`not_applicable`の理由を確認する。さらに、topologyが入口から副作用まで繋がること、残した各要素に対応要件と直接のconsumerがあること、local helperの切り出し理由、数値・順序・選択規則に具体値の反例があることを確認する。同じ会話内の再検証であり、履歴を隔離した別agentによる監査とは呼ばない。不一致ならStep 4を再実行する。
 
 ### Step 5: 設計書を報告する
 
