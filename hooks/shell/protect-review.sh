@@ -68,7 +68,7 @@ case "$TOOL" in
       RELATIVE_PATH=$(review_relative_path "$ROOT" "$FILE") || hook_deny "$REVIEW_FILE_MSG"
       if echo "$RELATIVE_PATH" | grep -qE "$REVIEW_FILE_PATH_RE"; then
         [ "$HOOK_AGENT" = "codex" ] && review_approval_consume "$ROOT" "$RELATIVE_PATH" && continue
-        hook_deny "$REVIEW_FILE_MSG"
+        hook_ask "$REVIEW_FILE_MSG"
       fi
     done < <(hook_file_paths)
     exit 0
