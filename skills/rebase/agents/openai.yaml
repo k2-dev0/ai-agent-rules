@@ -1,0 +1,7 @@
+interface:
+  display_name: "rebase"
+  short_description: "検証済みの変更内容を保ったままコミット履歴を機能単位に整理する"
+  default_prompt: "$rebase を使い、コミット内容を保ったまま履歴を機能単位に整理してください。"
+
+policy:
+  allow_implicit_invocation: false
