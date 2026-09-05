@@ -3,6 +3,12 @@ name: tdd
 description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚を上位モデルが調査・テストし、下位implementerに初回実装と大きい修正の再実装を委任し、上位モデルがレビュー・polishを完了するときに使う。
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
+hooks:
+  PreToolUse:
+    - matcher: Agent
+      hooks:
+        - type: command
+          command: .[agent_name]/hooks/shell/require-implementer.sh workflow
 ---
 
 ## 目的
