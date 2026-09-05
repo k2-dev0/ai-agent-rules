@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: "配置済みのエージェント設定ファイル群の placeholder（[agent_name] / [skills_root]）置換および [NOTE]: bootstrap 対象 の解決を行う"
+description: "配置済みのエージェント設定ファイル群の placeholder（[agent_name] / [skills_root]）置換を行う"
 allowed-tools: Bash
 disable-model-invocation: true
 ---
@@ -32,13 +32,13 @@ bash [skills_root]/bootstrap/init-agent.sh <agent>
 
 - `[skills_root]` は表の実パスへ、`<agent>` は引数へ置き換える。文字列、相対パス、単独実行を変えない。
 - sed / heredoc / 一時スクリプトで代用しない。
-- スクリプトは placeholder 置換、`[NOTE]: bootstrap 対象` の解決、置換漏れ検査を行う。全検査の成功後、配置先の `bootstrap/` を自己削除する。
+- スクリプトは placeholder 置換と置換漏れ検査を行う。全検査の成功後、配置先の `bootstrap/` を自己削除する。
 - 未知のエージェントを追加する場合は `init-agent.sh` の `case` を先に実装する。
 - 失敗した場合だけ [FAILURES.md](FAILURES.md) を読み、原因別の復旧手順に従う。成功時は読まない。
 
 ### Step 3: 結果を報告する
 
-置換した `[agent_name]` / `[skills_root]` の値、解決した `[NOTE]` 箇所、`bootstrap/` の削除をユーザーに報告する。
+置換した `[agent_name]` / `[skills_root]` の値、`bootstrap/` の削除をユーザーに報告する。
 
 ## 注意事項
 
