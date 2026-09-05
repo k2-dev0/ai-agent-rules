@@ -14,9 +14,9 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 
 ## 判定
 
-対象は親スキルが渡す、基準commitから実際に変更され現在も存在する**追跡済み本体コードの相対パス**だけとする。test、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスが渡されない場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
+対象は親スキルが確定済みの対象から選んだ、現在も存在する**追跡済み・commit済みでcleanな本体コードの相対パス**だけとする。verifiedは実変更path、directは明示pathを使う。test、設定、文書、Prisma schema、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスの指定が無い場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
 
-親スキルが`list-changed`で確定したpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。pathが空なら外部ワーカーを呼ばず、対象なしとして返す。
+親スキルが選別済みのpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。明示された一覧が空なら外部ワーカーを呼ばず、対象なしとして返す。
 
 - `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
 - `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない
@@ -25,10 +25,10 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 
 ## 実行
 
-1. 現在のHEAD先頭12桁からtask-idを`nesting-<HEAD先頭12桁>`とし、親スキルが渡した検証済みの実変更pathだけを個別引数で渡す。次の固定形式で`nesting` modeを実行する。
+1. task-idを`nesting-<HEAD先頭12桁>-<今回の実行に固有なsuffix>`とし、親スキルが渡した本体コードのpathだけを個別引数で渡す。同じHEADで別scopeの検査や再試行を行う場合も、新しいtask-idを使って既存結果を保持する。次の固定形式で`nesting` modeを実行する。
 
    ```bash
-   bash [skills_root]/worker/delegate.sh nesting --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 10 --timeout-reason scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa nesting-<HEAD先頭12桁> <対象path>...
+   bash [skills_root]/worker/delegate.sh nesting --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 10 --timeout-reason scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa nesting-<HEAD先頭12桁>-<今回の実行に固有なsuffix> <対象path>...
    ```
 
 2. `result.json`とreportを読み、3段階以上の候補ごとにファイル、行、最大深さ、到達条件があることを上位モデルが確認する。workerの失敗・中断・対象外変更では候補なしと扱わず品質ゲートを失敗にする。候補がなければ「3段階以上の制御フローネストなし」として終了する。
