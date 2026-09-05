@@ -34,22 +34,27 @@ RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
 SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
 
 validate_direct_input() {
-  local path seen_paths
+  local path seen_paths cursor
   [ "${#INPUT_PATHS[@]}" -gt 0 ] || die "direct modeには明示pathが必要"
   seen_paths=$'\n'
   for path in "${INPUT_PATHS[@]}"; do
     case "$path" in
       ""|.|/*|../*|*/../*|*/..|*"$(printf '\t')"*) die "不正な個別file path: $path" ;;
-      *'*'*|*'?'*|*':') die "不正な個別file path: $path" ;;
+      *'*'*|*'?'*|*':'*) die "不正な個別file path: $path" ;;
+      ./*|*/./*|*//*) die "正規化された相対pathを指定すること: $path" ;;
       *$'\n'*|*$'\r'*) die "改行を含むpathは扱えない" ;;
     esac
     case "$seen_paths" in
       *$'\n'"$path"$'\n'*) die "direct modeの明示pathが重複している: $path" ;;
     esac
     seen_paths="${seen_paths}${path}"$'\n'
-    [ -e "$REPOSITORY/$path" ] || die "$path が存在しない"
-    [ ! -d "$REPOSITORY/$path" ] || die "direct modeはdirectoryではなく個別fileに限定する: $path"
+    [ -f "$REPOSITORY/$path" ] || die "$path は通常fileではない、または存在しない"
     [ ! -L "$REPOSITORY/$path" ] || die "$path はsymlinkなのでdirect modeの対象にできない"
+    cursor=$(dirname "$path")
+    while [ "$cursor" != "." ]; do
+      [ ! -L "$REPOSITORY/$cursor" ] || die "$path の親directoryがsymlink"
+      cursor=$(dirname "$cursor")
+    done
     if ! git ls-files --error-unmatch -- ":(literal)$path" >/dev/null 2>&1 && git check-ignore -q -- "$path"; then
       die "$path はignoredされている"
     fi
