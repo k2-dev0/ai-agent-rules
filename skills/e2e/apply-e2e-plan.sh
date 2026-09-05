@@ -9,6 +9,7 @@ DEST_DIR=".[agent_name]/e2e"
 DEST="$DEST_DIR/.e2e.md"
 
 [ -f "$SRC" ] || { echo "ERROR: draft not found: $SRC" >&2; exit 1; }
+[ -L ".[agent_name]" ] && { echo "ERROR: agent dir is a symlink" >&2; exit 1; }
 [ -L "$DEST_DIR" ] && { echo "ERROR: dest dir is a symlink: $DEST_DIR" >&2; exit 1; }
 [ -L "$DEST" ] && { echo "ERROR: dest is a symlink: $DEST" >&2; exit 1; }
 
