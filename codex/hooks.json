@@ -132,7 +132,7 @@
         ]
       },
       {
-        "matcher": "^(Agent|spawn_agent)$",
+        "matcher": "^(Agent|spawn_agent|collaborationspawn_agent)$",
         "hooks": [
           {
             "type": "command",
