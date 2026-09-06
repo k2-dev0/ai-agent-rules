@@ -11,7 +11,7 @@ check() {
   if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*" >&2; exit 1; fi
 }
 
-# AGENTSを増やさず、必要時に読むskill配下の規約参照が両配置で解決する。
+# 必要時に読む規約と、対応するメインだけが使うモデル選択基準を両配置で解決する。
 for agent in claude codex; do
   target="$TMP/$agent project"
   mkdir -p "$target/.$agent"
@@ -24,7 +24,9 @@ for agent in claude codex; do
   cp -R "$REPO/skills" "$target/$skill_root"
   (cd "$target" && bash "$skill_root/bootstrap/init-agent.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
-  check test "$(wc -l < "$target/AGENTS.md" | tr -d ' ')" = 2
+  check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
+  check test -s "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq 'ツールが利用できない環境と子エージェント' "$target/AGENTS.md"
   check test -n "$rule_paths"
   while IFS= read -r rule; do
     check test -s "$target/.$agent/rules/$rule"
