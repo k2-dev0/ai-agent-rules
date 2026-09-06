@@ -63,8 +63,10 @@ if [ "${1:-}" = "list-changed" ]; then
     done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$BASE" HEAD)
     exit 0
   fi
+  HAS_SCOPE_PATH=false
   while IFS= read -r path; do
     [ -n "$path" ] || continue
+    HAS_SCOPE_PATH=true
     validate_path "$path"
     if git diff --quiet --no-ext-diff "$BASE" HEAD -- ":(literal)$path"; then
       continue
@@ -78,6 +80,7 @@ if [ "${1:-}" = "list-changed" ]; then
       printf '%s\n' "$path"
     fi
   done < <(sed -n '3,$p' "$SCOPE_RECEIPT")
+  [ "$HAS_SCOPE_PATH" = true ] || die "開始receiptに対象pathが無い"
   exit 0
 fi
 
