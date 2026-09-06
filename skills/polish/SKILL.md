@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 対象として確定したコードだけを整形・静的検査・buildし、診断をscopeへ帰属させてからpath検査と`unwind`を通す。実装前baselineがある変更はpath完全性まで検証し、気軽な直接修正は同じ品質処理を維持したまま完全性だけ未検証と明示する。
 
-診断または`unwind`がコードの判断を伴う修正を要求した場合は、[上位モデルのレビューと下位モデルの再実装](../tdd/REVIEW_FLOW.md)を全文読み、大小判定、修正主体、再検証、最終レビューの正本とする。
+診断または`unwind`がコードの判断を伴う修正を要求した場合は、[上位モデルのレビューと下位モデルの再実装](../REVIEW_FLOW.md)を全文読み、大小判定、修正主体、再検証、最終レビューの正本とする。
 
 ## モード
 
@@ -63,13 +63,7 @@ polish自体はtest commandを追加実行しない。`schema.prisma`、basename
 
 ## 診断のscope帰属
 
-各commandの終了codeだけでpolishの成否を決めず、diagnosticごとに次へ分類する。
-
-- 実変更path自体、または変更した公開型・export・契約との直接の因果関係を確認できる失敗は`scope-related`
-- 無関係な未変更file、今回作成・変更していないignored / untracked test、checkout前のbranchの残留testが消えた実装を参照する失敗は`unrelated`
-- 因果関係を確定できない失敗は`uncertain`
-
-`scope-related`だけを修正と再検証の対象にする。自動修正ではないコード修正は`REVIEW_FLOW.md`で大小を判定し、小さい問題だけ上位モデルが直接修正する。大きい問題は下位モデルをeffort `max`で起動し、診断、期待する不変条件、修正方針、変更禁止範囲、必要なtest commandを渡す。承認範囲内の修正を尽くしても残る場合は`scope fail`として返す。`unrelated`はファイルを修正・削除せず、command、diagnostic、対象外と判断した根拠を返して後続へ進む。`uncertain`は推測で成功または失敗に倒さず返す。どの分類もユーザーの完了マーク判断を代行しない。
+[レビューフローの診断のscope帰属](../REVIEW_FLOW.md#診断のscope帰属)を読み、各commandのdiagnosticを分類する。自動修正ではないコード修正も、同じ文書の大小判定と修正ループに従う。
 
 ## 制御フローネストの品質ゲート
 
