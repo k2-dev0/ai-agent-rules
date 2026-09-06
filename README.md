@@ -113,11 +113,16 @@ $bootstrap codex
 | 3段以上の制御フローネスト候補の抽出 | 外部worker | 上位モデルが確認済みの変更production pathだけを読み取る。変更要否は判断しない |
 | 差分・QA候補の採否、大小判定、小修正、テスト、最終レビュー、Git | Codex / Claude Code | 上位モデルが行う。大きい問題は修正briefを下位モデルへ戻す |
 
-`tdd`と`errand`では上位モデルが直接コードベースを調べ、確認済み事実、`path:line`、直接関係するtest・検証commandを確定する。調査結果はfresh contextのimplementer一体へ自然文で渡す。下位モデルに探索範囲、要件解釈、設計判断を補わせない。
+共通契約は`skills/`直下に置き、各スキルとagent定義から参照する。同じ判断基準を各フローへ書き写さず、次の正本を更新する。
 
-implementerは初回実装と各再実装で一体だけをfresh context・effort `max`で起動し、並列に動かさない。想定変更先は探索の起点であり、exact書き込み認可リストではない。active scope、session owner、lease、quoted reader、handoff / recoverも使わない。安全境界はRed後のclean worktree、Git・外部通信を指示で禁止し、上位モデル指定のtestだけを実行するimplementer、設定・秘密情報・lockfile・migration・Git管理領域を守る既存hook、上位モデルによる全実差分レビューと独立したGreenで構成する。
+| 正本 | 管理する内容 |
+|---|---|
+| [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 設計・実装・レビューの共通判断と、言語別規約への入口 |
+| [IMPLEMENTER_CONTRACT.md](skills/IMPLEMENTER_CONTRACT.md) | Claude / Codexの実装役が行う作業、変更境界、検証・報告 |
+| [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | tdd / errandの調査、シナリオ選択、Red、委譲、Greenの順序 |
+| [REVIEW_FLOW.md](skills/REVIEW_FLOW.md) | 差分検証、診断の帰属、修正担当の判定、再実装・最終レビュー |
 
-`errand`と`tdd`は`skills/tdd/SCENARIO_FLOW.md`の`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review`を共有する。implementerには全要件、確認済み事実、test_scenarios、Red要約、想定変更先、変更禁止カテゴリを自然文で渡す。test_scenariosはテスト範囲だけを表し、実装範囲を狭めない。大小判定は`skills/tdd/REVIEW_FLOW.md`を正本とし、「1ファイル・差分10行以下・修正が一意・ロジックや契約を変えない」の全条件を満たす指摘だけを上位モデルが直接修正する。それ以外は下位モデルが再実装し、上位モデルが再レビュー・テスト・最終レビューする。
+`tdd`は設計書の選択とpolish・完了処理、`errand`は依頼の適用範囲と限定検証を追加する。設計書の記法・必須情報・圧縮範囲は[cowlickの設計書形式](skills/cowlick/DESIGN_FORMAT.md)で管理する。agent定義にはモデル・ツールと共有契約の読み込み指示を残し、読み取りtoolの違いは各製品の定義で扱う。
 
 `meeting`、`preflight`、`cowlick`、`ponytail`のコードベース調査も上位モデルが直接行う。`ponytail`は同じ会話内で設計書を読み直すため、過去の文脈が隔離されるとは主張しない。preflight / cowlickの結論を根拠として流用せず、現在の`.prompt.md`と参照設計書を要件契約とし、適用規約と既存実装を再確認する。設計書だけでは目的、対象機能、要求、Changes、完了条件を特定できない場合は、過去の文脈で補完せず`blocked`とする。
 
@@ -222,7 +227,7 @@ Huygens等はUI用のnicknameで、roleとは別である。実際のログで�
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、`daresuma-readonly`を明示したAWS CLI、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
-| TDD / errandの上位モデル直接調査・レビューと下位モデル初回実装・再実装 | `skills/tdd/SCENARIO_FLOW.md`、`skills/tdd/REVIEW_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
+| TDD / errandの上位モデル直接調査・レビューと下位モデル初回実装・再実装 | `skills/SCENARIO_FLOW.md`、`skills/REVIEW_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
 | 変更production pathのネスト候補抽出 | `skills/worker/delegate.sh nesting`と`skills/{unwind,polish}/SKILL.md`。候補の採否は上位モデルが行う |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
 | polishのpath検査 | `quality-gate.sh <機能名> -- <実変更path>...`はreceiptと完全一致を検証するverified mode。`--direct-check` / `--direct`は通常の直接修正で明示pathだけを検査し、完全性を`scope-unverified`とする |
