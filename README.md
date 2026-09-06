@@ -178,9 +178,11 @@ Huygens等はUI用のnicknameで、roleとは別である。実際のログで�
 
 ## 承認の挙動
 
-承認の有無は「書き込みかどうか」だけで決めない。workspace sandbox内で完結し、既存内容を失わない可逆操作は自動化する。既存ファイルの上書き・metadata変更・削除、保護対象への変更、外部通信は確認または禁止へ倒す。
+新規作成とmetadata変更は、workspace sandbox内で自動実行する。shellによる既存ファイルの内容変更は、変更差分を確認できないため禁止する。削除、保護対象への変更、外部通信は、それぞれの確認・禁止規約に従う。
 
-このため、通常ファイルと `.[agent_name]/prompt/` への構造化された Edit / `apply_patch`、新規ファイルの Write、空ディレクトリを作る `mkdir` は自動実行する。一方、既存ファイルの全面Writeと、対象や上書きをcommand文字列だけから完全には判定できない汎用shell writerは確認する。
+通常ファイルと `.[agent_name]/prompt/` の内容変更は、差分が見える Edit / `apply_patch`を使う。shellでコピーする場合は `cp -n -- SOURCE DEST` とし、既存の宛先を上書きしない。新しいテキストの作成はWriteを使える。`>`・`>>`による通常ファイルへの出力は、新規かどうかを実行前の存在確認だけでは保証できないため拒否する（`/dev/null`への出力は除く）。
+
+このhookが検査するのは直接呼び出したshell commandであり、任意のスクリプト内部の全副作用を証明する仕組みではない。テスト・formatter・配布用の固定スクリプトは、従来どおりレビューされた実行入口を使う。上書きを隠すために別スクリプトを作って迂回してはいけない。
 
 両エージェントで共通化している主な挙動:
 
@@ -196,7 +198,9 @@ Huygens等はUI用のnicknameで、roleとは別である。実際のログで�
 | 単一のAWS CLI commandで`--profile daresuma-readonly`または`--profile=daresuma-readonly`を明示する | ✅ service / actionを限定せず自動 |
 | `package.json` / CI / migration file / Docker / Terraform を書き換える | 🙋 確認 |
 | `schema.prisma`を書き換え、`prisma format` / `validate` / `generate`を実行する | ✅ 自動 |
-| shellでファイル作成・上書き・metadata変更する（`cp` `touch` `chmod` `sed -i` 等） | 🙋 確認 |
+| shellで新規作成する（`touch`、`cp -n -- SOURCE DEST`、`ln [-s] -- SOURCE DEST`） | ✅ 自動。既存の宛先は置換しない |
+| metadataを変更する（`touch` `chmod` `chown` `chgrp`） | ✅ 自動 |
+| shellで内容を変更する（上書き可能な`cp`・`mv`、`sed -i`、`tee`、`>`・`>>`等） | 🚫 拒否。承認では解除せずEdit / `apply_patch`を使う |
 | ファイルを消す（`rm`等） | 🙋 確認 |
 | localhost を含むサーバーへ HTTP request を送る | 🙋 sandbox 外で確認 |
 | `commit-subject.sh` が生成・検証する契約に従うコミット | ✅ 自動 |
@@ -214,7 +218,7 @@ Huygens等はUI用のnicknameで、roleとは別である。実際のログで�
 |---|---|---|
 | localhost を含むHTTP request | sandbox外承認 | permission profileのnetwork無効化によりsandbox外承認 |
 | `package.json` / CI / migration 等のpath単位確認 | settingsとEdit / Write / NotebookEditのhookでask | rulesのpromptで1回限りの変更tokenを発行 |
-| 既存ファイルの全面Write | `overwrite.sh`でask | `apply_patch`は部分差分。opaque shellはrulesでprompt |
+| 既存ファイルの全面Write | `overwrite.sh`でask | `apply_patch`で差分編集 |
 | 設定・skillの更新 | sandbox除外済み固定スクリプト | rulesでallowした固定スクリプト |
 | local ESLint（`yarn eslint`） | 既定確認 | rulesの固定prefixで自動 |
 | MCPの未登録tool | Claudeの既定確認 | `default_tools_approval_mode = "prompt"` |
@@ -228,6 +232,7 @@ Huygens等はUI用のnicknameで、roleとは別である。実際のログで�
 | Codexのcommand単位の許可 / 確認 / 禁止 | `codex/rules/default.rules` |
 | Codexのhook eventと実行timeout | `codex/hooks.json` |
 | 単一読み取りcommand、`daresuma-readonly`を明示したAWS CLI、stderrの`/dev/null`破棄の安全な除去、複合shell・危険optionの拒否 | `hooks/shell/readonly-search.sh` |
+| shellの内容変更・redirectを拒否し、コピー・移動にno-clobberを要求する | `hooks/shell/shell-file-write.sh`。`sed`は行抽出だけを許可 |
 | TDD / errandの上位モデル直接調査・レビューと下位モデル初回実装・再実装 | `skills/SCENARIO_FLOW.md`、`skills/REVIEW_FLOW.md`、`claude/agents/implementer.md`、`codex/agents/implementer.toml` |
 | 変更production pathのネスト候補抽出 | `skills/worker/delegate.sh nesting`と`skills/{unwind,polish}/SKILL.md`。候補の採否は上位モデルが行う |
 | 実装前baselineとpolish対象の自動列挙 | `skills/polish/capture-scope.sh <機能名> --auto`と`list-changed`。書き込み認可には使わない |
