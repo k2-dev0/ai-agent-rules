@@ -30,7 +30,7 @@
 
 1. 挙動を変える本体実装ではTDDを使う。上記の明示的なtest除外、文書・設定・書式だけの変更には適用せず、変更に必要な検証を行う。
   - Red → Green → Refactor の順序を厳守する
-  - TDD対象ではRedとGreenを確認する。`tdd` / `errand`を使う場合は共通の`SCENARIO_FLOW.md`に従う。
+  - TDD対象ではRedとGreenを確認する。`tdd` / `errand`を使う場合は`[skills_root]/SCENARIO_FLOW.md`を読み、共通フローに従う。
 2. 1 テスト 1 アサーションを原則とする
 3. describe のネストは 2 階層までとする
 4. API 関数のテストでは Prisma のモックではなくテスト用 DB を使用する
