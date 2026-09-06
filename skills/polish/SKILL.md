@@ -11,6 +11,16 @@ disable-model-invocation: true
 
 診断または`unwind`がコードの判断を伴う修正を要求した場合は、[上位モデルのレビューと下位モデルの再実装](../REVIEW_FLOW.md)を全文読み、大小判定、修正主体、再検証、最終レビューの正本とする。
 
+## 実装前baseline
+
+実装workflowの呼び出し元は、Red用testをコミットしてworktreeがcleanになった後、実装開始直前に次を一度実行する。
+
+```bash
+bash [skills_root]/polish/capture-scope.sh <scope名> --auto
+```
+
+現在HEADを検証範囲の基準として記録する。実装役の書き込み権限を変更する処理ではない。
+
 ## モード
 
 開始時に一つだけ選び、途中で黙って切り替えない。
