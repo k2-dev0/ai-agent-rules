@@ -16,13 +16,7 @@
 
 ## 0. [agent_name]が直接調査する
 
-最初に次を実行し、Claude CodeとCodexの専用`implementer`定義を検査する。
-
-```bash
-bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
-```
-
-要求根拠にある識別子、path、番号、固有名詞から、現在の対象、最寄りの同型実装、schema・test・route、直接使える検証commandを[agent_name]がRead・Grep・Globまたは読み取り専用shell commandで確認する。下位モデル、surveyor subagent、外部workerへ調査を委任しない。
+要求根拠にある識別子、path、番号、固有名詞から、現在の対象、最寄りの同型実装、schema・test・route、直接使える検証commandを[agent_name]が直接確認する。下位モデル、surveyor subagent、外部workerへ調査を委任しない。
 
 調査は要求判断を直接支える最小範囲から始め、根拠の`path:line`、想定変更先、直接関係するtest・検証command、未確認事項を保持する。事実と推測を分け、存在を確認できない実装やtestをあるものとして扱わない。必須事実が不足する場合は[agent_name]が追加調査し、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
@@ -69,15 +63,9 @@ bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 - 最初からGreenなら、テストが要求を検出できるか確認する
 - シナリオの変更が必要ならStep 1へ戻して再承認する
 
-追跡対象のテストをコミットし、ユーザー由来のdirty fileがないことを確認してから、native implementer起動直前に次を1回実行する。
+追跡対象のテストをコミットし、ユーザー由来のdirty fileがないことを確認する。実装直前に[polishの実装前baseline](polish/SKILL.md#実装前baseline)をscope名で記録する。worktreeがcleanでなければ実装を開始せず停止する。ignore規則に一致するローカルtestはdirty判定に含めない。
 
-```bash
-bash [skills_root]/polish/capture-scope.sh <scope名> --auto
-```
-
-これは現在HEADをpolish用baselineとして記録するだけで、subagentの書き込みを認可・拒否しない。worktreeがcleanでなければ共有worktreeへwriterを起動せず停止する。ignore規則に一致するローカルtestはdirty判定に含めない。
-
-## 4. native implementerへ初回実装を委任する
+## 4. implementerへ初回実装を委任する
 
 機械検証用JSONやworker artifactを作らず、次を一つの実装briefとして渡す。
 
@@ -92,13 +80,7 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 
 test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭めない。
 
-専用定義を選択できるnative APIで、Codexは`agent_type: "implementer"`、Claude Codeは`subagent_type: "implementer"`を明示する。Codexは現在のAPIが受け付ける`fork_context: false`または`fork_turns: "none"`でfresh contextにし、modelとeffortは専用定義のLuna / maxを使う。`task_name`だけをimplementerにした汎用agent、default/workerへのmodel上書き、指示本文のコピーによる代用は禁止する。現在のtoolにrole選択欄が無ければ、利用可能なnative toolを探し、それでも専用定義を選べなければ実装を委任しない。
-
-起動前に親タスクの実効権限がworkspaceへの書き込みを許可していることを確認する。親がread-onlyまたはplanなら、専用定義のworkspace-writeで解除できると思って起動しない。権限が必要であることを親側で一度報告し、ユーザーが親タスクの権限を変更するまで委任を保留する。global設定の書き換えやsandbox無効化で代用しない。
-
-`implementer` subagentを一体だけforegroundで起動して完了まで待つ。待機にはAPIが返したchild agent ID、または待機先として扱えるtask pathを使う。wait先が空、または専用agent定義を選択できない場合は成功扱いにせず、代替writerを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。
-
-`agent_role`でimplementerを識別する。戻り値にroleが含まれなければ、子のmetadataまたは保存された実行記録で確認し、表示名から推測しない。Huygensなどの`agent_nickname`はUI用の別名で、別roleや別の性能設定を意味しない。ユーザーへの報告は「implementer（表示名: Huygens）」のようにroleを先に示す。roleや実効権限が要求と違えば編集前に止める。
+上記briefを専用implementer一体へ渡し、完了を待ってからStep 5へ進む。起動と待機は[implementerの呼び出し方](IMPLEMENTER_LAUNCH.md)に従う。起動できない場合は代替の実装役へ切り替えず、原因を報告する。
 
 ## 5. 相談・無変更・中断を処理する
 
