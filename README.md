@@ -63,9 +63,9 @@ Codex 0.138.0 以上を前提とする。次の対応を崩さずに配置する
 
 配置後は次の順序で有効化する。
 
-1. `setup-agent`で配置し、`__CONTEXT_DICTIONARY_ROOT__`をlocalの`context-dictionary`実pathへ解決する。手動配置では同じplaceholderを実pathへ置換する。
+1. `setup-agent`で配置する。初回・`--update`とも、context-dictionaryのlocal実pathと`[agent_name]` / `[skills_root]`を自動で解決し、検証後にbootstrapを削除してからエージェントを起動する。起動省略時も初期化までは完了し、初期化失敗時は起動しない。手動配置では`__CONTEXT_DICTIONARY_ROOT__`を実pathへ置換する。
 2. Codex の対話セッションを対象リポジトリで開き、project を trusted にする。未信頼では project-local の config / hooks / rules がすべて無視される。
-3. `$bootstrap codex` を実行し、placeholder（`[agent_name]` / `[skills_root]`）を解決する。成功後、配置先のbootstrap skillは自己削除される。配布rulesは正確な bootstrap コマンドだけをsandbox外でallowする。
+3. **手動配置の場合だけ**`$bootstrap codex`を実行し、placeholderを解決する。成功後、配置先のbootstrap skillは自己削除される。`setup-agent`を使った場合、この操作は不要。
 4. `/hooks` を開き、**bootstrap 実行後の現在のhook定義**をレビューして信頼する。hookは内容変更でhashが変わるたび再レビューが必要になる。
 5. Codexを再起動し、config / rules / hooks / skillsを新しいセッションで読み直す。context-dictionaryの`search` / `get`は自動承認、`upsert` / `follow_up`は毎回確認する。
 
@@ -88,9 +88,9 @@ Claude Code は次の対応で配置する。MCP の共有設定だけは `.clau
 | `e2e/` | `<repo>/.claude/e2e/` |
 | `skills/` | `<repo>/.claude/skills/` |
 
-`setup-agent`は`claude/.mcp.json`をproject rootへ配置し、`context-dictionary`のlocal実pathを反映する。配置後にprojectをtrustし、`.mcp.json`のSerenaとcontext-dictionaryを承認してから`/bootstrap claude`を実行する。contextの読み取りtoolだけを自動許可し、書き込みtoolは毎回確認する。
+`setup-agent`は`claude/.mcp.json`をproject rootへ配置し、`context-dictionary`のlocal実pathを反映する。初回・`--update`ともbootstrapの初期化処理を自動で完了させてから起動するため、スキルの手動実行は不要。配置後にprojectをtrustし、`.mcp.json`のSerenaとcontext-dictionaryを承認する。contextの読み取りtoolだけを自動許可し、書き込みtoolは毎回確認する。
 
-対象エージェントに応じた呼び出し形式:
+手動配置した場合のbootstrap呼び出し形式:
 
 ```
 # claude
