@@ -15,7 +15,7 @@
 | ID | 優先度 | 修正前の事実と影響 | 修正・根拠となるファイル |
 |---|---|---|---|
 | F01 | P2 | 規約が独立したMarkdownとして置かれ、必要な作業で読み込む導線がなかった | AGENTS.mdは元の2行を維持。[skills/IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md)から対象別規約へ案内。設計・実装・レビューskillから参照し、対象コード初回編集時は既存hookが資料を一度注入する |
-| F02 | P2 | 共通フローがtask名implementerとLuna/maxの指定に依存し、専用role選択を明記していなかった | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md)でCodexのagent_type、Claudeのsubagent_typeにimplementerを指定。[require-implementer.sh](hooks/shell/require-implementer.sh)でTDD/errand中の汎用agent起動を拒否。指示本文コピーによる代用も廃止 |
+| F02 | P2 | 専用roleの指定が文言に依存。既存hookにもモデル上書き検査がなく、Codex 0.153.4の実機で届くcollaborationspawn_agentがmatcherから漏れていた | [require-implementer.sh](hooks/shell/require-implementer.sh)へ起動引数・専用定義・共通契約の検査を統合し、[codex/hooks.json](codex/hooks.json)を実測したtool名へ対応。手動preflightを削除し、呼び出し詳細は[IMPLEMENTER_LAUNCH.md](skills/IMPLEMENTER_LAUNCH.md)へ分離。登録matcherを通す回帰テストを追加 |
 | F03 | P2 | 一度しか使わない関数を例外なく禁止する一方、複数使用ならutils.ts、5行以上のJSXならcomponentという機械的分割を要求していた | [function-pattern.md](rules/typescript/function-pattern.md)、[ui-pattern.md](rules/typescript/ui-pattern.md)を実際の利用箇所・責務・インライン案との比較へ変更 |
 | F04 | P2 | yup、modules内のutility、dayjs入口、@frontのpathなどを実在確認なしに要求していた | [validation-pattern.md](rules/typescript/validation-pattern.md)、[date-pattern.md](rules/typescript/date-pattern.md)、UI規約で、対象packageの依存・export・既存例を確認するよう変更。規約だけを理由に依存やwrapperを追加しない |
 | F05 | P2 | 過剰実装を避ける一般指示はあったが、テスト用Client注入、内部値の重複防御、ファイル名とexportの不一致を採否へ結び付けていなかった | 両[implementer](codex/agents/implementer.toml)と共通実装・レビュー工程へ、外部境界と内部保証の区別、実際のconsumer、配置・命名の既存例を追加。構造とテストを別判定 |
