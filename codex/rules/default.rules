@@ -85,21 +85,37 @@ prefix_rule(
     justification = "共有hookがstage件数・対象名・日本語メッセージを検証するため、契約準拠commitを許可します。",
 )
 
-# option無しでも既存ファイルの内容・metadataを変え得るcommandは、対象を確認してから実行する。
-# mkdirはworkspace sandbox内で空ディレクトリを作るだけなので確認対象にしない。固定スクリプトは
-# 上の限定allowに一致するため、内部実装のcp等まで個別承認にはならない。
+# metadata変更と上書きしない作成は自動化する。shell-file-write hookがredirectと
+# 上書き可能なoptionを拒否する。固定スクリプトの内部処理は個々のscriptのレビュー対象。
 prefix_rule(
-    pattern = [["cp", "install", "rsync", "touch", "chmod", "chown", "chgrp", "ln", "patch"]],
-    decision = "prompt",
-    justification = "filesystemへの作成・上書き・metadata変更の対象を確認してから実行します。",
-    match = [
-        "cp source.txt target.txt",
-        "chmod +x script.sh",
-    ],
-    not_match = [
-        "cat source.txt",
-        "find src -type f -print",
-    ],
+    pattern = [["touch", "chmod", "chown", "chgrp"]],
+    decision = "allow",
+    justification = "新規作成とmetadata変更は内容の上書きを伴わないため自動実行します。",
+)
+prefix_rule(
+    pattern = ["cp", "-n", "--"],
+    decision = "allow",
+    justification = "既存ファイルを上書きしないコピーを許可します。",
+)
+prefix_rule(
+    pattern = ["ln", "--"],
+    decision = "allow",
+    justification = "既存の宛先を置換しないリンク作成を許可します。",
+)
+prefix_rule(
+    pattern = ["ln", "-s", "--"],
+    decision = "allow",
+    justification = "既存の宛先を置換しないsymlink作成を許可します。",
+)
+prefix_rule(
+    pattern = ["install", "-d"],
+    decision = "allow",
+    justification = "ディレクトリ作成とmetadata設定を許可します。",
+)
+prefix_rule(
+    pattern = [["dd", "truncate", "tee", "patch", "rsync"]],
+    decision = "forbidden",
+    justification = "shellによるファイル内容の上書きは禁止です。Edit / apply_patchを使ってください。",
 )
 
 prefix_rule(
@@ -125,27 +141,12 @@ prefix_rule(
 prefix_rule(
     pattern = ["mv"],
     decision = "prompt",
-    justification = "移動による上書きや参照切れがないことを確認します。",
-)
-prefix_rule(
-    pattern = ["dd"],
-    decision = "prompt",
-    justification = "低水準の上書き対象を確認します。",
-)
-prefix_rule(
-    pattern = ["truncate"],
-    decision = "prompt",
-    justification = "ファイル内容を失う操作なので対象を確認します。",
-)
-prefix_rule(
-    pattern = ["tee"],
-    decision = "prompt",
-    justification = "出力先ファイルの上書き可否を確認します。",
+    justification = "hookで上書きを拒否したうえで、移動による参照切れがないことを確認します。",
 )
 prefix_rule(
     pattern = ["sed", "-i"],
-    decision = "prompt",
-    justification = "in-place編集の対象を確認します。",
+    decision = "forbidden",
+    justification = "shellでのin-place編集は禁止です。Edit / apply_patchを使ってください。",
 )
 
 # redirection・変数展開・wildcard・control flow を含むscriptはCodexが個別コマンドへ
