@@ -337,6 +337,11 @@ fi
 if bash .claude/skills/bootstrap/init-agent.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
+if [ -f .claude/skills/MODEL_SELECTION.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq 'ツールが利用できない環境と子エージェント' AGENTS.md; then
+  ok "モデル選択基準: Claude配置と非対応環境の除外"
+else
+  ng "モデル選択基準: Claude配置または適用境界が不正"
+fi
 [ -f .claude/agents/implementer.md ] && grep -q '^model: claude-sonnet-5$' .claude/agents/implementer.md && grep -q '^effort: max$' .claude/agents/implementer.md && ok "bootstrap claude はimplementer定義を保持" || ng "bootstrap claude のimplementer定義が不正"
 IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{subagent_type:"implementer"}}')
 if [ -z "$(printf '%s' "$IMPLEMENTER_INPUT" | bash .claude/hooks/shell/require-implementer.sh)" ]; then ok "Claude implementer hook: 正常配置を受理"; else ng "Claude implementer hook: 正常配置を拒否"; fi
@@ -627,6 +632,11 @@ git init -q
 if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
+if [ -f .agents/skills/MODEL_SELECTION.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq 'switch_main_model' AGENTS.md; then
+  ok "モデル選択基準: Codex配置と正本への参照"
+else
+  ng "モデル選択基準: Codex配置または正本参照が不正"
+fi
 [ -f .codex/agents/implementer.toml ] && grep -q '^model = "gpt-5.6-luna"$' .codex/agents/implementer.toml && grep -q '^model_reasoning_effort = "max"$' .codex/agents/implementer.toml && ok "bootstrap codex はimplementer定義を保持" || ng "bootstrap codex のimplementer定義が不正"
 IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:"implementer",fork_turns:"none"}}')
 if [ -z "$(printf '%s' "$IMPLEMENTER_INPUT" | bash .codex/hooks/shell/require-implementer.sh)" ]; then ok "Codex implementer hook: 正常配置を受理"; else ng "Codex implementer hook: 正常配置を拒否"; fi
