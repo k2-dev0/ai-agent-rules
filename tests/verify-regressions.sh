@@ -18,6 +18,7 @@ for agent in claude codex; do
   cp "$REPO/AGENTS.md" "$target/AGENTS.md"
   cp -R "$REPO/rules" "$target/.$agent/rules"
   cp -R "$REPO/hooks" "$target/.$agent/hooks"
+  cp -R "$REPO/$agent/agents" "$target/.$agent/agents"
   if [ "$agent" = codex ]; then skill_root=.agents/skills; else skill_root=.claude/skills; fi
   mkdir -p "$target/$(dirname "$skill_root")"
   cp -R "$REPO/skills" "$target/$skill_root"
@@ -67,7 +68,12 @@ output=$(printf '%s' "$input" | bash -c "$command")
 check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
 check test -z "$(printf '%s' "$input" | bash -c "$command")"
 
-# nicknameではなく専用roleを選ぶ。親がread-onlyなら編集を繰り返す前に拒否する。
+# 登録済みhookを通し、誤ったrole・モデル上書き・専用定義の不整合を起動前に拒否する。
+implementer_denied() {
+  local output
+  output=$(printf '%s' "$1" | bash -c "$command")
+  printf '%s' "$output" | jq -e --arg reason "$2" '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains($reason))' >/dev/null
+}
 for agent in claude codex; do
   cd "$TMP/$agent project"
   [ -d .git ] || git init -q
@@ -81,6 +87,13 @@ for agent in claude codex; do
   fi
   command=$(jq -r '.hooks.PreToolUse[].hooks[].command | select(contains("require-implementer.sh"))' "$settings")
   check test -n "$command"
+  # Codex 0.153.4の実機ではnamespaceが連結され、Agent aliasも付かない。
+  # commandだけを直接実行する試験では、このmatcher漏れを検出できない。
+  if [ "$agent" = codex ]; then names='Agent spawn_agent collaborationspawn_agent'; else names=Agent; fi
+  for tool_name in $names; do
+    matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $matcher | select($name | test($matcher)) | .hooks[].command | select(contains("require-implementer.sh"))' "$settings")
+    check test "$matched" = "$command"
+  done
   if [ "$agent" = claude ]; then command="$command workflow"; fi
   input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"ROLE1",cwd:$cwd,tool_name:"spawn_agent",permission_mode:"default",tool_input:{task_name:"implementer",model:"gpt-5.6-luna",reasoning_effort:"max"}}')
   output=$(printf '%s' "$input" | bash -c "$command")
@@ -89,7 +102,45 @@ for agent in claude codex; do
   input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="worker"')
   output=$(printf '%s' "$input" | bash -c "$command")
   check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
-  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="implementer"')
+  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input = {($key):"implementer"}')
+  if [ "$agent" = codex ]; then input=$(printf '%s' "$input" | jq '.tool_input.fork_turns="none"'); fi
+  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  for field in model reasoning_effort model_reasoning_effort effort thinking; do
+    invalid=$(printf '%s' "$input" | jq --arg field "$field" '.tool_input[$field]="other-model-or-effort"')
+    check implementer_denied "$invalid" 'モデル・effortは専用定義'
+  done
+  invalid=$(printf '%s' "$input" | jq '.tool_input.resume="old-agent"')
+  check implementer_denied "$invalid" 'resume'
+  invalid=$(printf '%s' "$input" | jq '.tool_input.run_in_background=true')
+  check implementer_denied "$invalid" 'background'
+  if [ "$agent" = codex ]; then
+    invalid=$(printf '%s' "$input" | jq 'del(.tool_input.fork_turns)')
+    check implementer_denied "$invalid" 'fork_context'
+    invalid=$(printf '%s' "$input" | jq '.tool_input.fork_turns="all"')
+    check implementer_denied "$invalid" 'fork_context'
+    invalid=$(printf '%s' "$input" | jq '.tool_input.fork_context=true')
+    check implementer_denied "$invalid" 'fork_context'
+    alternative=$(printf '%s' "$input" | jq 'del(.tool_input.fork_turns) | .tool_input.fork_context=false')
+    check test -z "$(printf '%s' "$alternative" | bash -c "$command")"
+    definition=.codex/agents/implementer.toml
+    model_line='model = "gpt-5.6-luna"'
+    effort_line='model_reasoning_effort = "max"'
+  else
+    definition=.claude/agents/implementer.md
+    model_line='model: claude-sonnet-5'
+    effort_line='effort: max'
+  fi
+  cp "$definition" "$TMP/implementer-original"
+  # 正しい設定を本文へ残しても、実際の設定欄が違えば通らない。
+  sed 's/^model[: =].*/model: wrong-model/' "$TMP/implementer-original" > "$definition"
+  printf '\n%s\n' "$model_line" >> "$definition"
+  check implementer_denied "$input" '定義の model '
+  sed 's/^model_reasoning_effort = "max"/model_reasoning_effort = "low"/; s/^effort: max/effort: low/' "$TMP/implementer-original" > "$definition"
+  check implementer_denied "$input" '必要な設定'
+  # 同じキーの重複も、どちらか一方だけを見て成功扱いにしない。
+  awk -v line="$effort_line" '{ print; if ($0 == line) print }' "$TMP/implementer-original" > "$definition"
+  check implementer_denied "$input" '必要な設定'
+  cp "$TMP/implementer-original" "$definition"
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
   input=$(printf '%s' "$input" | jq '.permission_mode="plan"')
   output=$(printf '%s' "$input" | bash -c "$command")
