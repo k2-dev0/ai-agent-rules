@@ -119,6 +119,7 @@ $bootstrap codex
 |---|---|
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 設計・実装・レビューの共通判断と、言語別規約への入口 |
 | [IMPLEMENTER_CONTRACT.md](skills/IMPLEMENTER_CONTRACT.md) | Claude / Codexの実装役が行う作業、変更境界、検証・報告 |
+| [IMPLEMENTER_LAUNCH.md](skills/IMPLEMENTER_LAUNCH.md) | 親から専用実装役を呼び出す際のAPI指定・待機・識別方法 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | tdd / errandの調査、シナリオ選択、Red、委譲、Greenの順序 |
 | [REVIEW_FLOW.md](skills/REVIEW_FLOW.md) | 差分検証、診断の帰属、修正担当の判定、再実装・最終レビュー |
 
@@ -158,7 +159,7 @@ API keyには40 USD以下の月次またはリセットなしhard limitを設定
 
 AGENTS.mdは全行動へ共通する短い指示だけにする。配置・命名・インライン化などの判断基準は`skills/IMPLEMENTATION_RULES.md`へ置き、設計・実装・レビューskillが必要時に読む。TypeScript/JavaScript/Prismaの初回編集では、既存の`load-required-contract.sh`がこの資料を一度注入して編集を止め、規約を反映した再試行へ進める。秘密情報・設定・lockfile等の操作禁止は専用hookが強制し、AGENTSへの注意書きで代用しない。
 
-Codexの実装委任は専用定義を選べるnative APIの`agent_type: "implementer"`、Claudeは`subagent_type: "implementer"`を指定する。汎用agentのtask名だけを変えたり、Luna/maxの指定だけで代用したりしない。TDD/errand中の誤ったroleは`require-implementer.sh`が起動前に拒否する。
+実装役の呼び出し方は[IMPLEMENTER_LAUNCH.md](skills/IMPLEMENTER_LAUNCH.md)へ集約する。`require-implementer.sh`はTDD/errand中の誤ったroleに加え、専用implementerへのモデル・effort上書き、専用定義の不整合、共通契約の欠落を起動前に拒否する。Codexはfresh contextの明示も検査する。設定検査をhookへ統合したため、旧`skills/tdd/preflight-implementer.sh`は配布先から削除する。
 
 Huygens等はUI用のnicknameで、roleとは別である。実際のログでもHuygensのroleはimplementer、Luna/maxだった。親のread-onlyが継承されていたことが承認増加に直結する。専用定義のworkspace-writeが親の実行時権限を解除するとは考えない。hookで分かるplan/read-onlyでは起動を止め、親側で権限を一度確認する。nicknameを変える目的でagentを再起動しない。根拠は[Codexのsubagent仕様](https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls)。hookは起動後のSubagentStartでは停止できないため、起動前のPreToolUse（Agent）で検査する。[hookの対応範囲](https://learn.chatgpt.com/docs/hooks#tool-coverage)。
 
