@@ -1,19 +1,18 @@
 # シナリオ駆動の共通実装フロー
 
-`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書を上位モデルの調査・シナリオ・テスト、下位implementerの初回実装と再実装、上位モデルのレビューの正本とする。
+`tdd`と`errand`は、調査後の実装をこの契約へ集約する。呼び出し元のSKILL.mdが入力範囲と停止条件を決め、この文書は調査、シナリオ選択、Red、初回実装、レビューへの引き渡し、Greenの順序を定める。
 
-初回実装後の修正主体、問題の大小判定、再実装、最終レビューは[上位モデルのレビューと下位モデルの再実装](REVIEW_FLOW.md)を全文読み、正本とする。
+初回実装後の差分検証、修正主体の判定、再実装、最終レビューは[レビューフロー](REVIEW_FLOW.md)を正本とし、Step 6で読む。この文書では工程の順序と実行する検証を定める。
 
 ## 呼び出し元が渡すもの
 
 | 入力 | `tdd` | `errand` |
 |---|---|---|
 | 要求根拠 | 承認済み設計書と上位モデルが確認した事実 | ユーザー依頼と上位モデルが確認した事実 |
-| implementerへの入力 | 全要件、確認済み事実、test_scenarios、Red、想定変更先 | 全要件、確認済み事実、test_scenarios、Red、想定変更先 |
 | scope名 | 設計書の機能名 | 呼び出し元が固定するASCII kebab-case名 |
 | 実装後の追加処理 | polishと必要ならindex更新 | 呼び出し元が定めた限定検証と完了報告 |
 
-想定変更先は調査とレビューの起点であり、書き込み認可リストではない。要件内で別のproduction fileが必要だと判明した場合、implementerは変更してよい。親が共有worktreeの実差分を全件レビューし、test/spec、fixture、設定、migration、依存関係、lockfile、agent設定、設計資産、Git管理ファイルへの変更を採用しない。
+親は[implementerの実装契約](IMPLEMENTER_CONTRACT.md)を読み、初回実装を先に代行せず、その変更境界をbriefと実差分の検証に使う。
 
 ## 0. [agent_name]が直接調査する
 
@@ -27,7 +26,7 @@ bash [skills_root]/tdd/preflight-implementer.sh [agent_name]
 
 調査は要求判断を直接支える最小範囲から始め、根拠の`path:line`、想定変更先、直接関係するtest・検証command、未確認事項を保持する。事実と推測を分け、存在を確認できない実装やtestをあるものとして扱わない。必須事実が不足する場合は[agent_name]が追加調査し、新しい設計判断が必要な場合だけ呼び出し元の停止条件へ戻る。
 
-[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)と、そこから案内する関連規約・設計書の参照ルールを実際に読む。新設予定の関数・型・ファイルについて、consumer、配置先の責務、同名fileのexport、依存関係、既存testのmock方式を照合する。参照path・ライブラリが存在しない場合は現行実装を根拠に訂正する。明示された挙動と変更可能な配置・命名・分割案を区別し、後者の調整だけで再承認へ戻らない。
+[設計・実装の判断基準](IMPLEMENTATION_RULES.md)と、そこから案内する該当規約を読み、調査結果へ適用する。
 
 ## 1. テストシナリオ候補をまとめて提示する
 
@@ -84,22 +83,22 @@ bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 
 - 設計書またはユーザー依頼の全要件
 - [agent_name]が確認した事実と`path:line`
-- 読んだ規約と適用箇所、配置・命名・exportの既存例、新設要素のconsumerとインライン案を採らない理由
+- 共通判断基準に沿った調査結果と適用する規約のpath、既存例
 - 選択済みtest_scenarios
 - Redのcommand、終了status、期待した理由での失敗要約
 - 実装後に下位モデルが実行する確認済みtest command
 - 想定変更先と、追加production fileを変更してよい条件
-- 変更禁止カテゴリ
+- [implementerの実装契約](IMPLEMENTER_CONTRACT.md)のpathと今回の変更禁止範囲
 
 test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭めない。
 
-専用定義を選択できるnative APIで、Codexは`agent_type: "implementer"`、Claude Codeは`subagent_type: "implementer"`を明示する。Codexでは`fork_context: false`で起動し、modelとeffortは専用定義のLuna / maxを使う。`task_name`だけをimplementerにした汎用agent、default/workerへのmodel上書き、指示本文のコピーによる代用は禁止する。現在のtoolにrole選択欄が無ければ、利用可能なnative toolを探し、それでも専用定義を選べなければ実装を委任しない。
+専用定義を選択できるnative APIで、Codexは`agent_type: "implementer"`、Claude Codeは`subagent_type: "implementer"`を明示する。Codexは現在のAPIが受け付ける`fork_context: false`または`fork_turns: "none"`でfresh contextにし、modelとeffortは専用定義のLuna / maxを使う。`task_name`だけをimplementerにした汎用agent、default/workerへのmodel上書き、指示本文のコピーによる代用は禁止する。現在のtoolにrole選択欄が無ければ、利用可能なnative toolを探し、それでも専用定義を選べなければ実装を委任しない。
 
 起動前に親タスクの実効権限がworkspaceへの書き込みを許可していることを確認する。親がread-onlyまたはplanなら、専用定義のworkspace-writeで解除できると思って起動しない。権限が必要であることを親側で一度報告し、ユーザーが親タスクの権限を変更するまで委任を保留する。global設定の書き換えやsandbox無効化で代用しない。
 
-`implementer` subagentを一体だけforegroundで起動して完了まで待つ。child agent IDが空、wait先が空、または専用agent定義を選択できない場合はwriterを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。下位モデルは実装後に指定済みtest commandを実行し、終了statusとdiagnosticを返す。
+`implementer` subagentを一体だけforegroundで起動して完了まで待つ。待機にはAPIが返したchild agent ID、または待機先として扱えるtask pathを使う。wait先が空、または専用agent定義を選択できない場合は成功扱いにせず、代替writerを起動しない。短周期poll、固定時間での打ち切り、別implementerの並列起動は禁止する。
 
-返された`agent_role`でimplementerを識別する。Huygensなどの`agent_nickname`はUI用の別名で、別roleや別の性能設定を意味しない。ユーザーへの報告は「implementer（表示名: Huygens）」のようにroleを先に示す。roleや実効権限が要求と違えば編集前に止める。
+`agent_role`でimplementerを識別する。戻り値にroleが含まれなければ、子のmetadataまたは保存された実行記録で確認し、表示名から推測しない。Huygensなどの`agent_nickname`はUI用の別名で、別roleや別の性能設定を意味しない。ユーザーへの報告は「implementer（表示名: Huygens）」のようにroleを先に示す。roleや実効権限が要求と違えば編集前に止める。
 
 ## 5. 相談・無変更・中断を処理する
 
@@ -111,35 +110,9 @@ test_scenariosは検証範囲だけを表し、要求根拠の実装範囲を狭
 
 `Outcome: implemented`でも実差分が0なら実装失敗として扱う。説明・分類だけを返した場合も成功に数えない。implementerが一部でも変更した後は、初回実装として再起動せずStep 6のレビューへ進む。subagentが中断・無応答で、cleanな状態からの初回実装再実行も一度失敗した場合だけ上位モデルが初回実装を引き継ぐ。レビュー指摘に対する再実装はこの再起動制限でなく`REVIEW_FLOW.md`に従う。active scope、owner session、lease、handoff、recoverは使わない。
 
-## 6. 実装差分を検証する
+## 6. レビューフローを実行する
 
-subagentの自己申告や想定変更先ではなく、共有worktreeの実際の差分を正として全件確認する。
-
-- 変更が要求根拠の範囲内であり、追加pathが必要だった因果を説明できる
-- test/spec、fixture、設定、migration、依存関係、lockfile、agent設定、設計、Git管理ファイルを変更していない
-- テスト環境検出、値のハードコード、assertion攻略がない
-- 全要件に一致し、test_scenariosの採否を実装省略へ流用していない
-
-正しい処理であることに加え、半年後に負債にならないかを必ずレビューする。テスト・型検査の成否と、以下の構造評価を別々に判定する。新設・変更した境界は、利用箇所、単純な代替との比較、配置・命名の既存例を根拠に採用する。
-
-- 独立した業務責務を持たないhelperや薄いwrapperで関数ジャンプを増やしていない
-- 一度だけ使う処理を切り出す場合、インライン化で主処理の理解が難しくなる理由を具体的に示せる
-- ファイルの役割とexportが、同じ配置・名前の既存例に合う。検証関数というだけでschema.ts、処理を提供するというだけでserviceへ置いていない
-- テスト専用のClient差し替え引数・ClientLike型や、外部境界ですでに検証した内部値の重複防御がない
-- 現在の要件に不要な共通化、設定可能性、将来用拡張点を作らずYAGNIに従っている
-- 制御フローとデータ変換を上から自然に追える
-- `filter().map()`で意図が明確になる処理を短さだけで`reduce()`へ畳み込んでいない
-- 多少冗長でも局所的に理解できる名前と構造を選んでいる
-
-採否は上位モデルのレビュー責務とする。`REVIEW_FLOW.md`に従い、すべての指摘を大小判定する。小さい問題だけを上位モデルが直接修正し、大きい問題は下位モデルへ再実装briefを渡す。再実装の起動はStep 4と同じ専用agent、fresh context、1体だけ、foreground、effort `max`を必須とする。再実装後は上位モデルが共有worktreeの実差分を再レビューする。
-
-Green、formatter、lint、polish、本体コードのcommitより先に、次の3項目だけを簡潔に報告する。
-
-- 採用: 実装者が変更した内容と採用理由
-- 問題: 問題箇所、影響、採用・修正・拒否の判断
-- 修正主体: 大小判定、上位モデルの小修正または下位モデルの再実装、その理由
-
-問題や修正がなければ「なし」と根拠を一文で示す。コードの再掲、作業手順、内部推論は報告しない。追跡対象の本体変更は、この報告後にリポジトリのGit規約どおりコミットする。
+[レビューフロー](REVIEW_FLOW.md)を全文読み、実装差分の検証、指摘の大小判定、必要な修正・再実装、採否と修正主体の報告を完了してからStep 7へ進む。
 
 ## 7. Green・最終レビュー・修正を完了する
 
@@ -155,14 +128,8 @@ Green、formatter、lint、polish、本体コードのcommitより先に、次�
 
 [agent_name]が確認した検証commandは`target-test`、`direct-regression`、`typecheck`、`schema`へ分類し、対象pathと理由を付ける。利用可能なcommandがなければ発明せず、未実行として報告する。下位モデルのtest結果で代用せず、上位モデルがこの実行表を独立に確認する。
 
-検証後に上位モデルが全差分を最終レビューする。未解決の指摘、検証が見つけた新規問題、最終レビューの新規指摘はすべて`REVIEW_FLOW.md`で大小を再判定する。修正後は影響する検証と最終レビューを再実行する。
+検証結果はStep 8でscopeへ帰属させ、[レビューフローの修正ループ](REVIEW_FLOW.md#修正ループ)に従って最終レビューと必要な修正・再検証を完了する。
 
 ## 8. 失敗をscopeに帰属させる
 
-test、typecheck、lint、Prisma検証の終了codeだけで今回の成否を決めず、各diagnosticを次へ分類する。
-
-- `scope-related`: 選択済みシナリオの対象test、実変更path自体、または変更した公開型・契約が原因と確認できるcallerの失敗
-- `unrelated`: 実変更pathと因果関係がない既存失敗、今回作成・変更していないignored / untracked test、checkout前の残留testの失敗
-- `uncertain`: 診断情報だけで因果関係を確定できない失敗
-
-`scope-related`だけを修正・再検証の対象にする。承認範囲内の修正を尽くしても残る場合は`scope fail`として報告へ進む。`unrelated`は対象外fileを変更せず、command、diagnostic、根拠を報告してworkflowを続ける。`uncertain`は推測で緑または赤に倒さない。どの分類が残っていても完了マークを自動判定せず、判断はユーザーに委ねる。
+[レビューフローの診断のscope帰属](REVIEW_FLOW.md#診断のscope帰属)に従って失敗を分類し、修正対象と報告内容を決める。完了処理は呼び出し元のスキルへ戻す。
