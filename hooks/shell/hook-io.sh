@@ -59,7 +59,30 @@ command -v jq >/dev/null 2>&1 || \
 hook_tool_name() { echo "$HOOK_INPUT" | jq -r '.tool_name'; }
 
 # native Agentのroleと親タスクの権限情報。nickname/task名はroleの代用にしない。
-hook_agent_type() { echo "$HOOK_INPUT" | jq -r '.tool_input.agent_type // .tool_input.subagent_type // empty'; }
+hook_agent_type() {
+  case "$HOOK_AGENT" in
+    codex) echo "$HOOK_INPUT" | jq -r '.tool_input.agent_type // empty' ;;
+    claude) echo "$HOOK_INPUT" | jq -r '.tool_input.subagent_type // empty' ;;
+  esac
+}
+
+# 専用定義の設定を起動引数で上書きせず、新規の実装役だけを起動する。
+hook_implementer_launch_valid() {
+  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" '
+    .tool_input | select(type == "object") |
+    ([.model, .reasoning_effort, .model_reasoning_effort, .effort, .thinking] | all(. == null)) and
+    (.resume == null or .resume == "") and
+    (.run_in_background == null or .run_in_background == false) and
+    (if $agent == "codex" then
+      (.subagent_type == null or .subagent_type == "implementer") and
+      ((has("fork_context") and .fork_context == false) or .fork_turns == "none") and
+      (if has("fork_context") then .fork_context == false else true end) and
+      (if has("fork_turns") then .fork_turns == "none" else true end)
+    else
+      (.agent_type == null or .agent_type == "implementer")
+    end)
+  ' >/dev/null
+}
 hook_permission_mode() { echo "$HOOK_INPUT" | jq -r '.permission_mode // empty'; }
 hook_transcript_path() { echo "$HOOK_INPUT" | jq -r '.transcript_path // empty'; }
 
