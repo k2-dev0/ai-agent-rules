@@ -34,7 +34,8 @@ CLAUDE_UNAVAILABLE_SERENA_TOOLS=(
   find_file
   search_for_pattern
 )
-FILESYSTEM_WRITER_COMMANDS=(cp install rsync touch chmod chown chgrp ln patch)
+METADATA_COMMANDS=(touch chmod chown chgrp)
+CONTENT_WRITER_COMMANDS=(dd truncate tee patch rsync)
 CLAUDE_SAFE_READ_PERMISSIONS=(
   'Bash(find:*)'
   'Bash(nl:*)'
@@ -796,11 +797,19 @@ if command -v codex >/dev/null 2>&1; then
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- rm -rf tmp/example 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: rm を prompt" || ng "rules: rm 判定失敗 out=[$OUT]"
   GROUP_FAILURES=
-  for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
-    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$WRITER_COMMAND" target 2>/dev/null)
-    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] || append_group_failure "$WRITER_COMMAND: $OUT"
+  for METADATA_COMMAND in "${METADATA_COMMANDS[@]}"; do
+    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$METADATA_COMMAND" target 2>/dev/null)
+    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] || append_group_failure "$METADATA_COMMAND: $OUT"
   done
-  report_group "rules: filesystem writerをprompt" "$GROUP_FAILURES"
+  report_group "rules: 新規作成・metadata変更をallow" "$GROUP_FAILURES"
+  GROUP_FAILURES=
+  for WRITER_COMMAND in "${CONTENT_WRITER_COMMANDS[@]}"; do
+    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$WRITER_COMMAND" target 2>/dev/null)
+    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] || append_group_failure "$WRITER_COMMAND: $OUT"
+  done
+  report_group "rules: shellの内容変更をforbidden" "$GROUP_FAILURES"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- cp -n -- source target 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision')" = allow ] && ok "rules: 上書きしないcpをallow" || ng "rules: cp -n判定失敗"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- mkdir -p prompt-work 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: sandbox内mkdirは承認対象外" || ng "rules: mkdirが承認対象 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
@@ -958,11 +967,18 @@ for READ_PERMISSION in "${CLAUDE_SAFE_READ_PERMISSIONS[@]}"; do
 done
 report_group "Claude: 単一読み取りcommandをallow" "$GROUP_FAILURES"
 GROUP_FAILURES=
-for WRITER_COMMAND in "${FILESYSTEM_WRITER_COMMANDS[@]}"; do
-  WRITER_PERMISSION="Bash($WRITER_COMMAND:*)"
-  jq -e --arg permission "$WRITER_PERMISSION" '.permissions.ask | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$WRITER_PERMISSION"
+for METADATA_COMMAND in "${METADATA_COMMANDS[@]}"; do
+  PERMISSION="Bash($METADATA_COMMAND:*)"
+  jq -e --arg permission "$PERMISSION" '(.permissions.allow | index($permission)) and (.permissions.ask | index($permission) | not)' "$SL" >/dev/null 2>&1 || append_group_failure "$PERMISSION"
 done
-report_group "Claude: filesystem writerをask" "$GROUP_FAILURES"
+report_group "Claude: 新規作成・metadata変更をallow" "$GROUP_FAILURES"
+GROUP_FAILURES=
+for WRITER_COMMAND in "${CONTENT_WRITER_COMMANDS[@]}"; do
+  PERMISSION="Bash($WRITER_COMMAND:*)"
+  jq -e --arg permission "$PERMISSION" '(.permissions.deny | index($permission)) and (.permissions.ask | index($permission) | not)' "$SL" >/dev/null 2>&1 || append_group_failure "$PERMISSION"
+done
+report_group "Claude: shellの内容変更をdeny" "$GROUP_FAILURES"
+jq -e '.permissions.allow | index("Bash(cp -n --:*)")' "$SL" >/dev/null && ok "Claude: 上書きしないcpをallow" || ng "Claude: cp -nが未許可"
 jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq -e '.permissions.ask | index("Bash(mkdir:*)") | not' "$SL" >/dev/null 2>&1 && ok "Claude: sandbox内mkdirをallow" || ng "Claude: mkdirが承認対象"
 jq -e '.permissions.allow | index("Bash(zat:*)")' "$SL" >/dev/null 2>&1 && grep -Fq 'EDIT_RULES='\''{"*":"deny"}'\''' "$WORKER_RUNNER" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$REPO/skills/unwind/SKILL.md" && ok "outline: zatは上位モデル、workerはnesting限定QAへ分離" || ng "outline: 上位調査と限定QAの境界が不足"
 jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
