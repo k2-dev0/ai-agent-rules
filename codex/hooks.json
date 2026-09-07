@@ -137,11 +137,21 @@
         ]
       },
       {
-        "matcher": "^(Agent|spawn_agent|collaborationspawn_agent)$",
+        "matcher": "(^Agent$|(^|[._])(spawn_agent|spawn_agents_on_csv|resume_agent)$|^collaboration(spawn_agent|spawn_agents_on_csv|resume_agent)$)",
         "hooks": [
           {
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/require-implementer.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "(^|[._])(wait|wait_agent)$|^collaboration(wait|wait_agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/agent-wait.sh\"",
             "timeout": 5
           }
         ]
