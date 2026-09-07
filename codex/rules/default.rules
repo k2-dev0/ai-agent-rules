@@ -4,7 +4,7 @@
 # distributed permission profile は通常のworkspace書き込みを許可し、hookが設定・skillを保護する。
 # `.[agent_name]/prompt/` は設計書の正本として直接更新できる。汎用の shell / cp / sed には例外を与えない。
 prefix_rule(
-    pattern = ["bash", ".agents/skills/bootstrap/init-agent.sh", "codex"],
+    pattern = ["bash", ".agents/skills/bootstrap/bootstrap.sh", "codex"],
     decision = "allow",
     justification = "配置済みCodex設定のplaceholderを決定的スクリプトで解決します。",
 )
