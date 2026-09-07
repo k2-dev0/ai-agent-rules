@@ -27,9 +27,9 @@ for agent in claude codex; do
   check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
   check test -s "$target/$skill_root/MODEL_SELECTION.md"
   check grep -Fq '作業開始時と作業の性質が変わったとき' "$target/AGENTS.md"
-  check grep -Fq '特定directoryの削除と参照修正は原則Luna。' "$target/$skill_root/MODEL_SELECTION.md"
   check grep -Fq '初期調査直後かつ実装開始前' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '[起動手順](IMPLEMENTER_LAUNCH.md)' "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq '`switch_main_model`だけを1回呼び直す' "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq '切り替え前に後続作業を続けない' "$target/$skill_root/MODEL_SELECTION.md"
   check test -n "$rule_paths"
   while IFS= read -r rule; do
     check test -s "$target/.$agent/rules/$rule"
