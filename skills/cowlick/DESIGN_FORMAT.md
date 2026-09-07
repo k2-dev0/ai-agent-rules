@@ -53,6 +53,46 @@
 
 上の行を優先する。新設識別子の実装時の英語名は固定しない。配列は`[]`、objectは`{}`を宣言・参照の両方へ付ける（`候補一覧[].length`、`候補一覧[].slice(...)`、`利用結果{}`）。
 
+### 構造化疑似コードの例
+
+以下はSMS送信処理の抜粋（import・schema定義は省略）。既存の`defineHandler`・`prisma.user`・`sendSMS`・field名は維持する。実行用コードではなく記法の例。
+
+```typescript
+// front/transactions/v2/t67_01__hdb_karaden_soushin.ts
+export const t67_01__hdb_karaden_soushin = defineHandler(
+  XMLメール通知schema,
+  async 入力{} => {
+    try {
+      let 送信先電話番号 = 入力{}.data.to;
+      if (/^A/.test(送信先電話番号)) {
+        const 顧客{} = await prisma.user.findUnique({
+          where: { customer_no: 送信先電話番号 },
+          select: { contact_phone_number: true },
+        });
+        if (顧客{} === null) throw new Error("顧客不存在");
+        送信先電話番号 = 顧客{}.contact_phone_number;
+      }
+      if (!/^0[789]0\d{8}$/.test(送信先電話番号)) {
+        throw new Error("携帯電話番号不正");
+      }
+      await sendSMS({ tel: 送信先電話番号, txt: 入力{}.data.smsBody });
+    } catch {
+      const 通知結果{} = await sendMail({
+        from: SMTP_MAIL_FROM,
+        to: 入力{}.data.notificationEmail,
+        subject: `[SMS送信失敗]${入力{}.data.smsSubject}`,
+        text: "SMS送信処理に失敗しました",
+      });
+      if (通知結果{} === null) {
+        throw new InternalServerError({ message: "失敗通知を送信できませんでした" });
+      }
+    }
+  },
+);
+```
+
+### 省略しない情報
+
 | 対象 | 省略しない情報 |
 |---|---|
 | 関数 | export/local、同期/async、引数、guardの評価順、導出値と計算式、正常・errorの区別と返却field |
