@@ -11,34 +11,38 @@ hooks:
           command: .[agent_name]/hooks/shell/load-required-contract.sh cowlick-design
 ---
 
-開始時に[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)を読み、対象に該当する規約と既存例だけを確認する。
+## 入力
 
-## 目的
+meetingから呼ぶ。開始時に[判断基準](../IMPLEMENTATION_RULES.md)・該当規約と[設計書形式](DESIGN_FORMAT.md)を全文読む。
 
-確定要件から `.[agent_name]/prompt/` の設計書を直接作成・更新する。要件監査、質問、単純化はmeetingが統括する。設計書の配置を承認のために二重化しない。
+| 条件 | 返却 |
+|---|---|
+| 同じ要件revisionの`preflight_ready`なし、対象変更、重大な未回答 | `preflight_required` |
+| 既存設計書が別要件・所有者不明・revision不明 | 変更せず`design_conflict` |
 
-## 実行
+## 手順
 
-開始時に[設計書形式](DESIGN_FORMAT.md)を全文読む。hookの有効化・信頼状態に依存せず、形式と設計根拠を入力へ含める。
+1. 明示要件・禁止制約・受入済みtrade-off・既存制約を固定し、設計選択は変更可能として扱う。
+2. 既存・新設予定の実行・永続化・運用境界を整理し、preflightの基準案とコード根拠を共通判断基準へ照合する。
+3. [agent_name]が各設計書をコードベースと照合する。サブエージェントへ調査を委任しない。
+4. 設計書形式に従い、`.[agent_name]/prompt/`の`.prompt.md`と`branch-<機能名>-prompt.md`を直接更新する。初回はWrite、改訂はEdit。
+5. 全設計書を横断レビューし、共通判断基準を満たし、設計書形式の実装情報を保持していることを確認する。
 
-1. 同じ要件revisionの`preflight_ready`が現在の会話にあることを確認する。欠落、対象変更、重大な未回答があれば`preflight_required`を返す。
-2. **明示要件**、**禁止・制約**、**受入済みtrade-off**、**既存制約**だけを固定条件にし、**設計選択**を要件へ昇格させない。
-3. `.[agent_name]/prompt/` の既存設計書は現在のrevisionだと確認できるときだけEditする。別要件、所有者不明、revision不明なら触れず`design_conflict`を返す。
-4. 既存経路と新設予定の実行・永続化・運用境界を一列にし、preflightの基準案と根拠を共通判断基準へ照合して設計する。
-5. `.prompt.md`と`branch-<機能名>-prompt.md`を `.[agent_name]/prompt/` へ直接作成・更新する。初回はWrite、改訂はEditを使う。
+| 調査・レビュー | 確認 |
+|---|---|
+| 既存経路 | 設計書ごと削除できる再利用先 |
+| 入口・運用 | endpoint・runtime resourceを増やさない案、既存deployment・scheduling・failure recovery |
+| 新設要素 | 必要性、配置・命名・exportの既存例、consumer |
+| 失敗対策 | 新設要素と緩和策を対で削除できるか |
 
-疑似コードの言語、必要な実装情報、圧縮可能な範囲は設計書形式に従い、実装時の再設計が不要なChangesを作る。
+結果には`path:line`、不明点、設計リスクを付ける。
 
-### コードベース調査
+## 返却
 
-[agent_name]が各設計書を1枚ずつコードベースと直接照合する。下位モデル、subagent、外部workerへ調査を委任しない。次を確認済み根拠の`path:line`、不明点、設計リスクとともに確認する。
+| status | 条件 |
+|---|---|
+| `design_ready` | 横断レビュー完了。file名と内容で識別できるdesign revisionを返す |
+| `research_blocked` | 参照先・必須根拠が不足。未調査範囲を返す |
+| `consultation_required` | 要件revisionと異なる判断が必要。選択肢・挙動差・推奨を返す |
 
-- 設計書ごと削除できる既存経路
-- 新しいendpointやruntime resourceを使わない入口
-- 既存のdeployment、scheduling、failure recovery pattern
-- 共通判断基準に沿った新設要素の必要性と既存例
-- 新設要素が生んだ失敗モードと緩和策をまとめて消せる反証
-
-参照先または必須根拠が得られない場合は、理由と未調査範囲を含む`research_blocked`をmeetingへ返す。要件revisionと異なる判断が必要なら、選択肢、挙動差、推奨を含む`consultation_required`をmeetingへ返す。
-
-調査後に全設計書を横断し、共通判断基準を満たすことと、Changesが設計書形式の実装情報を保持していることを確認する。満たせばファイル名と内容で識別できるdesign revisionと`design_ready`を返して停止し、ponytailへ自動で進まない。
+meetingへ返して停止し、ponytailへ直接進まない。
