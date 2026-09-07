@@ -1,5 +1,5 @@
 #!/bin/bash
-# 全体走査で判明した配布・書き込み・履歴・workerの回帰を外部通信なしで検証する。
+# 全体走査で判明した配布・書き込み・履歴・専用agentの回帰を外部通信なしで検証する。
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/rules-regressions.XXXXXX")
@@ -144,7 +144,7 @@ for agent in claude codex; do
   output=$(printf '%s' "$input" | bash -c "$command")
   check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
   if [ "$agent" = claude ]; then role_key=subagent_type; else role_key=agent_type; fi
-  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="worker"')
+  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="unknown-role"')
   output=$(printf '%s' "$input" | bash -c "$command")
   check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
   input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input = {($key):"implementer"}')
@@ -266,23 +266,92 @@ for mode in edit commit; do
   fi
 done
 
-# 実際のmonitor関数を短い時間幅で実行する。正常eventの後のごみはidleを延長しない。
-awk '/^process_group_alive\(\)/,/^stop_running_children\(\)/ { if ($0 !~ /^stop_running_children\(\)/) print }
-     /^count_valid_events\(\)/,/^run_opencode\(\)/ { if ($0 !~ /^run_opencode\(\)/) print }' "$REPO/skills/worker/delegate.sh" > "$TMP/monitor.sh"
-(
-  . "$TMP/monitor.sh"
-  TIMEOUT_TERM_GRACE_SECONDS=1
-  TIMEOUT_POLL_SECONDS=1
-  HARD_TIMEOUT_SECONDS=6
-  IDLE_TIMEOUT_SECONDS=2
-  TIMEOUT_MARKER="$TMP/timeout.kind"
-  printf '{"type":"text","text":"start"}\n' > "$TMP/events.jsonl"
-  set -m
-  (while true; do printf 'not-json\n'; sleep 0.2; done) >> "$TMP/events.jsonl" &
-  writer=$!
-  set +m
-  trap 'terminate_process_group "$writer"; wait "$writer" 2>/dev/null || true' EXIT
-  monitor_opencode "$writer" "$TMP/events.jsonl" "$(date +%s)"
-  check test "$(cat "$TIMEOUT_MARKER")" = idle
-)
+# ネスト検出役は実装workflow内でも新規起動できるが、権限・設定の上書きは拒否する。
+for agent in claude codex; do
+  cd "$TMP/$agent project"
+  if [ "$agent" = codex ]; then
+    role_key=agent_type
+    definition=.codex/agents/nesting-reviewer.toml
+    contract=.agents/skills/unwind/NESTING_CONTRACT.md
+    boundary='sandbox_mode = "read-only"'
+  else
+    role_key=subagent_type
+    definition=.claude/agents/nesting-reviewer.md
+    contract=.claude/skills/unwind/NESTING_CONTRACT.md
+    boundary='tools: Read, Grep, Glob'
+  fi
+  command="bash .$agent/hooks/shell/require-implementer.sh workflow"
+  input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{cwd:$cwd,tool_input:{($role):"nesting-reviewer",fork_turns:"none"}}')
+  check grep -Fq "$contract" "$definition"
+  check grep -Fxq "$boundary" "$definition"
+  check test -s "$contract"
+  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  for mutation in '.model="other"' '.effort="high"' '.resume="old-id"' '.run_in_background=true'; do
+    invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
+    check implementer_denied "$invalid" '専用定義で新規起動'
+  done
+  if [ "$agent" = codex ]; then
+    invalid=$(printf '%s' "$input" | jq '.tool_input.fork_turns="all"')
+    check implementer_denied "$invalid" '専用定義で新規起動'
+  fi
+  cp "$definition" "$definition.original"
+  if [ "$agent" = codex ]; then
+    sed 's/sandbox_mode = "read-only"/sandbox_mode = "workspace-write"/' "$definition.original" > "$definition"
+  else
+    sed 's/tools: Read, Grep, Glob/tools: Read, Grep, Glob, Bash/' "$definition.original" > "$definition"
+  fi
+  check implementer_denied "$input" '配布設定と一致しません'
+  mv "$definition.original" "$definition"
+  mv "$contract" "$contract.missing"
+  check implementer_denied "$input" '検出契約が無い'
+  mv "$contract.missing" "$contract"
+  mv "$definition" "$definition.missing"
+  check implementer_denied "$input" '定義が無い'
+  mv "$definition.missing" "$definition"
+done
+# workflow markerなしでも、Codexの未登録role・上書き・別起動経路を拒否する。
+cd "$TMP/codex project"
+command='bash .codex/hooks/shell/require-implementer.sh'
+for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent collaborationspawn_agent resume_agent spawn_agents_on_csv; do
+  matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("require-implementer.sh"))' "$REPO/codex/hooks.json")
+  check test -n "$matched"
+  input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{agent_type:"default",fork_turns:"none"}}')
+  check implementer_denied "$input" 'Luna/max'
+done
+for role in implementer nesting-reviewer; do
+  input=$(jq -cn --arg cwd "$PWD" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:$role,fork_turns:"none"}}')
+  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  for field in model reasoning_effort effort config model_provider; do
+    invalid=$(printf '%s' "$input" | jq --arg field "$field" '.tool_input[$field]="override"')
+    output=$(printf '%s' "$invalid" | bash -c "$command")
+    check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
+  done
+  check grep -Fxq 'enabled = false' ".codex/agents/$role.toml"
+done
+
+# 待機時間だけを書き換え、待機先・cursor等は保つ。補正でモデルの再試行を発生させない。
+for tool_name in wait collaboration.wait collaborationwait wait_agent collaboration.wait_agent collaborationwait_agent; do
+  matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("agent-wait.sh"))' "$REPO/codex/hooks.json")
+  check test -n "$matched"
+  for duration in null 10000 30000; do
+    input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" --argjson duration "$duration" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{ids:["child-1"],cursor:"next"}} | if $duration == null then . else .tool_input.timeout_ms=$duration end')
+    output=$(printf '%s' "$input" | bash .codex/hooks/shell/agent-wait.sh)
+    check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = allow
+    expected=$(printf '%s' "$input" | jq -cS '.tool_input + {timeout_ms:60000}')
+    actual=$(printf '%s' "$output" | jq -cS '.hookSpecificOutput.updatedInput')
+    check test "$actual" = "$expected"
+  done
+  for duration in 0 60000 120000 -1 '"invalid"'; do
+    input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" --argjson duration "$duration" '{cwd:$cwd,tool_name:$tool,tool_input:{ids:["child-1"],timeout_ms:$duration}}')
+    check test -z "$(printf '%s' "$input" | bash .codex/hooks/shell/agent-wait.sh)"
+  done
+done
+input='{"tool_name":"wait","tool_input":{"cell_id":"exec-cell","yield_time_ms":1000}}'
+check test -z "$(printf '%s' "$input" | bash .codex/hooks/shell/agent-wait.sh)"
+check test -z "$(printf '%s' '{"tool_name":"wait_agent","tool_input":{"timeout_ms":10000}}' | bash "$TMP/claude project/.claude/hooks/shell/agent-wait.sh")"
+check test ! -e "$REPO/skills/worker/delegate.sh"
+if rg -i 'opencode|skills/worker/delegate.sh' "$REPO/skills" "$REPO/claude" "$REPO/codex" "$REPO/hooks" "$REPO/README.md"; then
+  printf 'FAIL: retired runner reference\n' >&2
+  exit 1
+fi
 printf 'regressions: all passed\n'
