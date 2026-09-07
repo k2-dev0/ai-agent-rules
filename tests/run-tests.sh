@@ -94,7 +94,7 @@ check "config: promptから設定へ戻るpathは拒否" deny protect-config.sh 
 check "config: Edit .agents は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
 check "config: rm .claude は deny"      deny  protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .claude"}}'
 check "config: 設定読み取りは棄権"      empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
-check "config: 設定script起動は棄権"    empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/bootstrap/init-agent.sh claude"}}'
+check "config: 設定script起動は棄権"    empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/bootstrap/bootstrap.sh claude"}}'
 
 # --- deny-history ---
 check "history: git rebase は deny"   deny  deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git rebase -i HEAD~3"}}'
@@ -267,7 +267,7 @@ if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDe
   PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは deny JSON + exit 0"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 未実装エージェント rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/bootstrap/init-agent.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/bootstrap/bootstrap.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも bootstrap は棄権"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: bootstrap例外 rc=$RC out=[$OUT]"; fi
 
