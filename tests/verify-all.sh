@@ -889,6 +889,13 @@ for SC in bootstrap/bootstrap.sh tdd/mark-prompt-done.sh polish/quality-gate.sh 
 done
 [ "$MISS" = "0" ] && ok "固定スクリプトは引数あり・なし両形で登録済み"
 
+if bash "$SUITE/verify-skill-source.sh" > "$S/skill-source.out" 2>&1; then
+  ok "skillの直接読み取り・一括検索・traceを拒否し通常実行を維持"
+else
+  ng "skill source guardに失敗"
+  cat "$S/skill-source.out"
+fi
+
 if bash "$SUITE/verify-regressions.sh" > "$S/regressions.out" 2>&1; then
   ok "配布参照・hook配線・親symlink・並行変更・子の起動と待機の動作回帰"
 else
