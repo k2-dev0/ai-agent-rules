@@ -22,11 +22,11 @@ for agent in claude codex; do
   if [ "$agent" = codex ]; then skill_root=.agents/skills; else skill_root=.claude/skills; fi
   mkdir -p "$target/$(dirname "$skill_root")"
   cp -R "$REPO/skills" "$target/$skill_root"
-  (cd "$target" && bash "$skill_root/bootstrap/init-agent.sh" "$agent") >/dev/null
+  (cd "$target" && bash "$skill_root/bootstrap/bootstrap.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
   check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
   check test -s "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq 'ツールが利用できない環境と子エージェント' "$target/AGENTS.md"
+  check grep -Fq '作業開始時と作業の性質が変わったとき' "$target/AGENTS.md"
   check test -n "$rule_paths"
   while IFS= read -r rule; do
     check test -s "$target/.$agent/rules/$rule"
