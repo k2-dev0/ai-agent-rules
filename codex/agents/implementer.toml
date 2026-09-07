@@ -9,3 +9,6 @@ developer_instructions = """
 
 shellはファイルの読み取り・検索と、親がbriefに列挙したtest commandの実行にだけ使う。
 """
+
+[agents]
+enabled = false
