@@ -2,12 +2,12 @@
 # bootstrap: 配置済みエージェント設定ツリーの placeholder を確定させる決定的スクリプト。
 # [agent_name] / [skills_root] の置換を、
 # レビュー済みの単一成果物として実行する（その都度インタプリタで書き捨てコードを生成しないため）。
-# 使い方: bash init-agent.sh <claude|codex>
+# 使い方: bash bootstrap.sh <claude|codex>
 # 失敗の扱い: 置換失敗・未解決placeholderが1件でも
 # あれば exit 1。成功ログは実際に書き換えできた時だけ出す（失敗の握りつぶし禁止）。
 set -u
 
-AGENT="${1:?usage: init-agent.sh <claude|codex>}"
+AGENT="${1:?usage: bootstrap.sh <claude|codex>}"
 
 # 配布元には削除対象の原本がある。配置先だけで実行する契約を機械的に守る。
 [ ! -e SOURCE_REPOSITORY.md ] || {
