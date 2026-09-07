@@ -78,8 +78,6 @@ if matches_expected empty "$COWLICK_SECOND"; then
 else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
 fi
-DELEGATE_INPUT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"bash .claude/skills/worker/delegate.sh prepare"}}')
-check "required-reading: workerには旧調査契約を注入しない" empty load-required-contract.sh "$DELEGATE_INPUT"
 
 # --- protect-git ---
 check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'
@@ -112,9 +110,9 @@ check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
   readonly-search.sh \
   "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
 check_bash_rewrite "readonly-search: findのstderr破棄を許可" \
-  "find .codex/tmp/worker -maxdepth 2 -type f -print" \
+  "find .codex/tmp/checks -maxdepth 2 -type f -print" \
   readonly-search.sh \
-  "find .codex/tmp/worker -maxdepth 2 -type f -print 2>/dev/null"
+  "find .codex/tmp/checks -maxdepth 2 -type f -print 2>/dev/null"
 check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
   "nl -ba src/foo.ts >/dev/null" \
   readonly-search.sh \
