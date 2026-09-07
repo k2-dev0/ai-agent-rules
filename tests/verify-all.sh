@@ -109,7 +109,6 @@ for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
   [ -x "$f" ] || append_group_failure "exec bit: $f"
 done
-WORKER_RUNNER="$REPO/skills/worker/delegate.sh"
 CLAUDE_IMPLEMENTER="$REPO/claude/agents/implementer.md"
 CODEX_IMPLEMENTER="$REPO/codex/agents/implementer.toml"
 IMPLEMENTER_CONTRACT="$REPO/skills/IMPLEMENTER_CONTRACT.md"
@@ -118,39 +117,7 @@ FUNCTION_RULES="$REPO/rules/typescript/function-pattern.md"
 CLAUDE_SURVEYOR="$REPO/claude/agents/surveyor.md"
 CODEX_SURVEYOR="$REPO/codex/agents/surveyor.toml"
 IMPLEMENTER_LAUNCH="$REPO/skills/IMPLEMENTER_LAUNCH.md"
-[ -x "$WORKER_RUNNER" ] || append_group_failure "exec bit: $WORKER_RUNNER"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
-grep -q 'SOFT_BUDGET_USD="38"' "$WORKER_RUNNER" && grep -q 'HARD_BUDGET_USD="40"' "$WORKER_RUNNER" && ok "外部ワーカー予算: soft=38 hard=40" || ng "外部ワーカー予算が不正"
-grep -q 'DEFAULT_MODEL="openrouter/minimax/minimax-m3"' "$WORKER_RUNNER" && grep -Fq 'MODEL="${DELEGATE_MODEL:-$DEFAULT_MODEL}"' "$WORKER_RUNNER" && grep -Fq 'MODEL_ID="${MODEL#openrouter/}"' "$WORKER_RUNNER" && ok "外部ワーカーモデル: MiniMax M3を既定値として差し替え可能" || ng "外部ワーカーモデルの既定値または差し替えが不正"
-grep -Fq 'MODEL_VARIANT="${DELEGATE_MODEL_VARIANT:-}"' "$WORKER_RUNNER" && grep -q -- '--arg model_variant "$MODEL_VARIANT"' "$WORKER_RUNNER" && grep -q 'model_variant:(if $model_variant == "" then null else $model_variant end)' "$WORKER_RUNNER" && grep -q 'command+=(--variant "$MODEL_VARIANT")' "$WORKER_RUNNER" && ! grep -q 'reasoningEffort' "$WORKER_RUNNER" && ok "外部ワーカーvariant: 既定はadaptive、明示時だけ指定" || ng "外部ワーカーvariantの任意指定が不正"
-if grep -Fq 'research and survey modes were removed; lower models are limited to bounded QA' "$WORKER_RUNNER" && grep -q 'mode must be nesting, prepare, smoke, or show' "$WORKER_RUNNER"; then
-  ok "workerはnesting限定QAだけを公開"
-else
-  ng "workerにresearch / survey入口が残存"
-fi
-grep -q 'XDG_DATA_HOME="$TEMP_ROOT/xdg-data"' "$WORKER_RUNNER" && grep -q 'XDG_STATE_HOME="$TEMP_ROOT/xdg-state"' "$WORKER_RUNNER" && grep -q 'XDG_CACHE_HOME="$TEMP_ROOT/xdg-cache"' "$WORKER_RUNNER" && grep -q 'XDG_CONFIG_HOME="$TEMP_ROOT/xdg-config"' "$WORKER_RUNNER" && grep -q 'TMPDIR="$TEMP_ROOT/tmp"' "$WORKER_RUNNER" && ok "worker OpenCode状態: task単位XDG・tmp分離" || ng "worker OpenCode状態: XDG・tmp分離が不足"
-grep -q 'SMOKE_IDLE_TIMEOUT_SECONDS="30"' "$WORKER_RUNNER" && grep -q 'TIMEOUT_POLICY_SOURCE="explicit"' "$WORKER_RUNNER" && grep -q 'MIN_POLLS_PER_IDLE_WINDOW="3"' "$WORKER_RUNNER" && grep -q 'MIN_IDLE_WINDOWS_PER_HARD_TIMEOUT="2"' "$WORKER_RUNNER" && grep -q '^validate_timeout_reason()' "$WORKER_RUNNER" && grep -q -- '--arg timeout_reason "$TIMEOUT_REASON"' "$WORKER_RUNNER" && grep -q '^count_valid_events()' "$WORKER_RUNNER" && grep -q '^monitor_opencode()' "$WORKER_RUNNER" && grep -q '^terminate_process_group()' "$WORKER_RUNNER" && grep -q 'return 124' "$WORKER_RUNNER" && grep -q -- '--argjson timed_out "$TIMED_OUT"' "$WORKER_RUNNER" && ok "worker timeout: 有効event・明示値・理由・安全比率を検証して記録" || ng "worker timeout設定・event観測・理由記録が不正"
-grep -q '^write_task_state()' "$WORKER_RUNNER" && grep -q '^stop_running_children()' "$WORKER_RUNNER" && grep -q 'task is already active or has unfinished state' "$WORKER_RUNNER" && grep -q 'effective_status' "$WORKER_RUNNER" && ok "worker lifecycle: task状態と重複拒否を記録" || ng "worker lifecycle管理が不正"
-grep -q -- '--arg model_id "$MODEL_ID"' "$WORKER_RUNNER" && ! grep -q 'MODEL_ID="$MODEL_ID".*jq' "$WORKER_RUNNER" && ok "worker config: readonly定数をjq引数で受け渡す" || ng "worker config: readonly変数への再代入が残存"
-grep -q '"zdr":true' "$WORKER_RUNNER" && grep -q '"data_collection":"deny"' "$WORKER_RUNNER" && ok "worker routing: ZDRとdata collection拒否" || ng "worker routingのprivacy強制漏れ"
-grep -Fq 'EDIT_RULES='\''{"*":"deny"}'\''' "$WORKER_RUNNER" && grep -q '"external_directory":"deny"' "$WORKER_RUNNER" && grep -q 'opencode --pure run' "$WORKER_RUNNER" && ok "worker権限: edit・外部dir・pluginを拒否" || ng "workerの読み取り専用権限境界が不正"
-grep -Fq '".git/**":"deny"' "$WORKER_RUNNER" && grep -Fq '"**/.env.*":"deny"' "$WORKER_RUNNER" && ! grep -q 'snapshot_ignored_agent_context' "$WORKER_RUNNER" && ok "worker読み取り: Git・envを拒否しignored agent contextを持ち込まない" || ng "workerのGit・env・agent context境界が不正"
-grep -Fq 'trap cleanup EXIT' "$WORKER_RUNNER" && grep -Fq "trap 'exit 130' INT" "$WORKER_RUNNER" && grep -Fq "trap 'exit 143' TERM" "$WORKER_RUNNER" && ok "worker中断: cleanup後に処理を継続しない" || ng "workerのsignal終了処理が不正"
-grep -q 'SMOKE_PROMPT="hello"' "$WORKER_RUNNER" && grep -q 'read_rules='\''"deny"'\''' "$WORKER_RUNNER" && grep -q '"bash":"deny"' "$WORKER_RUNNER" && ok "worker smoke: hello固定・tool全拒否" || ng "worker smokeのpromptまたは権限が不正"
-grep -q '^  nesting)' "$WORKER_RUNNER" && grep -q '機能調査、要件判断、設計判断、修正案、コード変更は禁止' "$WORKER_RUNNER" && grep -q 'nesting path must be tracked' "$WORKER_RUNNER" && ok "worker nesting: 本体コードだけを読み取り検出" || ng "worker nesting検出モードが不正"
-grep -Fq 'git -C "$REPO_ROOT" show "$SOURCE_COMMIT:$path" > "$WORKTREE/$path"' "$WORKER_RUNNER" && grep -Fq 'cd "$execution_root" || exit 72' "$WORKER_RUNNER" && grep -Fq 'bounded_snapshot_unchanged' "$WORKER_RUNNER" && grep -Fq 'read-only delegated model changed a protected path' "$WORKER_RUNNER" && ok "worker snapshot: HEADの指定pathだけを固定し変更を機械拒否" || ng "workerの限定snapshotまたは読み取り専用検査が不正"
-if [ ! -e "$REPO/skills/worker/validate-survey-request.sh" ] && [ ! -e "$REPO/skills/worker/DELEGATION.md" ]; then
-  ok "worker旧調査契約とvalidatorを削除"
-else
-  ng "worker旧調査契約またはvalidatorが残存"
-fi
-grep -q '^  show)' "$WORKER_RUNNER" && grep -q 'show mode requires task id' "$WORKER_RUNNER" && grep -q "cannot extract delegated report" "$WORKER_RUNNER" && ok "外部ワーカー結果: report抽出と固定showを提供" || ng "外部ワーカー結果の固定取得経路が不正"
-if grep -q '^  prepare)' "$WORKER_RUNNER" && grep -q 'delegation contract ready' "$WORKER_RUNNER" && [ "$(OPENROUTER_API_KEY= bash "$WORKER_RUNNER" prepare)" = 'delegate: delegation contract ready' ]; then
-  ok "外部ワーカーprepare: API key・外部通信なしの共通契約入口を提供"
-else
-  ng "外部ワーカーprepareの固定入口が不正"
-fi
-
 BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
 BOOTSTRAP_FAILURES="$REPO/skills/bootstrap/FAILURES.md"
 if grep -q '^allowed-tools: Bash$' "$BOOTSTRAP_SKILL" && grep -q '最初のツール呼び出し' "$BOOTSTRAP_SKILL" && grep -Fq '失敗した場合だけ [FAILURES.md](FAILURES.md) を読み' "$BOOTSTRAP_SKILL" && [ -f "$BOOTSTRAP_FAILURES" ]; then
@@ -190,21 +157,21 @@ if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*Write' && s
 else
   ng "ponytailの設計書更新toolまたは質問境界が不正"
 fi
-grep -Fq '調査を下位モデル、subagent、外部workerへ委任しない' "$MEETING_SKILL" && grep -Fq '下位モデル、subagent、外部workerへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ! grep -Fq 'worker/delegate.sh' "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ok "設計調査と判断を上位モデルへ固定" || ng "設計調査を下位モデルへ委任できる"
+grep -Fq '調査をサブエージェントへ委任しない' "$MEETING_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ! grep -Fq 'worker/delegate.sh' "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ok "設計調査と判断を上位モデルへ固定" || ng "設計調査を下位モデルへ委任できる"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
-grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'clientで検証する範囲とserverの最新dataで再検証する範囲' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && grep -Fq '設計書形式の実装情報を保持' "$COWLICK_SKILL" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
-grep -Fq '| 書き方 | 対象 | 例 |' "$COWLICK_FORMAT" && grep -Fq '予約語・演算子・構文、組み込み型と組み込みobject' "$COWLICK_FORMAT" && grep -Fq '標準library・外部library・frameworkのAPI、instance method・property名を英語' "$COWLICK_FORMAT" && grep -Fq '新しく設計する業務上の関数、引数、変数、型、結果field、error名、処理内容は日本語' "$COWLICK_FORMAT" && grep -Fq '既存symbol、schema field、file pathも参照を壊さないよう実名' "$COWLICK_FORMAT" && grep -Fq '設計書形式に従い' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
-grep -Fq '次は書式と密度の例であり、この処理自体を要件として流用しない' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].length' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].slice(...)' "$COWLICK_FORMAT" && grep -Fq '利用結果{}' "$COWLICK_FORMAT" && grep -Fq 'for (const 使用候補 of 使用候補一覧[])' "$COWLICK_FORMAT" && grep -Fq 'return 利用結果{}' "$COWLICK_FORMAT" && ok "cowlick疑似コードの正例" || ng "cowlick疑似コードの正例が不足"
+grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'client検証とserverの最新dataによる再検証' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && grep -Fq '設計書形式の実装情報を保持' "$COWLICK_SKILL" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
+grep -Fq '| 書き方 | 対象 | 例 |' "$COWLICK_FORMAT" && grep -Fq '予約語・演算子・構文・組み込み型/object' "$COWLICK_FORMAT" && grep -Fq '標準・外部library・framework API、method・property' "$COWLICK_FORMAT" && grep -Fq '新設する業務関数・引数・変数・型・結果field・error・処理' "$COWLICK_FORMAT" && grep -Fq '既存symbol・schema field・file path' "$COWLICK_FORMAT" && grep -Fq '設計書形式に従い' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
+grep -Fq '配列は`[]`、objectは`{}`を宣言・参照の両方へ付ける' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].length' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].slice(...)' "$COWLICK_FORMAT" && grep -Fq '利用結果{}' "$COWLICK_FORMAT" && grep -Fq '分岐・loopは構文で書く' "$COWLICK_FORMAT" && grep -Fq '共通処理と対象固有の差を残す' "$COWLICK_FORMAT" && ok "cowlick疑似コードの形状・制御構文" || ng "cowlick疑似コードの形状・制御構文が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '`ponytail_audit`' "$PONYTAIL_SKILL" && grep -Fq '`minimalAlternative`' "$PONYTAIL_SKILL" && grep -Fq '`counterexamples`' "$PONYTAIL_SKILL" && grep -Fq '`unresolved`' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '全fieldが埋まり.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
 grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_SKILL" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_SKILL" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_SKILL" && grep -Fq '測定可能な条件' "$PONYTAIL_SKILL" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_SKILL" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_SKILL" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
 grep -Fq "../cowlick/DESIGN_FORMAT.md" "$PONYTAIL_SKILL" && grep -Fq "圧縮してよいのは重複説明と同一の外枠だけ" "$COWLICK_FORMAT" && grep -Fq "文章一行へ畳まない" "$COWLICK_FORMAT" && ok "ponytailは実装契約を失う圧縮を禁止" || ng "ponytailが疑似コードの重要契約を圧縮可能"
 grep -Fq '一つのfindingはIDを付けて一度だけ説明' "$PONYTAIL_SKILL" && grep -Fq '同じ要件・原因・判断・置換先を持つ要素は一行へまとめる' "$PONYTAIL_SKILL" && grep -Fq '同じtopologyや根拠を別fieldで言い換えない' "$PONYTAIL_SKILL" && ok "ponytailの監査正本は重複せず簡潔" || ng "ponytailの監査成果物が重複可能"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -Fq '`ponytail_audit`の必須field' "$MEETING_SKILL" && grep -Fq '空の`unresolved`' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
-grep -Fq 'topologyが入口から副作用まで繋がる' "$MEETING_SKILL" && grep -Fq '対応要件と直接のconsumer' "$MEETING_SKILL" && grep -Fq '具体値の反例' "$MEETING_SKILL" && ok "meetingがponytailの主要成果物を独立検証" || ng "meetingのponytail独立検証が不足"
-grep -Fq '設計判断、横断比較、設計書の採否、ユーザーへ提示する選択肢は、オーケストレーターである[agent_name]が担当する' "$MEETING_SKILL" && grep -Fq '設計判断、横断比較、採否、設計書の修正はすべて[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
-grep -q 'design_ready.*停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/` へ直接作成・更新する' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "cowlickとponytailはprompt正本を直接更新" || ng "cowlick/ponytailのprompt直接更新境界が不正"
+grep -Fq '入口から副作用までのtopologyが繋がっている' "$MEETING_SKILL" && grep -Fq '対応要件・直接のconsumer' "$MEETING_SKILL" && grep -Fq '具体的な反例' "$MEETING_SKILL" && ok "meetingがponytailの主要成果物を独立検証" || ng "meetingのponytail独立検証が不足"
+grep -Fq '内部skillの選択・再実行は自分で行い' "$MEETING_SKILL" && grep -Fq '調査・判断・編集は[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
+grep -Fq 'meetingへ返して停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/`の' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "cowlickとponytailはprompt正本を直接更新" || ng "cowlick/ponytailのprompt直接更新境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
   [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
@@ -240,18 +207,18 @@ grep -Fq "初回実装またはレビュー後の再実装" "$IMPLEMENTER_CONTRA
 [ ! -e "$CLAUDE_SURVEYOR" ] && [ ! -e "$CODEX_SURVEYOR" ] && ok "native surveyor定義を削除" || ng "native surveyor定義が残存"
 grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: implementer定義の配布先が不足"
 for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
-  if grep -Fq "[skills_root]/IMPLEMENTER_CONTRACT.md" "$IMPLEMENTER_FILE" && grep -Fq "IMPLEMENTATION_RULES.md" "$IMPLEMENTER_CONTRACT" && grep -Fq "半年後の保守者" "$IMPLEMENTATION_RULES"; then
+  if grep -Fq "[skills_root]/IMPLEMENTER_CONTRACT.md" "$IMPLEMENTER_FILE" && grep -Fq "IMPLEMENTATION_RULES.md" "$IMPLEMENTER_CONTRACT" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES"; then
     ok "implementer可読性契約: $(basename "$IMPLEMENTER_FILE")"
   else
     ng "implementer可読性契約が不足: $IMPLEMENTER_FILE"
   fi
 done
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq '上位モデルが直接調査する' "$ERRAND_SKILL" && grep -Fq '外部workerへ調査を委任しない' "$SCENARIO_FLOW" && ok "errand は上位モデルの直接調査へ固定" || ng "errand の直接調査境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq '上位モデルが直接調査する' "$ERRAND_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$SCENARIO_FLOW" && ok "errand は上位モデルの直接調査へ固定" || ng "errand の直接調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && ! grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
 grep -Fq "共通フローのStep 1〜8" "$ERRAND_SKILL" && grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && grep -Fq "Git管理ファイルを変更しない" "$IMPLEMENTER_CONTRACT" && ok "errand は上位モデル調査と下位モデル初回実装を分離" || ng "errand の調査・実装境界が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q '親directoryが存在しない' "$REPO/skills/polish/capture-scope.sh" && grep -q 'ignoredされている' "$REPO/skills/polish/capture-scope.sh" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
-grep -Fq '未実装、複数、または対応テストが未作成であることだけを理由に停止しない' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
+grep -Fq '未実装、複数path、対応test未作成' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
 grep -Fq "共通フローのStep 1〜8" "$ERRAND_SKILL" && grep -Fq "初回実装を先に代行せず" "$SCENARIO_FLOW" && grep -Fq "cleanな状態からの初回実装再実行も一度失敗" "$SCENARIO_FLOW" && grep -Fq "下位モデルに再実装させる" "$REVIEW_FLOW" && ok "errand は共有フローで上位判断・下位実装へ固定" || ng "errand の初回実装・修正責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
@@ -282,25 +249,25 @@ else
 fi
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq '検出候補の抽出だけを下位モデル' "$UNWIND_SKILL" && grep -Fq 'bash [skills_root]/worker/delegate.sh nesting' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -q '返却された候補だけ' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はすべて上位モデル' "$UNWIND_SKILL" && ok "unwind はnesting候補抽出だけを下位モデルへ限定" || ng "unwind の限定QA・判断責務分離が無い"
+grep -Fq '検出候補の抽出だけを下位モデル' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -q '返却された候補だけ' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はすべて上位モデル' "$UNWIND_SKILL" && ok "unwind はnesting候補抽出だけを下位モデルへ限定" || ng "unwind の限定QA・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -f "$IMPLEMENTER_LAUNCH" ] && grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq 'polish/SKILL.md#実装前baseline' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
 ! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
-grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致' "$POLISH_SKILL" && grep -Fq '入力された実変更pathだけが追跡済みかつclean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
-grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は呼び出し元の状態遷移不備として停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq 'Prettier / ESLintだけの独自フォールバックへ置き換えない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
+grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現存する実変更pathの順序込み完全一致' "$POLISH_SKILL" && grep -Fq '全件のtracked・clean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
+grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq '品質検査をPrettier / ESLintだけへ縮小しない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && [ -f "$REVIEW_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && grep -Fq 'REVIEW_FLOW.md' "$SCENARIO_FLOW" "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・errand・polish・unwindはレビュー・再実装契約を共有" || ng "共通実装・レビューフロー参照が不正"
-grep -Fq "共通フローのStep 0〜8" "$TDD_SKILL" && grep -Fq "外部workerへ調査を委任しない" "$SCENARIO_FLOW" && grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && grep -Fq "REVIEW_FLOW.md" "$SCENARIO_FLOW" && ok "tdd は上位モデル調査・判断と下位モデル初回・再実装へ固定" || ng "tdd の調査・実装・修正境界が不正"
-grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq '下位モデル、surveyor subagent、外部workerへ調査を委任しない' "$SCENARIO_FLOW" && ok "共通フローは上位モデルの直接調査へ固定" || ng "共通フローの直接調査境界が不正"
+grep -Fq "共通フローのStep 0〜8" "$TDD_SKILL" && grep -Fq "サブエージェントへ調査を委任しない" "$SCENARIO_FLOW" && grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && grep -Fq "REVIEW_FLOW.md" "$SCENARIO_FLOW" && ok "tdd は上位モデル調査・判断と下位モデル初回・再実装へ固定" || ng "tdd の調査・実装・修正境界が不正"
+grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq 'サブエージェントへ調査を委任しない' "$SCENARIO_FLOW" && ok "共通フローは上位モデルの直接調査へ固定" || ng "共通フローの直接調査境界が不正"
 grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq 'IMPLEMENTER_LAUNCH.md' "$SCENARIO_FLOW" && grep -Fq 'IMPLEMENTER_LAUNCH.md' "$REVIEW_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなimplementerを固定" || ng "共通フローのtest選択権・実装境界またはimplementer起動が不正"
-grep -Fq "IMPLEMENTATION_RULES.md" "$REVIEW_FLOW" && grep -Fq "半年後の保守者" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
-grep -Fq '次の条件をすべて満たす場合だけ小さい問題' "$REVIEW_FLOW" && grep -Fq '変更行数が10行以下' "$REVIEW_FLOW" && grep -Fq '次の条件を一つでも満たす場合は大きい問題' "$REVIEW_FLOW" && grep -Fq '変更先が2ファイル以上、または変更行数が11行以上' "$REVIEW_FLOW" && grep -Fq '1行の条件反転でも' "$REVIEW_FLOW" && grep -Fq '2回連続' "$REVIEW_FLOW" && grep -Fq '最終レビュー' "$REVIEW_FLOW" && ok "レビュー契約は大小判定・2回失敗fallback・最終レビューを固定" || ng "レビュー・再実装契約が不足"
+grep -Fq "IMPLEMENTATION_RULES.md" "$REVIEW_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
+grep -Fq 'すべて満たす場合だけ' "$REVIEW_FLOW" && grep -Fq '変更行数が10行以下' "$REVIEW_FLOW" && grep -Fq '一つでも該当' "$REVIEW_FLOW" && grep -Fq '変更先が2ファイル以上、または変更行数が11行以上' "$REVIEW_FLOW" && grep -Fq '1行の条件反転でも' "$REVIEW_FLOW" && grep -Fq '2回連続' "$REVIEW_FLOW" && grep -Fq '最終レビュー' "$REVIEW_FLOW" && ok "レビュー契約は大小判定・2回失敗fallback・最終レビューを固定" || ng "レビュー・再実装契約が不足"
 grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$REVIEW_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$REVIEW_FLOW" && grep -Fq '採用:' "$REVIEW_FLOW" && grep -Fq '問題:' "$REVIEW_FLOW" && grep -Fq '修正主体:' "$REVIEW_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$REVIEW_FLOW" && ok "上位モデルは実装差分の評価と修正主体を後続処理前に簡潔に報告" || ng "上位モデルの実装差分レビュー報告契約が不足"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq "REVIEW_FLOW.md#診断のscope帰属" "$SCENARIO_FLOW" && grep -Fq "REVIEW_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$REVIEW_FLOW" && grep -Fq "unrelated" "$REVIEW_FLOW" && grep -Fq "uncertain" "$REVIEW_FLOW" && grep -Fq "ignored / untracked test" "$REVIEW_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$REVIEW_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
-grep -Fq 'この出力と完全一致する相対path全件を一括入力' "$POLISH_SKILL" && grep -Fq 'directory、glob、`git diff`で独自に広げたpathを使わない' "$POLISH_SKILL" && grep -Fq 'typecheck・build・Prisma検証はファイル単位で安全に分割できない' "$POLISH_SKILL" && grep -Fq '確定済みの対象pathから本体コードだけを選び'  "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
-grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq '`build` scriptがないpackageのbuild commandは推測・発明しない' "$POLISH_SKILL" && grep -Fq '親の`polish`が実行した同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
+grep -Fq 'この出力と完全一致する相対path全件を一括入力' "$POLISH_SKILL" && grep -Fq 'directory、glob、`git diff`・`git status`から推測・拡張しない' "$POLISH_SKILL" && grep -Fq 'typecheck・build・Prisma検証には所属package/schemaだけ' "$POLISH_SKILL" && grep -Fq '確定済みの対象pathから本体コードだけを選び'  "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
+grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq 'commandなしは`not run`' "$POLISH_SKILL" && grep -Fq '親の`polish`が実行した同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
 grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq 'この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
 grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq '実装直前に[polishの実装前baseline]' "$SCENARIO_FLOW" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
 grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '`REVIEW_FLOW.md`で大小判定' "$POLISH_SKILL" && grep -Fq 'どちらが修正しても全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
@@ -488,90 +455,6 @@ if bash "$MD" "../../etc/passwd" > mark3.out 2>&1; then ng "mark-prompt-done: �
 if bash "$MD" nonexistent > mark4.out 2>&1; then ng "mark-prompt-done: 未登録の機能名を通した"; else ok "mark-prompt-done: 未登録の機能名を拒否"; fi
 rm -rf .claude/prompt
 
-echo "== 2.75 workerの限定QA回帰（外部通信なし） =="
-DELEGATE_REPO="$S/delegate-nesting"
-DELEGATE_BIN="$DELEGATE_REPO/bin"
-DELEGATE_SCRIPT="$DELEGATE_REPO/.claude/skills/worker/delegate.sh"
-DELEGATE_TIMEOUT_REASON='scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa'
-DELEGATE_TIMEOUT_ARGS=(--hard-timeout-minutes 4 --idle-timeout-seconds 120 --poll-seconds 5 --timeout-reason "$DELEGATE_TIMEOUT_REASON")
-mkdir -p "$DELEGATE_BIN" "$(dirname "$DELEGATE_SCRIPT")" "$DELEGATE_REPO/src"
-cp .claude/skills/worker/delegate.sh "$DELEGATE_SCRIPT"
-printf '#!/bin/bash\n[ -z "${CURL_CALL_MARKER:-}" ] || : > "$CURL_CALL_MARKER"\nprintf '\''{"data":{"usage_monthly":0,"usage":0,"limit":40,"limit_reset":"monthly"}}\\n'\''\n' > "$DELEGATE_BIN/curl"
-printf '%s\n' \
-  '#!/bin/bash' \
-  'jq -e '\''.permission.edit["*"] == "deny" and (.permission.bash == "deny" or .permission.bash["*"] == "deny") and .permission.external_directory == "deny"'\'' "$OPENCODE_CONFIG" >/dev/null || exit 40' \
-  'last="${!#}"' \
-  'if [ "$last" = "hello" ]; then jq -cn --arg text hello '\''{type:"text",text:$text}'\''; exit; fi' \
-  '[ -f src/subject.ts ] || exit 41' \
-  '[ ! -e .claude ] || exit 42' \
-  '[ "$(find . -type f | wc -l | tr -d " ")" = "1" ] || exit 43' \
-  'text='\''Outcome: fulfilled
-## Claims
-### C1
-Status: fulfilled
-Claim: src/subject.tsに三段階の制御フローネストがある
-Evidence:
-- `src/subject.ts:1-7`
-Interpretation: if、for、ifが同じ実行経路で深さ3になる
-Limitations: none
-## Remaining
-none'\''' \
-  'jq -cn --arg text "$text" '\''{type:"text",text:$text}'\''' \
-  > "$DELEGATE_BIN/opencode"
-chmod +x "$DELEGATE_BIN/curl" "$DELEGATE_BIN/opencode"
-cd "$DELEGATE_REPO"
-git init -q
-git config user.email tester@example.com
-git config user.name tester
-printf '%s\n' 'export function subject(items: number[]) {' '  if (items.length > 0) {' '    for (const item of items) {' '      if (item > 0) {' '        return item' '      }' '    }' '  }' '  return 0' '}' > src/subject.ts
-git add src/subject.ts
-git commit -qm "test: nesting fixture"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" smoke > delegate-smoke.out 2>&1 && grep -Fq 'smoke: ok model=openrouter/minimax/minimax-m3 variant=default' delegate-smoke.out; then
-  ok "delegate-openrouter: 固定helloでsmokeを完了"
-else
-  ng "delegate-openrouter: smokeが不正"; cat delegate-smoke.out
-fi
-CURL_CALL_MARKER="$DELEGATE_REPO/research-curl-called"
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test CURL_CALL_MARKER="$CURL_CALL_MARKER" bash "$DELEGATE_SCRIPT" research > delegate-research-mode.out 2>&1; then
-  ng "delegate-worker: research modeを許可"
-elif grep -Fq 'research and survey modes were removed; lower models are limited to bounded QA' delegate-research-mode.out && [ ! -e "$CURL_CALL_MARKER" ]; then
-  ok "delegate-worker: researchを外部通信前に拒否"
-else
-  ng "delegate-worker: researchの拒否境界が不正"; cat delegate-research-mode.out
-fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test CURL_CALL_MARKER="$CURL_CALL_MARKER" bash "$DELEGATE_SCRIPT" survey > delegate-survey-mode.out 2>&1; then
-  ng "delegate-worker: survey modeを許可"
-elif grep -Fq 'research and survey modes were removed; lower models are limited to bounded QA' delegate-survey-mode.out && [ ! -e "$CURL_CALL_MARKER" ]; then
-  ok "delegate-worker: surveyを外部通信前に拒否"
-else
-  ng "delegate-worker: surveyの拒否境界が不正"; cat delegate-survey-mode.out
-fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" implement > delegate-implement-mode.out 2>&1; then
-  ng "delegate-worker: implement modeを許可"
-elif grep -Fq 'mode must be nesting, prepare, smoke, or show' delegate-implement-mode.out; then
-  ok "delegate-worker: nesting以外の作業modeを拒否"
-else
-  ng "delegate-worker: 不正modeの拒否理由が不正"; cat delegate-implement-mode.out
-fi
-BEFORE_NESTING_TREE=$(git rev-parse 'HEAD^{tree}')
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" nesting "${DELEGATE_TIMEOUT_ARGS[@]}" nesting-check src/subject.ts > delegate-nesting.out 2>&1; then
-  ok "delegate-worker: nestingは追跡済み本体コードを読み取り検出"
-else
-  ng "delegate-worker: nestingが失敗"; cat delegate-nesting.out
-fi
-NESTING_RESULT="$DELEGATE_REPO/.claude/tmp/worker/nesting-check/result.json"
-if [ -f "$NESTING_RESULT" ] && [ "$(jq -r '.mode' "$NESTING_RESULT")" = "nesting" ] && [ "$(jq -r '.status' "$NESTING_RESULT")" = "0" ] && [ "$(jq -c '.changed_paths' "$NESTING_RESULT")" = "[]" ] && [ "$(jq -c '.context_snapshot_paths' "$NESTING_RESULT")" = "[]" ] && grep -Fq 'src/subject.tsに三段階' "$DELEGATE_REPO/.claude/tmp/worker/nesting-check/report.md" && [ "$(git rev-parse 'HEAD^{tree}')" = "$BEFORE_NESTING_TREE" ]; then
-  ok "delegate-worker: 指定pathのnesting結果を変更なしで保存"
-else
-  ng "delegate-worker: nestingのresultまたは読み取り専用境界が不正"
-fi
-if PATH="$DELEGATE_BIN:$PATH" OPENROUTER_API_KEY=test bash "$DELEGATE_SCRIPT" nesting "${DELEGATE_TIMEOUT_ARGS[@]}" nesting-test-path src/subject.test.ts > delegate-test-path.out 2>&1; then
-  ng "delegate-worker: test pathをnesting対象に許可"
-elif grep -Fq 'test assets cannot be inspected for nesting' delegate-test-path.out; then
-  ok "delegate-worker: nesting対象を追跡済みproduction codeへ限定"
-else
-  ng "delegate-worker: nesting対象pathの拒否理由が不正"; cat delegate-test-path.out
-fi
 echo "== 3. hook 全数テスト（claude 配置） =="
 cp "$SUITE/run-tests.sh" "$S/claude-sim/run-tests.sh"
 bash "$S/claude-sim/run-tests.sh" > hook-tests.out 2>&1
@@ -648,10 +531,10 @@ mv .agents/skills/IMPLEMENTER_CONTRACT.md .agents/skills/IMPLEMENTER_CONTRACT.md
 OUTPUT=$(printf '%s' "$IMPLEMENTER_INPUT" | bash .codex/hooks/shell/require-implementer.sh)
 if printf '%s' "$OUTPUT" | jq -e '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains("共通実装契約が無い"))' >/dev/null; then ok "Codex implementer hook: 共通契約欠落を起動前に拒否"; else ng "Codex implementer hook: 共通契約欠落を見逃す"; fi
 mv .agents/skills/IMPLEMENTER_CONTRACT.md.missing .agents/skills/IMPLEMENTER_CONTRACT.md
-if ! grep -q '^default_subagent_model' .codex/config.toml && ! grep -q '^default_subagent_reasoning_effort' .codex/config.toml; then
-  ok "bootstrap codex はgeneric subagentを下位モデルへ固定しない"
+if grep -q '^default_subagent_model = "gpt-5.6-luna"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "max"$' .codex/config.toml; then
+  ok "bootstrap codex は子の既定値をLuna/maxへ固定"
 else
-  ng "bootstrap codex にgeneric subagentの下位モデル既定が残存"
+  ng "bootstrap codex の子モデル既定値が不正"
 fi
 git config user.email tester@example.com
 git config user.name tester
@@ -702,7 +585,6 @@ AWS_MIXED_PROFILE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'aws st
 [ -z "$AWS_MIXED_PROFILE_PERMISSION_OUT" ] && ok "codex: daresuma-readonlyと別profileの混在を自動許可しない" || ng "codex: 混在AWS profileを誤って自動許可 out=[$AWS_MIXED_PROFILE_PERMISSION_OUT]"
 UNSAFE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PermissionRequest",session_id:"CREAD2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"rg foo src | sort",description:"opaque shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
 [ -z "$UNSAFE_PERMISSION_OUT" ] && ok "codex: 複合shellの承認判断へ介入しない" || ng "codex: 複合shellを誤って自動許可 out=[$UNSAFE_PERMISSION_OUT]"
-! grep -Fq 'normalize_default_delegate_model' .codex/hooks/shell/readonly-search.sh && ! grep -Fq 'DELEGATE_MODEL=openrouter/minimax/minimax-m3' .codex/hooks/shell/readonly-search.sh && ok "codex: worker commandを書き換えない" || ng "codex: 旧worker model正規化が残存"
 grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
 grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
 grep -q '^enabled = false$' .codex/config.toml && grep -q '^allow_local_binding = false$' .codex/config.toml && ok "permissions: localhost を含む network を遮断" || ng "permissions: network 境界が未設定"
@@ -852,12 +734,6 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/capture-scope.sh user-api -- src/example.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: polish scope記録の固定経路を allow" || ng "rules: polish scope記録判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/worker/delegate.sh nesting --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 10 --timeout-reason scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa nesting-abc123def456 src/example.ts 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: nesting限定QAの固定経路を allow" || ng "rules: nesting worker判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/worker/delegate.sh research task-id spec.md 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" != "allow" ] && ok "rules: research委任をallowしない" || ng "rules: research委任を許可 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/worker/delegate.sh smoke 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: 課金smokeを自動許可しない" || ng "rules: worker smokeを誤許可 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- ./base/scripts/run-unit.sh test/features/purchase/unit/device-discount-utils.test.ts test/features/purchase/unit/purchase-api.integration.test.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 承認済みunit test runnerを allow" || ng "rules: unit test runner判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- yarn eslint --ext .ts,.js,.tsx features/mypage/resources/contract/components/ContractSecurityOptionForm.tsx 'features/mypage/routes/contract/pages/-.[number].option.security.add._index.tsx' 2>/dev/null)
@@ -961,11 +837,6 @@ done
 report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
 jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
-if jq -e '.sandbox.excludedCommands | (index("bash .claude/skills/worker/delegate.sh nesting") != null and index("bash .claude/skills/worker/delegate.sh nesting *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(bash .claude/skills/worker/delegate.sh nesting)") != null and index("Bash(bash .claude/skills/worker/delegate.sh nesting:*)") != null)' "$SL" >/dev/null 2>&1; then
-  ok "Claude: nesting限定QAだけを自動許可"
-else
-  ng "Claude: nesting限定QAの許可が不足"
-fi
 if ! jq -e '.permissions.allow[] | select(test("delegate\\.sh (research|survey)"))' "$SL" >/dev/null 2>&1 && ! jq -e '.sandbox.excludedCommands[] | select(test("delegate\\.sh (research|survey)"))' "$SJ" >/dev/null 2>&1; then
   ok "Claude: research / survey委任を自動許可しない"
 else
@@ -990,7 +861,6 @@ done
 report_group "Claude: shellの内容変更をdeny" "$GROUP_FAILURES"
 jq -e '.permissions.allow | index("Bash(cp -n --:*)")' "$SL" >/dev/null && ok "Claude: 上書きしないcpをallow" || ng "Claude: cp -nが未許可"
 jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq -e '.permissions.ask | index("Bash(mkdir:*)") | not' "$SL" >/dev/null 2>&1 && ok "Claude: sandbox内mkdirをallow" || ng "Claude: mkdirが承認対象"
-jq -e '.permissions.allow | index("Bash(zat:*)")' "$SL" >/dev/null 2>&1 && grep -Fq 'EDIT_RULES='\''{"*":"deny"}'\''' "$WORKER_RUNNER" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$REPO/skills/unwind/SKILL.md" && ok "outline: zatは上位モデル、workerはnesting限定QAへ分離" || ng "outline: 上位調査と限定QAの境界が不足"
 jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
@@ -1020,7 +890,7 @@ done
 [ "$MISS" = "0" ] && ok "固定スクリプトは引数あり・なし両形で登録済み"
 
 if bash "$SUITE/verify-regressions.sh" > "$S/regressions.out" 2>&1; then
-  ok "配布参照・hook配線・親symlink・並行変更・idle判定の動作回帰"
+  ok "配布参照・hook配線・親symlink・並行変更・子の起動と待機の動作回帰"
 else
   ng "全体走査で追加した動作回帰に失敗"
   cat "$S/regressions.out"
