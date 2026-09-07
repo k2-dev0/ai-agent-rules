@@ -155,6 +155,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|Read|Grep|exec_command)$|(^|[._])(read_file|read_text_file|read_multiple_files|get_file_contents|read_resource|search_for_pattern|find_symbol|get_symbols_overview|exec_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-skill-source.sh\"",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
