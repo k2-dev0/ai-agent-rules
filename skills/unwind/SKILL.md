@@ -1,55 +1,37 @@
 ---
 name: unwind
-description: "polish の最終品質ゲートから呼ばれ、下位モデルに変更済み本体コードの三段階以上の制御フローネスト候補抽出だけを委任する。上位モデルが判断し、大きい修正は実装用の下位モデルへ委任する。"
+description: "polishから呼び、変更済み本体コードの3段以上の制御フローネストを検出・縮退する。"
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 ---
 
-## 目的
+## 対象・判定
 
-変更済みの本体コードについて、同じ実行経路に制御構造が3段階以上重なる箇所を、意味を保ったまま2段階以下へ減らす。`polish` の内部品質ゲートとしてだけ実行する。
+polish内部でのみ実行する。親から渡された機能名と、追跡・commit済みでcleanな本体コードの相対pathを使う。verifiedは実変更path、directは明示path。`unwind`自身では差分を再探索・再検証しない。
 
-検出候補の抽出だけを下位モデルの読み取り専用・隔離workerへ委任する。機能の目的、要件、設計、変更範囲の調査は依頼しない。候補の採否、修正・却下判断、検証はすべて上位モデルが行う。
+test・設定・文書・Prisma schema・生成物・vendor・依存物・未変更file・削除済みfileは対象外。入力不足は親へ返し、空一覧なら検出を省略する。
 
-候補に対する修正主体は[上位モデルのレビューと下位モデルの再実装](../REVIEW_FLOW.md)を全文読み、大小判定する。読み取り専用workerはこの判定と再実装を担当しない。
+判定は[検出契約](NESTING_CONTRACT.md)に従い、3段以上を意味を保って2段以下へ減らす。
 
-## 判定
+## 手順
 
-対象は親スキルが確定済みの対象から選んだ、現在も存在する**追跡済み・commit済みでcleanな本体コードの相対パス**だけとする。verifiedは実変更path、directは明示pathを使う。test、設定、文書、Prisma schema、生成物、vendor、依存物、開始scope内の未変更file、commit済み削除は対象外にする。機能名または対象パスの指定が無い場合は、上位モデルが差分を探索して補完せず、親スキルへ対象不足として返す。
+検出候補の抽出だけを下位モデルへ渡す。機能の目的、要件、設計、変更範囲の調査は依頼しない。候補の採否、修正・却下判断、検証はすべて上位モデルが行う。
 
-親スキルが選別済みのpathをそのまま使い、`unwind`自身では差分を再探索・再検証しない。明示された一覧が空なら外部ワーカーを呼ばず、対象なしとして返す。
+起動・待機は[子・待機の規則](../SUBAGENT_RULES.md)に従う。
 
-- `if` / `else`、loop、`switch`、`try` / `catch` / `finally` の制御ブロックを実行経路ごとに数える
-- `else if` の連鎖は1つの選択として扱い、`switch` の `case` ラベルは `switch` より深く数えない
-- 関数・メソッド・callback の内部は独立して数える。関数境界を作って深さを隠してはならない
-- 下位モデルは各候補の実行経路を読み、機械的な括弧数だけで判定しない
+1. 親スキルが渡した本体コードのpathだけを、専用`nesting-reviewer`へ渡す。briefは機能名・repository絶対path・HEAD・対象path。Codexは`agent_type: "nesting-reviewer"`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type: "nesting-reviewer"`。model・effortは専用定義を使い、上書き・resume・backgroundは指定しない。利用不能なら親へ失敗を返す。
+2. 返却されたchild ID／task pathで完了を待ち、全対象pathの検出完了と候補のfile・行・最大深さ・到達条件を確認する。待機先なし・未読pathありは失敗。検出中は対象を変更せず、HEAD・対象内容が変わった結果は破棄して新規起動する。失敗・中断・対象外変更は品質ゲート失敗。候補なしなら「3段階以上の制御フローネストなし」と返す。
+3. guard clause（return/continue/break/throw）→ 条件反転 → 排他的分岐のswitch・状態表・dispatch map化 → 不要な反復の除外、の順で検討する。
+4. 修正時は[レビューフロー](../REVIEW_FLOW.md)を全文読み、大小判定・修正担当・検証に従う。対象test・型検査・lintと、親の`polish`が実行した同じpackageのbuildを再実行する。build未実行は理由を引き継ぎ、新しいbuild commandを発明しない。
+5. 修正をcommit後、新HEADと新しいサブエージェントで再検出する。安全に縮退できない候補は理由・却下案を親へ返す。
 
-## 実行
+## 禁止
 
-1. task-idを`nesting-<HEAD先頭12桁>-<今回の実行に固有なsuffix>`とし、親スキルが渡した本体コードのpathだけを個別引数で渡す。同じHEADで別scopeの検査や再試行を行う場合も、新しいtask-idを使って既存結果を保持する。次の固定形式で`nesting` modeを実行する。
-
-   ```bash
-   bash [skills_root]/worker/delegate.sh nesting --hard-timeout-minutes 10 --idle-timeout-seconds 120 --poll-seconds 10 --timeout-reason scope=changed-production-paths,difficulty=low,basis=mechanical-nesting-qa nesting-<HEAD先頭12桁>-<今回の実行に固有なsuffix> <対象path>...
-   ```
-
-2. `result.json`とreportを読み、3段階以上の候補ごとにファイル、行、最大深さ、到達条件があることを上位モデルが確認する。workerの失敗・中断・対象外変更では候補なしと扱わず品質ゲートを失敗にする。候補がなければ「3段階以上の制御フローネストなし」として終了する。
-3. 次の順で、既存の責務と振る舞いを変えずに浅くできる案を検討する。
-   - 異常・対象外・空値を先に `return` / `continue` / `break` / `throw` する guard clause
-   - 条件を反転し、主経路を左端へ置く
-   - 相互排他的な分岐を `switch`、状態表、dispatch map、データ駆動の選択へ置き換える
-   - ループの不要な反復を先に除外し、必要な処理だけを直線化する
-4. 振る舞いを保てる案があれば、`REVIEW_FLOW.md`の大小判定と修正ループに従う。再検証では対象テスト・型検査・lintに加え、親の`polish`が実行した同じpackageのbuildを再実行する。親がbuildを`not run`とした場合はその理由を引き継ぎ、新しいbuild commandを発明しない。コードを変更してコミットした場合は新しいHEADからtask-idを作り直し、Step 1から再検出する。
-5. 安全な縮退案が無い場合は、深さを残す根拠と却下した案を `polish` へ返す。未検討のまま最終報告へ進まない。
-
-## 禁止する見せかけの縮退
-
-次はネストを別の場所へ隠すだけなので、解決策として提案・適用してはならない。
-
-- 深いブロックだけを新しい関数・メソッド・helperへ切り出して直後に呼ぶ
+- 深いブロックを新しい関数・メソッド・helperへ切り出して直後に呼ぶ
 - IIFE、callback、lambda、local functionへ押し込む
-- 呼び出し元の分岐を helper へ移し、呼び出し連鎖の先で同じネストを維持する
+- helperの呼び出し先へ同じネストを移す
 
-新しい境界を導入するなら、それ自体が独立した業務責務と公開契約を持ち、このネストを隠すことが主目的ではないと説明できなければならない。
+新しい関数境界には独立した業務責務・公開契約が必要。ネストを隠す目的では作らない。
 
-## 返却内容
+## 返却
 
-`polish`へworkerのtask-id・結果path・候補ごとの最大深さ・到達条件・大小判定と修正主体・採用した縮退または残した根拠・実行したテスト・型検査・lint・buildを返す。候補が無ければ、workerの結果を根拠に「3段階以上の制御フローネストなし」と明示する。
+child ID／task path・検出結果、候補の最大深さ・到達条件、大小判定・修正主体、縮退結果／残す理由、test・型検査・lint・buildの結果を返す。
