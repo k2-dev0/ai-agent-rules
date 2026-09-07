@@ -68,18 +68,19 @@ hook_agent_type() {
 
 # 専用定義の設定を起動引数で上書きせず、新規の実装役だけを起動する。
 hook_implementer_launch_valid() {
-  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" '
+  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "${1:-implementer}" '
     .tool_input | select(type == "object") |
-    ([.model, .reasoning_effort, .model_reasoning_effort, .effort, .thinking] | all(. == null)) and
+    ([.model, .reasoning_effort, .model_reasoning_effort, .reasoningEffort, .effort, .thinking,
+      .config, .config_file, .model_provider, .sandbox_mode] | all(. == null)) and
     (.resume == null or .resume == "") and
     (.run_in_background == null or .run_in_background == false) and
     (if $agent == "codex" then
-      (.subagent_type == null or .subagent_type == "implementer") and
+      (.subagent_type == null or .subagent_type == $role) and
       ((has("fork_context") and .fork_context == false) or .fork_turns == "none") and
       (if has("fork_context") then .fork_context == false else true end) and
       (if has("fork_turns") then .fork_turns == "none" else true end)
     else
-      (.agent_type == null or .agent_type == "implementer")
+      (.agent_type == null or .agent_type == $role)
     end)
   ' >/dev/null
 }
@@ -136,6 +137,12 @@ hook_deny_json() {
 # 決定 JSON(deny)を stdout へ出し、理由をエージェントに伝えて hook を終える関数
 hook_deny() {
   hook_deny_json "$1"
+  exit 0
+}
+
+# native toolの引数を補正して続行する。
+hook_rewrite_input() {
+  jq -cn --argjson input "$1" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":$input}}'
   exit 0
 }
 
