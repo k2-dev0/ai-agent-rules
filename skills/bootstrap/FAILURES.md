@@ -1,6 +1,6 @@
 # bootstrap 失敗時の確認
 
-このファイルは `init-agent.sh` が失敗した場合だけ読む。
+このファイルは `bootstrap.sh` が失敗した場合だけ読む。
 
 ## 共通
 
