@@ -1,119 +1,96 @@
 ---
 name: polish
-description: 実装完了後、receipt付き変更または直接修正の明示pathへフォーマッタ・リンター・型検査・buildを適用し、コード修正は上位モデルの大小判定と下位モデルの再実装へ戻す。
+description: 実装後の対象pathを整形・lint・型検査・build・ネスト検査する。
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, Agent, Skill(unwind)
 disable-model-invocation: true
 ---
 
-## 目的
-
-対象として確定したコードだけを整形・静的検査・buildし、診断をscopeへ帰属させてからpath検査と`unwind`を通す。実装前baselineがある変更はpath完全性まで検証し、気軽な直接修正は同じ品質処理を維持したまま完全性だけ未検証と明示する。
-
-診断または`unwind`がコードの判断を伴う修正を要求した場合は、[上位モデルのレビューと下位モデルの再実装](../REVIEW_FLOW.md)を全文読み、大小判定、修正主体、再検証、最終レビューの正本とする。
-
 ## 実装前baseline
 
-実装workflowの呼び出し元は、Red用testをコミットしてworktreeがcleanになった後、実装開始直前に次を一度実行する。
+実装workflowではRed用testをコミットし、cleanな状態で実装直前に一度実行する。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh <scope名> --auto
 ```
 
-現在HEADを検証範囲の基準として記録する。実装役の書き込み権限を変更する処理ではない。
+## 入力
 
-## モード
+開始時にモードを選び、途中で変更しない。
 
-開始時に一つだけ選び、途中で黙って切り替えない。
+| モード | 対象・保証 |
+|---|---|
+| **verified** | 実装前receiptのある変更。実変更pathの完全性を検査する。receipt欠落は停止し、directへ降格しない |
+| **direct** | 通常の直接修正で渡された相対path全件。完全性は`scope-unverified`。明示pathなしでは実行しない |
 
-- **verified**: `tdd`、`errand`などの呼び出し元が実装前に`capture-scope.sh <機能名> --auto`でreceiptを作成済みの場合。receiptから実変更pathを決定し、最後にpathの完全一致まで検証する。receipt欠落は呼び出し元の状態遷移不備として停止し、directへ降格しない
-- **direct**: 通常の直接依頼で、呼び出し元が今回作成・変更した相対path全件を順序付きで渡す場合。receiptは要求せず、path完全性だけ`scope-unverified`とする。repository全体、directory、glob、`git diff`、`git status`から対象を推測・拡張しない。明示pathが無ければ実行しない
-
-どちらもformatter、lint、typecheck、Prisma検証、build、`unwind`を同じ条件で実行する。receiptが無いことを理由にPrettier / ESLintだけの独自フォールバックへ置き換えない。
-
-## 入力と対象
-
-verifiedは機能名を受け取り、最初に次を実行する。
+verifiedは次を実行し、この出力と完全一致する相対path全件を一括入力にする。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-`--auto`で記録したbaselineでは、基準commitから現在HEADまで実際に差分があり、現在も存在する追跡済みfileがGitの順序で返る。従来の個別path receiptでは、候補のうち実際に変更されたfileだけがreceipt順で返る。この出力と完全一致する相対path全件を一括入力とし、directory、glob、`git diff`で独自に広げたpathを使わない。commit済み削除はformatter・lint・`unwind`・path検査の対象外にする。出力が空なら実行表と`unwind`を省略し、path検査へ進む。
+`--auto`は基準commit〜HEADの差分から現存する追跡fileをGit順で返す。個別path receiptは実変更fileをreceipt順で返す。削除済みfileは除外し、空なら実行表・unwindを省略してpath検査へ進む。
 
-directは機能名と明示path全件を受け取り、formatter等を起動する前に次で個別file・重複・存在・symlink・ignoreを検査する。未追跡fileはこの時点では許可するが、最終gateまでに追跡・commitする。
+directは開始前に次でpath形式・重複・存在・symlink・ignoreを検査する。未追跡fileは最終gateまでに追跡・commitする。失敗時に対象を推測し直さない。
 
 ```bash
 bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示path>...
 ```
 
-以降、verifiedの実変更pathまたはdirectの明示pathを**対象path**と呼ぶ。direct-check失敗時は対象を推測して再構成しない。
-
-各対象pathを、直近の`package.json`、`tsconfig.json`、formatter / lint設定、Prisma schemaが属するpackageへ対応付ける。formatter・lint・`unwind`へは対象pathだけを渡し、無関係なdirty fileとproject全体への`--write` / `--fix`は対象外にする。typecheck・build・Prisma検証はファイル単位で安全に分割できないため、対象pathが属するpackageまたはschemaだけを起点に既存単位で実行する。ただしpackage単位の失敗全体を今回の失敗とは扱わない。
+対象をrepository全体、directory、glob、`git diff`・`git status`から推測・拡張しない。各pathを最寄りのpackage・設定・Prisma schemaへ対応付ける。formatter・lintには対象pathだけ、typecheck・build・Prisma検証には所属package/schemaだけを渡す。
 
 ## 実行表
 
-packageごとに上から実行する。既存scriptを第一選択にし、scriptがない場合だけ同じpackageの`node_modules/.bin`を使う。`npx`とinstallは禁止する。
+両モードともpackageごとに上から実行する。既存scriptを優先し、なければ同じpackageの`node_modules/.bin`を使う。`npx`・installは禁止。
 
-| 条件 | 実行 | 範囲 |
-|---|---|---|
-| `format` scriptがpathを受ける | `yarn format -- <paths>` | 対象pathだけ |
-| 上記なし、Prettier設定あり | `prettier --write <paths>` | 設定が支配する対象pathだけ |
-| 上記なし、Biome設定あり | `biome format --write <paths>` | 同上 |
-| `lint` scriptがpathを受ける | `yarn lint -- <paths>` | 対象pathだけ |
-| 上記なし、ESLint設定あり | `eslint --fix <paths>` | 同上 |
-| 上記なし、Biome設定あり | 導入済みBiomeのhelpで確認した修正optionで`biome lint <paths>` | 同上 |
-| TypeScript / JavaScriptを含み`typecheck` scriptあり | packageで`yarn typecheck` | package単位で1回 |
-| 上記scriptなし、`tsconfig.json`あり | `tsc -p <tsconfig> --noEmit` | package単位で1回 |
-| `schema.prisma`を含む | Prismaの`format`、`validate`、`generate` | schemaが属するpackage |
-| 対象pathが属するpackageに`build` scriptあり | packageで`yarn build` | package単位で1回 |
+| 条件 | command |
+|---|---|
+| path指定可能なformat script | `yarn format -- <paths>` |
+| 上記なし、Prettier設定あり | `prettier --write <paths>` |
+| 上記なし、Biome設定あり | `biome format --write <paths>` |
+| path指定可能なlint script | `yarn lint -- <paths>` |
+| 上記なし、ESLint設定あり | `eslint --fix <paths>` |
+| 上記なし、Biome設定あり | 導入済みhelpで修正optionを確認し`biome lint <paths>` |
+| TS/JS変更、typecheck scriptあり | packageで`yarn typecheck` |
+| 上記scriptなし、tsconfigあり | `tsc -p <tsconfig> --noEmit` |
+| `schema.prisma`変更 | Prismaの`format`・`validate`・`generate` |
+| 所属packageに`build` scriptあり | packageで`yarn build` |
 
-同じpathを複数formatterまたはlinter設定が支配し、既存scriptでも一意にならない場合は勝手に選ばず`not run`として返す。`build` scriptがないpackageのbuild commandは推測・発明しない。必要なtoolが未導入ならinstallせず、実行できなかった検査を`not run`として返す。
+package単位の検査は各1回。設定競合で一意に選べない、tool未導入、commandなしは`not run`とし、推測・installで補わない。品質検査をPrettier / ESLintだけへ縮小しない。polish自体はtestを追加実行しない。
 
-polish自体はtest commandを追加実行しない。`schema.prisma`、basenameが`constants.ts`または`constants.js`のfile、`constants/`配下のfileだけの変更では、それらを理由に対応testを探索・実行しない。
+## 診断・修正
 
-## 診断のscope帰属
+[診断のscope帰属](../REVIEW_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書を全文読み、大小判定・担当・最終レビューに従う。
 
-[レビューフローの診断のscope帰属](../REVIEW_FLOW.md#診断のscope帰属)を読み、各commandのdiagnosticを分類する。自動修正ではないコード修正も、同じ文書の大小判定と修正ループに従う。
+| 原因 | 修正後 |
+|---|---|
+| formatterがformat差分を自動修正 | lintへ進む |
+| linterが自動修正 | formatter・lintを再確認して続行 |
+| `scope-related`な型・構文・lint・Prisma・build error | `REVIEW_FLOW.md`で大小判定。修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
+| `unrelated`・`uncertain` | 対象外fileを変更せず分類を報告して続行 |
+| `unwind`の修正 | 大小判定に従って修正・検証・commit後、同じ対象pathでpolishを再実行 |
+| tool未導入・設定競合・実行不能 | `not run`を報告して続行 |
 
-## 制御フローネストの品質ゲート
+コードの判断を伴う修正は、どちらが修正しても全品質ゲートを再実行する。
 
-実行表に`scope-related`な失敗が無く、その他のdiagnosticを分類した後に、確定済みの対象pathから本体コードだけを選び、`unwind`を必ず呼ぶ。test、設定、文書、Prisma schema、生成物、vendor、依存物はネスト検査から除外し、除外理由を返す。本体コードが無ければ`unwind`と外部workerを省略する。開始scopeの未変更pathを混ぜず、対象を新たに探索しない。この選別はネスト検査だけに適用し、最後のscope path検査には元の全件を渡す。返却された候補だけを読み、早期return等で構造的に減らせるか判断する。関数抽出で深さを隠さない。
+## ネスト検査
 
-`unwind` がコードを変更した場合は、対象テスト・型検査・lint・親スキルが実行した同じpackageのbuildを再実行し、通常の変更と同じ単位でコミットした後、同じ対象pathを下位モデルの`nesting` QAへ再度渡す。縮退できない候補がある場合も、workerのtask-id・結果path・理由と却下案を最終報告用に返してから後続へ進む。
+`scope-related`失敗の解消と他の診断の分類後、確定済みの対象pathから本体コードだけを選び、`unwind`を必ず呼ぶ。test・設定・文書・Prisma schema・生成物・vendor・依存物は除外し、本体コードなしなら検出も省略する。対象を再探索しない。
+
+返却された候補だけを確認し、関数抽出で深さを隠さない。修正後は対象test・型検査・lint・同じpackageのbuildを再実行する。縮退不能は理由・却下案・child ID／task path・検出結果を報告する。
 
 ## scope path検査
 
-実行表、`unwind`、必要な修正と再検証を終え、対象変更をコミットしてから、polish開始時に得た対象pathを同じ順序で全件渡す。`list-changed`をもう一度実行しない。verifiedの入力が空なら`--`の後へpathを付けない。directの空入力は許可しない。
-
-verified:
+修正・検証・commit後、開始時の全対象pathを同じ順序で一度だけ渡す。ネスト検査の除外fileも含め、`list-changed`をもう一度実行しない。選んだモードのコマンドだけを単独実行する。
 
 ```bash
+# verified（対象なしの場合も -- を付ける）
 bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
-```
-
-開始receiptのrepository・基準commit・modeを読み、現在の入力pathを「基準commitから実際に変更され、現在存在するfile」の一覧と順序込みで完全一致させる。個別path receiptでは候補一覧も照合する。入力された実変更pathだけが追跡済みかつcleanであることを検査する。
-
-direct:
-
-```bash
+# direct（空入力不可）
 bash [skills_root]/polish/quality-gate.sh <機能名> --direct -- <明示path>...
 ```
 
-明示pathの形式、重複、存在、symlink、ignoreに加え、全件が追跡済みかつcleanであることを検査する。成功しても対象pathの完全性は証明せず、最終結果を`scope-unverified`とする。
+verifiedはreceiptのrepository・基準commit・modeと照合し、現存する実変更pathの順序込み完全一致、全件のtracked・cleanを検査する。個別path receiptは候補一覧も照合する。directはpathの形式・重複・存在・symlink・ignore・tracked・cleanを検査するが、完全性は証明しない。
 
-どちらも完了receiptの記録や後続での再検証は行わない。ソース内容は解析せず、独自のESLint rule、`no-magic-numbers`、import規則を追加しない。コード規約は実行表の既存lint設定へ任せる。
+完了receiptの記録や後続での再検証は行わない。独自のESLint rule、`no-magic-numbers`、import規則を追加しない。
 
-## 反復条件
-
-修正原因と修正主体により再検証範囲を決める。
-
-| 原因 | 修正後の処理 |
-|---|---|
-| formatterがformat差分を自動修正 | 再起動せず後続のlintへ進む |
-| linterが自動修正 | formatterとlintを再確認して後続へ進む |
-| `scope-related`な型error、構文error、非自動修正のlint error、Prisma整合性error、build error | `REVIEW_FLOW.md`で大小判定し、対応する主体が修正。必要な検証とcommit後にpolishを先頭から再実行 |
-| `unrelated`または`uncertain`な失敗 | 対象外fileを変更せず分類根拠を返し、後続のscope path検査へ進む |
-| `unwind`による修正 | `REVIEW_FLOW.md`で大小判定し、対応する主体が修正。必要なtestとcommit後にpolishを先頭から再実行 |
-| tool未導入、設定競合、実行不能 | 再実行で隠さず`not run`と理由を返し、後続のscope path検査へ進む |
-
-決定的tool自身の修正は、それ以前の結果を無効化する範囲だけ再確認する。コードの判断を伴う修正は、上位モデルと下位モデルのどちらが修正しても全品質ゲートを再実行し、上位モデルが最終レビューする。最終報告ではモードと対象pathを示し、実行済みcommandを`scope pass`、`scope fail`、`unrelated failure`、`uncertain`、`not run`へ分類する。directではこれと別にpath完全性を`scope-unverified`と明記し、ファイル単位の起動へ分割しない。
+モード・対象pathと、commandごとの`scope pass`／`scope fail`／`unrelated failure`／`uncertain`／`not run`を返す。directは別に`scope-unverified`を示す。pathごとにpolishを分割しない。
