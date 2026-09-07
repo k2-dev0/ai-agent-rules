@@ -1,20 +1,6 @@
-# UI コンポーネントの編集ルール
+# UI編集
 
-## インポート元
-
-1. プロジェクトに共通componentの入口がある場合は、それを使用する。`@front/components/`等の例をそのまま使わず、alias・export・同型実装を確認する。
-  - 共通入口がラップしているライブラリを直接importして、既存の統一を壊さない
-  - Why: ライブラリの差し替え・ラップ時の影響範囲を限定するため
-
-## ローカルコンポーネントへの切り出し
-
-1. `[skills_root]/IMPLEMENTATION_RULES.md`の構造の判断を読み、表示単位にも適用する。
-
-## スタイリング
-
-1. プロジェクト固有の拡張クラス定義がある場合は、それを優先して使用すること
-2. クラス名の動的な結合は既存方式へ合わせる。`classnames` / `clsx`が未導入なら、この規約だけのために追加しない。
-
-## 命名ルール
-
-1. 最寄りの同型componentの命名と責務へ合わせる。resource名を接頭辞にする既存規約なら、例えばbill配下で`BillPaymentDetail.tsx`とする。別プロジェクトのdirectoryを作る根拠にはしない。
+- alias・export・同型実装を確認し、共通component入口を使う。ラップ済みlibraryを直接importしない。
+- 切り出しは`[skills_root]/IMPLEMENTATION_RULES.md`に従う。
+- 既存の拡張クラスを優先する。動的なクラス結合は既存方式に合わせ、未導入のclassnames／clsxを追加しない。
+- 命名・責務は同型componentに合わせる。resource接頭辞の規約なら`BillPaymentDetail.tsx`のようにする。
