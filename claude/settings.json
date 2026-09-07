@@ -92,6 +92,15 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/require-implementer.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|Read|Grep|exec_command)$|(^|[._])(read_file|read_text_file|read_multiple_files|get_file_contents|read_resource|search_for_pattern|find_symbol|get_symbols_overview|exec_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/deny-skill-source.sh"
+          }
+        ]
       }
     ]
   },
