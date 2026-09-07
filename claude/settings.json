@@ -100,8 +100,8 @@
     "failIfUnavailable": true,
     "autoAllowBashIfSandboxed": false,
     "excludedCommands": [
-      "bash .claude/skills/bootstrap/init-agent.sh",
-      "bash .claude/skills/bootstrap/init-agent.sh *",
+      "bash .claude/skills/bootstrap/bootstrap.sh",
+      "bash .claude/skills/bootstrap/bootstrap.sh *",
       "bash .claude/skills/tdd/mark-prompt-done.sh",
       "bash .claude/skills/tdd/mark-prompt-done.sh *",
       "bash .claude/skills/polish/quality-gate.sh",
