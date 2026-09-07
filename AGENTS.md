@@ -3,5 +3,5 @@
 
 ## メインモデルの選択
 
-- Codexのメインエージェントで `switch_main_model` が利用可能な場合だけ、作業前にモデル選択基準を読み、作業の性質が変わったときも適用する。配布元では `skills/MODEL_SELECTION.md`、配置先では `[skills_root]/MODEL_SELECTION.md` を読む。
-- ツールが利用できない環境と子エージェントには、この切り替え操作を要求しない。
+- 作業開始時と作業の性質が変わったときは `[skills_root]/MODEL_SELECTION.md` に従ってモデルを選ぶ
+  - 判断基準が文脈から失われたと判断したら再読する
