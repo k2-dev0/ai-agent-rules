@@ -318,7 +318,7 @@ git config user.email tester@example.com
 git config user.name tester
 git commit --allow-empty -qm "test: 品質ゲートfixtureを初期化"
 touch SOURCE_REPOSITORY.md
-if bash .claude/skills/bootstrap/init-agent.sh claude > init-source.log 2>&1; then
+if bash .claude/skills/bootstrap/bootstrap.sh claude > init-source.log 2>&1; then
   ng "bootstrap は配布元での実行を拒否"
 else
   ok "bootstrap は配布元での実行を拒否"
@@ -328,19 +328,19 @@ rm SOURCE_REPOSITORY.md
 mkdir -p "$S/bootstrap-failing-bin"
 printf '%s\n' '#!/bin/bash' 'exit 2' > "$S/bootstrap-failing-bin/grep"
 chmod +x "$S/bootstrap-failing-bin/grep"
-if PATH="$S/bootstrap-failing-bin:$PATH" bash .claude/skills/bootstrap/init-agent.sh claude > init-search-failure.log 2>&1; then
+if PATH="$S/bootstrap-failing-bin:$PATH" bash .claude/skills/bootstrap/bootstrap.sh claude > init-search-failure.log 2>&1; then
   ng "bootstrap は探索失敗を拒否"
 else
   ok "bootstrap は探索失敗を拒否"
 fi
 [ -d .claude/skills/bootstrap ] && ok "bootstrap は探索失敗後も再試行可能" || ng "bootstrap が探索失敗後に消えた"
-if bash .claude/skills/bootstrap/init-agent.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
+if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq 'ツールが利用できない環境と子エージェント' AGENTS.md; then
-  ok "モデル選択基準: Claude配置と非対応環境の除外"
+if [ -f .claude/skills/MODEL_SELECTION.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '作業開始時と作業の性質が変わったとき' AGENTS.md; then
+  ok "モデル選択基準: Claude配置と参照タイミング"
 else
-  ng "モデル選択基準: Claude配置または適用境界が不正"
+  ng "モデル選択基準: Claude配置または参照タイミングが不正"
 fi
 [ -f .claude/agents/implementer.md ] && grep -q '^model: claude-sonnet-5$' .claude/agents/implementer.md && grep -q '^effort: max$' .claude/agents/implementer.md && ok "bootstrap claude はimplementer定義を保持" || ng "bootstrap claude のimplementer定義が不正"
 IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{subagent_type:"implementer"}}')
@@ -629,13 +629,13 @@ cp -R "$REPO/e2e" "$S/codex-sim/.codex/e2e"
 cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
-if bash .agents/skills/bootstrap/init-agent.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
+if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq 'switch_main_model' AGENTS.md; then
-  ok "モデル選択基準: Codex配置と正本への参照"
+if [ -f .agents/skills/MODEL_SELECTION.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '作業開始時と作業の性質が変わったとき' AGENTS.md; then
+  ok "モデル選択基準: Codex配置と参照タイミング"
 else
-  ng "モデル選択基準: Codex配置または正本参照が不正"
+  ng "モデル選択基準: Codex配置または参照タイミングが不正"
 fi
 [ -f .codex/agents/implementer.toml ] && grep -q '^model = "gpt-5.6-luna"$' .codex/agents/implementer.toml && grep -q '^model_reasoning_effort = "max"$' .codex/agents/implementer.toml && ok "bootstrap codex はimplementer定義を保持" || ng "bootstrap codex のimplementer定義が不正"
 IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:"implementer",fork_turns:"none"}}')
@@ -842,7 +842,7 @@ if command -v codex >/dev/null 2>&1; then
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: ps -p 以外へ許可を拡張しない" || ng "rules: ps の許可範囲が過剰 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/bootstrap/init-agent.sh codex 2>/dev/null)
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/bootstrap/bootstrap.sh codex 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: bootstrap の固定経路を allow" || ng "rules: bootstrap 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: e2e plan の固定経路を allow" || ng "rules: e2e plan 判定失敗 out=[$OUT]"
@@ -1010,7 +1010,7 @@ done
 report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
 jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
-for SC in bootstrap/init-agent.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh e2e/apply-e2e-plan.sh; do
+for SC in bootstrap/bootstrap.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
   jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
