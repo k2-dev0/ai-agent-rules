@@ -123,6 +123,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 単一file・対象名一致・日本語・AI署名なしの契約準拠commit | 自動 |
 | shell上書き・mv・sed -i・tee・redirect、複合command・危険option | 拒否。内容変更はEdit/apply_patch |
 | .env・lockfile・.git・agent設定の直接変更 | 拒否。設定更新は固定スクリプト |
+| skill内スクリプトの直接表示・内容検索・trace実行 | hookで拒否。文書・ファイル名一覧・通常実行は維持。実行に問題があれば報告して停止 |
 | Prisma migrate/db push/db execute、Git push/cherry-pick、依存install/add | 拒否 |
 | 複数stage・対象名不一致・日本語なし・AI署名・amendのcommit | 拒否 |
 
