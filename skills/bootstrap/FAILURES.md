@@ -1,23 +1,15 @@
-# bootstrap 失敗時の確認
+# bootstrap失敗時
 
-このファイルは `bootstrap.sh` が失敗した場合だけ読む。
+`bootstrap.sh`が失敗した場合だけ読む。
 
-## 共通
-
-- プロジェクトルートから、SKILL.md のコマンドを相対パスのまま単独実行する。
-- `./`、絶対パス、`sh`、`cd ... &&`、pipe、separator、redirect を足さない。許可はコマンド文字列へ限定されている。
-- placeholder 残存で終了した場合は、報告されたファイルを確認する。別の検索コマンドで終了条件を作り直さない。
-
-| message | 対応 |
+| 結果 | 対応 |
 |---|---|
-| `bootstrap cannot run in the source repository` | 配布元では実行せず、設定を配置したapplication repositoryで実行する |
-| `cannot inspect ...` | 配置済み設定treeの読み取り権限を直して再実行する |
-| `cannot remove bootstrap skill from discovery` | `bootstrap/`が残っていることを確認し、親directoryの権限を直して再実行する |
+| コマンド形式が違う | プロジェクトルートからSKILL.mdの相対pathを単独実行。`./`・絶対path・sh・cd・pipe・separator・redirectを足さない |
+| placeholder残存 | 報告されたfileを確認。終了条件を別の検索で作り直さない |
+| `bootstrap cannot run in the source repository` | 配置先で実行 |
+| `cannot inspect ...` | 配置先の読み取り権限を修正 |
+| `cannot remove bootstrap skill from discovery` | bootstrapの残存と親directoryの権限を確認・修正 |
+| Claudeで正しいcommandも`Operation not permitted` | `sandbox.excludedCommands`を確認し、設定更新とsandbox外実行を依頼 |
+| Codexで正しいcommandも拒否 | project trustと`.codex/rules/default.rules`を確認 |
 
-## Claude Code
-
-`Operation not permitted` なら、まずコマンド文字列を直す。正しい文字列でも失敗する場合だけ、古い配置で `settings.json` の `sandbox.excludedCommands` が欠けている可能性をユーザーへ報告し、sandbox 外の再実行と設定更新を依頼する。
-
-## Codex
-
-正しい文字列でも拒否された場合は、project trust と配布済み `.codex/rules/default.rules` を確認する。限定 allow を避ける別コマンドへ変更しない。
+限定allowを迂回する別コマンドへ変更しない。
