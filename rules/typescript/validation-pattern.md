@@ -1,17 +1,7 @@
-# 入力検証・schema の編集ルール
+# 入力検証・schema
 
-入力境界と内部値の扱い、配置・命名の共通基準は`[skills_root]/IMPLEMENTATION_RULES.md`を読む。
+共通基準は`[skills_root]/IMPLEMENTATION_RULES.md`に従う。
 
-## スキーマ定義ツールの選定
-
-1. 対象packageの依存関係と同じ責務の既存schemaを確認し、実際に使われている検証ライブラリと定義方式へ合わせる。Zod使用箇所へyupを新規導入するなど、規約の例だけを根拠に別方式を増やさない。
-2. schema objectを置く流儀の`schema.ts`には、手書きの検証関数を置かない。
-
-## nullable 必須フィールドのユーティリティ
-
-1. 以下の条件を **すべて** 満たすフィールドには、同じ契約の既存ユーティリティが存在する場合に再利用する。import先とexportを確認し、存在しない`modules/yup/utils.ts`や`modules/zod/utils.ts`を想定しない。
-  - 入力（選択）が必須である
-  - placeholder を設定する
-  - 初期値が null である
-    - Why: 「未選択状態（null）→ placeholder 表示 → 送信時に必須バリデーション」というパターンを統一的に扱うため
-    - 該当する既存処理がなければ、その入力境界で必要なschemaだけを定義する。将来用のユーティリティ一式を作らない。
+- 対象packageの依存・既存schemaに合わせてlibrary・定義方式を選ぶ。schema object用の`schema.ts`に手書き検証関数を置かない。
+- 必須選択・placeholderあり・初期値nullの全条件を満たすfieldは、同契約の既存utilityを再利用する。import・exportを確認し、存在を仮定しない。
+- 既存処理がなければ入力境界に必要なschemaだけを定義する。将来用utilityは作らない。
