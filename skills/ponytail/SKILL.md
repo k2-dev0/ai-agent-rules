@@ -1,155 +1,65 @@
 ---
 name: ponytail
-description: "cowlick が `.[agent_name]/prompt/` に作った設計書を全設計書横断で監査し、要件へのtraceability、境界を新設しない代替案、原因除去、既存の実行方式の再利用を比較して、過剰な実装計画を削る"
+description: "meetingから設計書一式を監査し、要件を満たす最小案へ削減する。"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 user-invocable: false
 ---
 
-開始時に[設計・実装の判断基準](../IMPLEMENTATION_RULES.md)を読み、対象に該当する規約と既存例だけを確認する。
+## 対象・条件
 
-## 目的
+開始時に[判断基準](../IMPLEMENTATION_RULES.md)と該当規約を読む。対象は`.[agent_name]/prompt/.prompt.md`と参照先の`branch-*-prompt.md`。変更は現在の設計書とindexだけに限定する。
 
-実装前の設計から、不要な機能、実行境界、対象ファイル、失敗対策、依存、抽象化を削る。
-各設計書の内部で合理的でも、全体では不要な経路を丸ごと消し、確定要件を満たす最小の設計へ絞る。
+前段の結論を証拠にせずコードベースを再調査する。設計書だけで目的・対象・要件由来・Changes・完了条件を特定できない、またはindexが不整合なら`blocked`。過去の文脈やファイル名で補完しない。同じ会話内の再調査を履歴の隔離とは呼ばない。
 
-## 独立監査の前提
+調査・判断・編集は[agent_name]が行う。サブエージェントへ調査を委任しない。
 
-同じエージェントの会話履歴は消せないため、前段の知識がないとは主張しない。現在の`.[agent_name]/prompt/.prompt.md`と参照先設計書を要求契約とし、前段の結論を証拠として使わずコードベースを独立に再調査する。今回の判断基準と関連規約は引き続き適用する。
+## 手順
 
-過去phaseの結論、会話の含意、ファイル名から目的や対象を補完しない。設計書だけから目的、明示要件、禁止・制約、受入済みtrade-off、対象機能、Changes、完了条件を特定できない場合は、以前の文脈で穴埋めせず`blocked`を返す。
+1. 個別設計書より先に一式を横断し、入口、共有責務、全caller・consumer、永続化、外部副作用、利用者の契約を追う。bug修正では報告された症状とroot causeを分ける。
+2. 省略 → 既存実装・実行方式 → 標準library → native機能 → 導入済み依存 → 最小の独自実装の順で比較する。要件を満たす案が見つかったら、それ以降は追加しない。
+3. 境界・global/shared変更を増やさない案と比較し、下表を埋める。新設要素のためだけの要素、導出できる定数、設計選択だけに対応する要素は削除候補にする。
+4. 数値・順序・候補選択は具体値で反証する。自動選択・先頭N件・min/max・tie-break・組み合わせ探索の未指定部分を要件へ昇格させない。
+5. 再利用候補の引数・戻り値・副作用・error・運用範囲、runtime・browser・DB・frameworkの対応version、依存の利用方式を確認する。新設要素は設計上の直接consumerと既存責務を照合し、未実装という理由だけでは停止しない。
+6. [設計書形式](../cowlick/DESIGN_FORMAT.md)に従い、確認済みの単純化を直接反映する。設計書全体を外す場合はindexも更新する。
+7. 監査結果と現在の設計書を照合し、statusをmeetingへ返す。
 
-## 行動理念
+| 特に確認する新設要素 | 判断 |
+|---|---|
+| global middleware・認証認可・logger・router・shared schema、endpoint・queue・DLQ・scheduler・worker・serverless・外部接続・deployment・監視復旧 | 共通判断基準で必要性を確認。根拠がなければ削除候補または相談 |
+| 実装が一つだけのinterface、一製品factory、一caller layer、委譲だけのwrapper、固定config | 直接の責務へ統合できるか比較 |
+| caller別のguard・workaround | root causeの共有責務へ統合。統合できなければ既存制約と他経路への影響を確認 |
+| 新設要素が生む失敗と緩和策 | 原因と対で削除できるか比較 |
 
-以下を上から順に適用する:
-
-- これはそもそも必要か。必要性が疑わしい場合は省略し、その旨を一行で述べる（YAGNI）
-- 既にこのコードベースに存在するものはないか。helper、utility、型だけでなく、deployment topology、route、scheduler、worker、永続化、監視、失敗復旧などの実行方式を再利用する
-- 標準 library にその機能があるなら、それを使う
-- native platform 機能でカバーできないか。picker library より `<input type="date">`、JS より CSS、application code より DB constraint を優先する
-- 既に導入済みの依存関係で解決できるなら、それを使う。数行で済む処理のために新しい依存関係を追加しない
-- 独自実装の構造は共通判断基準で比較する
-- ここまでで成立しない場合だけ、要件を満たす最小の独自実装を選ぶ
-
-この順序は、新しい abstraction や依存関係を正当化する checklist ではない。より上の選択肢で解決できた時点で、下の選択肢を検討しない。
-
-この順序は問題を理解した後にだけ適用する。短い案を先に決めてから調査範囲を縮めてはならない。入口、共有責務、全caller・consumer、永続化と外部副作用、利用者に見える契約まで実経路を追い、最小変更を置くべき責務を確定する。最小差分でも責務が誤っていれば、将来の修正を増やすだけなので採用しない。
-
-bug修正を含む設計書では、報告された症状とroot causeを分ける。複数callerが通る共有責務へ一度だけ置ける修正を、callerごとのguardや個別workaroundより優先する。症状の経路だけを塞ぐ案を残せるのは、共有責務を変えられない既存制約と、残るsibling経路への影響を説明できる場合だけとする。
-
-## 境界
-
-- 対象は `.[agent_name]/prompt/` の現在の設計書だけとする
-- 本体コード、テスト、設定、依存関係は変更しない
-- cowlick の必須ファイル構成と必須 section を壊さない
-- ユーザーが preflight で明示的に受け入れた要件や trade-off を、単純化だけを理由に覆さない
-- 単純化で挙動、入力境界、error handling、data loss防止、security、accessibility、data integrity、互換性が変わる場合は勝手に変更せず、判断が必要な論点として返す
-- 非自明な分岐、loop、parser、金額・security処理を守る最小の実行可能なテストを、行数削減だけを理由に消さない
+受入済み要件・trade-offを覆さない。挙動、入力境界、error、data loss防止、security、accessibility、整合性、互換性が変わる案は相談する。非自明な分岐・loop・parser・金額・securityを守る最小の実行可能なテストを削らない。
 
 ## 必須監査成果物
 
-ファイルを増やさず、会話内に次の`ponytail_audit`を作る。これを監査の正本とする。
+会話内に`ponytail_audit`を作る。ファイルは増やさない。
 
-| field | 必須内容 |
+| field | 内容 |
 |---|---|
 | `revision` | 対象design revision |
-| `requirements` | 明示要件、禁止・制約、受入済みtrade-off、既存制約、設計選択を区別した表 |
-| `topology` | 全設計書の入口、caller・consumer、共有責務、永続化、外部副作用、既存・新設境界。bug修正では症状とroot cause |
-| `elements` | 新設するfile・export・関数・定数・型・class、対応要件、直接のconsumer、インライン等の単純な代替、配置・命名・exportの既存例、新設要素が生む失敗と緩和策、残す・統合・削除の判断、根拠 |
-| `minimalAlternative` | runtime boundaryとglobal/shared変更を増やさない案と、要件充足、trade-off、新しい失敗、運用負荷の比較 |
-| `counterexamples` | 数値・順序・選択規則ごとの具体値、期待結果、根拠。等号、混在、同値、入力順、より少ない候補を該当分だけ含める |
-| `limitsAndTests` | 既知の上限と測定可能な再検討条件、非自明な処理を守る最小の実行可能なtest |
-| `changesContract` | guard順、式、境界、where・sort・tie-break、正常・error返却、状態遷移、副作用、dataの権威がChangesに残ること |
+| `requirements` | 明示要件／禁止・制約／受入済みtrade-off／既存制約／設計選択 |
+| `topology` | 入口、caller・consumer、共有責務、永続化、外部副作用、既存・新設境界、症状とroot cause |
+| `elements` | 新設file・export・関数・定数・型・class、対応要件、直接consumer、単純な代替、配置・命名・exportの既存例、失敗と緩和策、残す／統合／削除、根拠 |
+| `minimalAlternative` | 境界・global/shared変更を増やさない案との要件充足・trade-off・失敗・運用負荷の比較 |
+| `counterexamples` | 数値・順序・選択規則の具体値・期待結果・根拠。等号、混在、同値、入力順、候補不足を該当分だけ確認 |
+| `limitsAndTests` | 性能・容量・並行性・精度・運用の上限、再検討する測定可能な条件、最小の実行可能なテスト |
+| `changesContract` | 設計書形式の必須sectionとChangesの実装情報を保持 |
 | `unresolved` | 未決定事項。ready時は空配列 |
 
-`elements`の判断には共通判断基準を使う。別の値から導ける定数と設計選択だけに対応する要素は削除候補にする。該当しないfieldは理由付きの`not_applicable`にする。
+一つのfindingはIDを付けて一度だけ説明し、他fieldではIDを参照する。同じ要件・原因・判断・置換先を持つ要素は一行へまとめる。同じtopologyや根拠を別fieldで言い換えない。非該当fieldは理由付き`not_applicable`を一行で示す。
 
-監査は表で簡潔に書く。一つのfindingはIDを付けて一度だけ説明し、他fieldではIDを参照する。同じ要件・原因・判断・置換先を持つ要素は一行へまとめる。具体的な差がある場合だけ分ける。`not_applicable`は一行、失敗モードは比較結果を変えるものだけに限定し、同じtopologyや根拠を別fieldで言い換えない。
+## 成功・返却
 
-## 調査の責務
+全fieldが埋まり、`unresolved`が空、revisionが現在のdesignと一致し、設計書が監査結果を反映した場合だけ`ponytail_ready`。残した要素には対応要件・直接consumer・単純な代替では満たせない根拠が必要。
 
-既存実装、実行方式、標準・native機能、導入済み依存の調査、設計判断、横断比較、採否、設計書の修正はすべて[agent_name]が行う。下位モデル、subagent、外部workerへ調査を委任しない。
-
-1. 個別設計書より先に設計書一式を横断し、設計書ごと削除できる既存経路と、より少ない境界で同じ結果を得る案を探索する
-2. 新しいendpoint、runtime resource、global/shared変更を使わない入口と、既存のdeployment、scheduling、failure recovery patternを探す
-3. 各新設要素が別の新設要素のためだけに必要になっていないか、現設計を不要とする反証を探す
-4. 残った個別論点は対象の契約、適用できない理由、未確認事項を根拠の`path:line`とともに確認する
-5. 根拠不備または矛盾がある場合は[agent_name]が対象境界を追加調査し、推測で穴埋めしない
-
-## 実行フロー
-
-### Step 1: 入力を確認する
-
-`.[agent_name]/prompt/.prompt.md` と、そこから参照される `branch-*-prompt.md` を対象にする。設計書が存在しない、index と設計書が対応しない、または設計書内で明示要件と設計選択を区別できない場合は、過去phaseの情報を参照せず `blocked` を返す。
-
-### Step 2: 全設計書を横断監査する
-
-必須監査成果物を作り、設計書の境界を外して一つのdata flowと実行経路として見る。次を設計拡大のred flagとして扱う:
-
-- global middleware、認証・認可、共通logger、global router、shared schema
-- 新しいpublic endpoint、queue、DLQ、scheduler、worker、serverless function、外部接続
-- 新しいdeployment方式、監視・復旧経路、同一業務処理の複数worker化
-- 実装が一つだけのinterface、一製品だけのfactory、一callerだけのlayer、処理を委譲するだけのwrapper、利用者が変えないconfig
-
-red flagを共通判断基準へ照合し、採用根拠が揃わなければ削除候補または `consultation_required` にする。
-
-数値、順序、候補選択の規則は、要件から直接決まる部分と設計者が補った部分を分ける。自動選択、先頭N件、最小・最大値の利用、tie-break、組み合わせ探索を、もっともらしい既定値だけで確定要件へ昇格させない。
-
-### Step 3: 最小代替案を比較する
-
-最小代替案を作り、共通判断基準と必須監査成果物の項目で現設計と比較する。
-
-`elements`と`counterexamples`を埋め、各新設要素を既存実装・標準・native機能・導入済み依存へ置換できるか確認する。新設要素が生む失敗と、そのためだけの緩和策は同じ`elements`行で対にする。設計書・file・workerの丸ごと削除、root causeの共有責務への統合も比較する。具体例で破れる数値・順序・選択規則は要件として残さず、入力契約不足またはユーザー判断として扱う。
-
-簡素化案に既知の性能・容量・並行性・精度・運用上の上限がある場合は、その上限と再検討する測定可能な条件を設計へ残す。将来用のabstractionやconfigを先に追加せず、条件を満たした時点で拡張する。
-
-### Step 4: 削除仮説をコードベースで検証する
-
-Step 2と3の探索を[agent_name]が直接行う。現設計の成立確認ではなく、現設計を不要にする反証を優先する。名前の一致だけで再利用可能と判断せず、引数、戻り値、副作用、error、運用範囲が要件と一致するか確認する。
-
-標準・native機能は対象 runtime、browser support、database、framework version で利用可能か確認する。導入済み依存は lockfile だけでなく、実際の利用 pattern と保守境界も確認する。
-
-未実装の新設要素は、設計書に記した直接のconsumerを設計契約として監査し、既存の入口と責務配置に矛盾しないかコードベースで照合する。実装ファイルがまだ存在しないことだけを理由に `blocked` にしない。
-
-### Step 5: 設計書を単純化する
-
-[設計書形式](../cowlick/DESIGN_FORMAT.md)を読み、確認できた根拠だけを使って`.[agent_name]/prompt/`を直接修正する:
-
-- 不要な機能、対象ファイル、処理を削る
-- 新設予定の要素を、既存実装の再利用へ置き換える
-- 独自実装を標準・native機能へ置き換える
-- 不要な新規依存を消す
-- 一実装interface、一製品factory、委譲だけのwrapper、一caller layer、変化しないconfigを直接の責務へ畳む
-- 疑似コードの圧縮は設計書形式で許された範囲に限る
-- 設計書全体が不要なら index と設計書を両方対象から外す
-- 新設要素が生んだ問題への緩和策は、原因側と対で削除する
-- 症状別の修正を、全経路が通るroot causeの一箇所へ統合する
-
-編集後も設計書形式の必須sectionと実装情報が残っていることを確認する。
-
-### Step 6: 変更と比較を報告する
-
-選択した最小案、削除・統合した設計書と境界、再利用した実行方式を報告する。省略または置換した項目ごとに、分類、理由、置換先、根拠を一行で示す。分類は `delete`、`reuse`、`stdlib`、`native`、`yagni`、`shrink` のいずれかとする。長い一般論は書かない。
-
-```
-- [delete|reuse|stdlib|native|yagni|shrink] <省略・置換したもの>: <理由。置換先>（根拠: path/to/file:line）
-```
-
-削減前の案が実装されていない以上、削減行数、工数、費用を実測値のように報告しない。比較できるのは設計書、対象ファイル、新規依存、新設境界など、現在の設計書から直接数えられる項目だけとする。
-
-判断が必要で変更しなかった項目は、選択肢、挙動差、推奨を meeting へ返す。ユーザーへ直接質問しない。
-
-何も削らなかった場合も、最小代替案、満たせなかった明示要件、現設計の主要な新設要素を残す根拠を報告する。「検討したが削除不要」だけで済ませない。
-
-### Step 7: ready gateを確認してmeetingへ戻す
-
-`ponytail_audit`の全fieldが埋まり、`unresolved`が空で、`revision`が現在のdesignと一致し、設計書が`elements`と`changesContract`の判断を反映するまで`ponytail_ready`を返さない。残した要素は対応要件、実際のconsumer、単純な代替では満たせない根拠を持たなければならない。
-
-結果を次の status とともに meeting へ返す。
-
-| status | 意味 |
+| status | 条件 |
 |---|---|
-| `ponytail_ready` | ready gateをすべて満たし、現在のdesign revisionが確認済みの最小案と一致する |
-| `consultation_required` | 挙動を変える候補があり、ユーザー判断が必要 |
-| `blocked` | 設計書の不整合、要件由来の欠落、参照先の不足、根拠不足により監査を完了できない |
+| `ponytail_ready` | 上記条件をすべて満たす |
+| `consultation_required` | 挙動変更などのユーザー判断が必要 |
+| `blocked` | 設計書の不整合・要件由来・参照先・必須根拠の不足 |
 
-ponytail が加えた単純化は `.[agent_name]/prompt/` の正本へ直接反映される。meeting は最終承認や反映phaseを置かない。
+選んだ案、削除・統合・再利用、残る上限を簡潔に報告する。項目は`[delete|reuse|stdlib|native|yagni|shrink] 対象 → 置換先（path:line）`で示す。何も削らなかった場合も、比較案と満たせない要件を返す。未実装案の削減行数・工数・費用を実測値として示さない。
+
+未決定事項は選択肢・挙動差・推奨をmeetingへ返し、直接質問しない。最終承認・反映phaseは追加しない。
