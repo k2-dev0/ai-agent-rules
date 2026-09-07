@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: ユーザーが引数なしの`$tdd`を明示し、`@.[agent_name]/prompt/.prompt.md`の先頭未完了設計書1枚を上位モデルが調査・テストし、下位implementerに初回実装と大きい修正の再実装を委任し、上位モデルがレビュー・polishを完了するときに使う。
+description: "引数なしの$tddで、先頭未完了設計書1枚を実装・レビュー・polishする。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
 disable-model-invocation: true
 hooks:
@@ -11,55 +11,32 @@ hooks:
           command: .[agent_name]/hooks/shell/require-implementer.sh workflow
 ---
 
-## 目的
+## 対象
 
-`.prompt.md`の先頭未完了設計書1枚を`direct survey → scenario → red → lower-model implementer → review-reimplementation → green-final-review → polish`で完了する。調査、シナリオ、テスト、Red、初回実装、再実装、Green、最終レビューは[シナリオ駆動の共通実装フロー](../SCENARIO_FLOW.md)を全文読んで正本とし、このスキルでは設計書選択、polish、index更新だけを追加する。
+引数なしで`@.[agent_name]/prompt/.prompt.md`の先頭`- [ ] branch-<機能名>-prompt.md`だけを読む。他の設計書や次の項目へ進まない。1枚を1 branch・1 PRとして扱う。
 
-## 対象の選択
+引数あり、index・参照先なしは変更せず停止する。未完了項目なしなら完了済みと報告する。
 
-`$tdd`は引数を受け取らない。`@.[agent_name]/prompt/.prompt.md`の先頭の`- [ ] branch-<機能名>-prompt.md`だけを対象にし、他の設計書は読まない。引数がある、indexがない、未完了項目がない、または参照先がない場合は変更せず停止する。
+## 手順
 
-未完了項目がなければ全設計書が完了済みと報告する。対象設計書は1 branch・1 PRの単位として扱い、次の設計書へ自動で進まない。
-
-## 実行フロー
-
-### 1. 対象と既存状態を確認する
-
-indexから対象設計書を選び、対象設計書1枚を読む。ユーザー由来の未コミット変更があっても読み取り調査は行えるが、共有worktreeへimplementerを起動してはならない。変更の所有者を推測せず、Red用testをコミットした後も残るdirty fileがあれば実装前に停止する。
-
-### 2. 共通のシナリオ駆動実装フローを完了する
-
-対象設計書を要求根拠、機能名をscope名として、共通フローのStep 0〜8を実行する。調査、テスト選択と例外、Red、baseline取得、implementerへのbrief、レビューとGreenは共通フローへ従う。
-
-### 3. polishと完了処理を行う
-
-設計書の完了条件、共通フローのGreenまたはtest除外、レビュー、追跡対象のコミットを確認してから、次を実行する。
+1. 対象設計書を読み、[共通実装フロー](../SCENARIO_FLOW.md)を全文読む。
+2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜8を実行する。ユーザー由来のdirty fileがあっても調査はできるが、Red用testのcommit後も残る場合はimplementerを起動しない。
+3. 設計書の完了条件、Greenまたはtest除外、レビュー、追跡対象のcommitを確認し、次を実行する。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。品質検査、修正時の再実行、path完全性の確認はpolishのフローに従う。
+この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。
 
-実装差分、検証結果、`unrelated`・`uncertain`・`not run`を先にユーザーへ報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ次を単独実行する。
+4. 実差分・検証結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 ```
 
-## 例外停止
+## 停止・報告
 
-- ユーザー由来のdirty fileが残り、共有worktreeへwriterを安全に起動できない
-- DB、依存関係、公開APIなど承認範囲外の変更が必要になる
-- 確認した事実と要求根拠が矛盾し、新しい設計判断が必要になる
-- implementerの専用agent定義をpreflightできない
+dirty file、承認範囲外のDB・依存・公開API変更、新しい設計判断、implementerの専用定義を確認できない場合は停止する。
 
-## 完了報告
-
-- 対象設計書と選択済みtest_scenarios
-- RedとGreen、またはtest除外
-- [agent_name]が調査した範囲と確認した事実
-- implementerの結果、実差分の採否、大小判定、修正主体、最終レビュー
-- polish結果とscope帰属
-- リポジトリ規約に従ったコミット
-- indexの残件数。完了マークはユーザーが明示した場合だけ更新
+対象設計書、選択済みシナリオ、Red・Green／test除外、調査結果、実差分の採否・大小判定・修正主体・最終レビュー、polish・検証分類、commit、index残件数を簡潔に報告する。
