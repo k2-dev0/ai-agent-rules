@@ -17,7 +17,7 @@ preflight・cowlickの調査はメインが行い、ponytailの監査は履歴�
 
 ## 手順
 
-`preflight → cowlick → ponytail` の順で実行する。要件・design・監査のrevisionは会話内で管理し、変更後に古い結果を流用しない。各skillの変更範囲と承認条件に従う。
+`preflight → cowlick → ponytail` の順で実行する。要件・design・監査のrevisionは会話内で管理し、変更後に古い結果を流用しない。各skillはその工程へ進む直前に読み、変更範囲と承認条件に従う。
 
 | 工程 | 進め方・戻り先 |
 |---|---|
