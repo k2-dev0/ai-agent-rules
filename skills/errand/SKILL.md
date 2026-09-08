@@ -15,7 +15,6 @@ disable-model-invocation: true
 | 未実装、複数path、対応test未作成 | それだけでは停止しない。単一の公開挙動に必要な変更を扱う |
 | 新しいAPI・認可境界・data契約などの設計判断が必要 | 変更せず停止 |
 | migration・設定・依存・CI・skill・Git管理fileの変更 | errandの対象外 |
-| Red用testのcommit後もユーザー由来のdirty fileが残る | 実装前に停止 |
 
 Prismaのfield・型・主キー・relationを一意に決められれば`schema.prisma`を変更できる。migration fileの作成は対象外。
 
@@ -25,10 +24,9 @@ Prismaのfield・型・主キー・relationを一意に決められれば`schema
 
 1. 依頼から公開挙動・完了条件・ASCII kebab-caseのscope名を決める。識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
 2. 共通フローStep 0でメインが直接調査する。最寄りの同型実装1件のpath、置換する識別子・値、想定変更先、検証commandを確認する。
-3. 新しいテストまたはテストファイルが必要なことは停止理由にしない。ユーザーが選択したものだけをテストへ変換する。
-4. 要求根拠をユーザー依頼として共通フローのStep 1〜7を実行する。同型実装から名前・内容を一意に決められる新規本体ファイルも含める。
-5. 共通フローStep 6に対象path指定可能な既存lintを加える。commandがなければ`not run`とする。
-6. 検証・commit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。指摘対応はメインが行い、修正後の検証・commit・再レビューまで完了する。
+3. 要求根拠をユーザー依頼として共通フローのStep 1〜7を実行する。同型実装から名前・内容を一意に決められる新規本体ファイルも含める。
+4. 共通フローStep 6に対象path指定可能な既存lintを加える。commandがなければ`not run`とする。
+5. 検証・commit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。
 
 ## 報告
 
