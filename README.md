@@ -72,7 +72,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-調査・要件・設計・実装・自己確認・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは読み取りの文脈隔離・独立レビューに限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
+調査・要件・設計・実装・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは読み取りの文脈隔離・独立レビューに限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
 
 確定済みの実装はメインのLuna、未解決の判断はモデル選択に従って昇格する。実装・検証・整形後に会話継承なしの独立レビューを自動起動する。CodexはSol/high、複雑な整合性検証はAstra/high、ClaudeはOpus/high。ネスト検出役のLuna/max・Sonnet/maxとは分ける。短周期poll・全文ログ再取得は避け、指摘だけをメインへ戻す。詳細は[独立レビュー](skills/INDEPENDENT_REVIEW.md)と[子・待機の規則](skills/SUBAGENT_RULES.md)。
 
@@ -83,7 +83,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | メインモデルの選択 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
-| [REVIEW_FLOW.md](skills/REVIEW_FLOW.md) | 差分検証・診断分類・修正担当・最終レビュー |
+| [VERIFICATION_FLOW.md](skills/VERIFICATION_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | 固定差分の独立レビュー起動・待機・指摘対応 |
 | [CODE_REVIEW_CONTRACT.md](skills/CODE_REVIEW_CONTRACT.md) | 読み取り専用レビュー役の入力・確認・返却 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
