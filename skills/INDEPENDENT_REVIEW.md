@@ -12,15 +12,15 @@
 
 ## 起動・待機
 
-| 環境・条件 | role | model / effort |
-|---|---|---|
-| Codex・通常 | `code-reviewer` | Sol / high |
-| Codex・[モデル選択](MODEL_SELECTION.md)のAstra条件に該当する検証 | `deep-reviewer` | Astra / high |
-| Claude | `code-reviewer` | Opus / high |
+| 環境・条件 | role |
+|---|---|
+| Codex・通常 | `code-reviewer` |
+| Codex・[モデル選択](MODEL_SELECTION.md)のAstra条件に該当する検証 | `deep-reviewer` |
+| Claude | `code-reviewer` |
 
-Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_turns: "none"`を明示する。Claudeは`subagent_type`にroleを指定する。model・effortは専用定義を使い、起動引数で上書きしない。
+Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_turns: "none"`を明示する。Claudeは`subagent_type`にroleを指定する。model・effortは専用定義を使う。
 
-子の起動直前に[子・待機の規則](SUBAGENT_RULES.md)を読み、新規の読み取り専用agentを1体起動し、メインは完了まで作業を止める。完了後は子を終了・解放する。対応role・起動toolが利用不能、起動拒否、中断、入力不足なら独立レビュー未完了と報告する。メインの自己確認で代用しない。
+子の起動直前に[子・待機の規則](SUBAGENT_RULES.md)を読み、選んだroleで起動する。完了後は子を終了・解放する。対応role・起動toolが利用不能、起動拒否、中断、入力不足なら独立レビュー未完了と報告する。メインの自己確認で代用しない。
 
 ## 結果・修正
 
