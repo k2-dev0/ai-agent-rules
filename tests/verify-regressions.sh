@@ -247,17 +247,21 @@ for agent in claude codex; do
   export CLAUDE_PROJECT_DIR=$PWD
   command="bash .$agent/hooks/shell/require-implementer.sh"
   if [ "$agent" = codex ]; then
-    roles='code-reviewer deep-reviewer'
+    roles='code-reviewer deep-reviewer design-reviewer'
     role_key=agent_type
     extension=toml
     contract=.agents/skills/CODE_REVIEW_CONTRACT.md
   else
-    roles=code-reviewer
+    roles='code-reviewer design-reviewer'
     role_key=subagent_type
     extension=md
     contract=.claude/skills/CODE_REVIEW_CONTRACT.md
   fi
   for role in $roles; do
+    if [ "$agent" = codex ]; then contract=.agents/skills/CODE_REVIEW_CONTRACT.md; else contract=.claude/skills/CODE_REVIEW_CONTRACT.md; fi
+    if [ "$role" = design-reviewer ]; then
+      if [ "$agent" = codex ]; then contract=.agents/skills/ponytail/REVIEW_CONTRACT.md; else contract=.claude/skills/ponytail/REVIEW_CONTRACT.md; fi
+    fi
     definition=".$agent/agents/$role.$extension"
     input=$(jq -cn --arg cwd "$PWD" --arg key "$role_key" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{($key):$role,fork_turns:"none"}}')
     check test -z "$(printf '%s' "$input" | bash -c "$command")"
