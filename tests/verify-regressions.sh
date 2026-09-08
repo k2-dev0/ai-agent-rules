@@ -124,86 +124,6 @@ implementer_denied() {
   output=$(printf '%s' "$1" | bash -c "$command")
   printf '%s' "$output" | jq -e --arg reason "$2" '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains($reason))' >/dev/null
 }
-for agent in claude codex; do
-  cd "$TMP/$agent project"
-  [ -d .git ] || git init -q
-  export CLAUDE_PROJECT_DIR=$PWD
-  if [ "$agent" = codex ]; then
-    settings="$REPO/codex/hooks.json"
-    mkdir -p .codex/tmp
-    : > .codex/tmp/session.tdd.ROLE1
-  else
-    settings="$REPO/claude/settings.json"
-  fi
-  command=$(jq -r '.hooks.PreToolUse[].hooks[].command | select(contains("require-implementer.sh"))' "$settings")
-  check test -n "$command"
-  # Codex 0.153.4の実機ではnamespaceが連結され、Agent aliasも付かない。
-  # commandだけを直接実行する試験では、このmatcher漏れを検出できない。
-  if [ "$agent" = codex ]; then names='Agent spawn_agent collaborationspawn_agent'; else names=Agent; fi
-  for tool_name in $names; do
-    matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $matcher | select($name | test($matcher)) | .hooks[].command | select(contains("require-implementer.sh"))' "$settings")
-    check test "$matched" = "$command"
-  done
-  if [ "$agent" = claude ]; then command="$command workflow"; fi
-  input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"ROLE1",cwd:$cwd,tool_name:"spawn_agent",permission_mode:"default",tool_input:{task_name:"implementer",model:"gpt-5.6-luna",reasoning_effort:"max"}}')
-  output=$(printf '%s' "$input" | bash -c "$command")
-  check test -z "$output"
-  if [ "$agent" = claude ]; then role_key=subagent_type; else role_key=agent_type; fi
-  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="unknown-role"')
-  output=$(printf '%s' "$input" | bash -c "$command")
-  check test -z "$output"
-  input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input = {($key):"implementer"}')
-  if [ "$agent" = codex ]; then input=$(printf '%s' "$input" | jq '.tool_input.fork_turns="none"'); fi
-  check test -z "$(printf '%s' "$input" | bash -c "$command")"
-  for field in model reasoning_effort model_reasoning_effort effort thinking; do
-    invalid=$(printf '%s' "$input" | jq --arg field "$field" '.tool_input[$field]="other-model-or-effort"')
-    check implementer_denied "$invalid" 'モデル・effortは専用定義'
-  done
-  invalid=$(printf '%s' "$input" | jq '.tool_input.resume="old-agent"')
-  check implementer_denied "$invalid" 'resume'
-  invalid=$(printf '%s' "$input" | jq '.tool_input.run_in_background=true')
-  check implementer_denied "$invalid" 'background'
-  if [ "$agent" = codex ]; then
-    invalid=$(printf '%s' "$input" | jq 'del(.tool_input.fork_turns)')
-    check implementer_denied "$invalid" 'fork_context'
-    invalid=$(printf '%s' "$input" | jq '.tool_input.fork_turns="all"')
-    check implementer_denied "$invalid" 'fork_context'
-    invalid=$(printf '%s' "$input" | jq '.tool_input.fork_context=true')
-    check implementer_denied "$invalid" 'fork_context'
-    alternative=$(printf '%s' "$input" | jq 'del(.tool_input.fork_turns) | .tool_input.fork_context=false')
-    check test -z "$(printf '%s' "$alternative" | bash -c "$command")"
-    definition=.codex/agents/implementer.toml
-    model_line='model = "gpt-5.6-luna"'
-    effort_line='model_reasoning_effort = "max"'
-  else
-    definition=.claude/agents/implementer.md
-    model_line='model: claude-sonnet-5'
-    effort_line='effort: max'
-  fi
-  cp "$definition" "$TMP/implementer-original"
-  # 正しい設定を本文へ残しても、実際の設定欄が違えば通らない。
-  sed 's/^model[: =].*/model: wrong-model/' "$TMP/implementer-original" > "$definition"
-  printf '\n%s\n' "$model_line" >> "$definition"
-  check implementer_denied "$input" '定義の model '
-  sed 's/^model_reasoning_effort = "max"/model_reasoning_effort = "low"/; s/^effort: max/effort: low/' "$TMP/implementer-original" > "$definition"
-  check implementer_denied "$input" '必要な設定'
-  # 同じキーの重複も、どちらか一方だけを見て成功扱いにしない。
-  awk -v line="$effort_line" '{ print; if ($0 == line) print }' "$TMP/implementer-original" > "$definition"
-  check implementer_denied "$input" '必要な設定'
-  cp "$TMP/implementer-original" "$definition"
-  check test -z "$(printf '%s' "$input" | bash -c "$command")"
-  input=$(printf '%s' "$input" | jq '.permission_mode="plan"')
-  output=$(printf '%s' "$input" | bash -c "$command")
-  check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
-  if [ "$agent" = codex ]; then
-    printf '%s\n' '{"type":"turn_context","payload":{"sandbox_policy":{"type":"read-only"}}}' > "$TMP/parent.jsonl"
-    input=$(printf '%s' "$input" | jq --arg path "$TMP/parent.jsonl" '.permission_mode="default" | .transcript_path=$path')
-    output=$(printf '%s' "$input" | bash -c "$command")
-    check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
-    printf '%s\n' '{"type":"turn_context","payload":{"sandbox_policy":{"type":"workspace-write"}}}' >> "$TMP/parent.jsonl"
-    check test -z "$(printf '%s' "$input" | bash -c "$command")"
-  fi
-done
 cd "$TMP/claude project"
 
 # 固定宛先の親リンクから外部fileを変更できない。
@@ -291,7 +211,7 @@ for agent in claude codex; do
   check grep -Fxq "$boundary" "$definition"
   check test -s "$contract"
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
-  for mutation in '.model="other"' '.effort="high"' '.resume="old-id"' '.run_in_background=true'; do
+  for mutation in '.model="other"' '.effort="high"'; do
     invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
     check implementer_denied "$invalid" '専用定義で新規起動'
   done
@@ -317,13 +237,13 @@ done
 # 専用role以外は通常の権限判断へ委ねる。namespace付き起動もhookへ到達する。
 cd "$TMP/codex project"
 command='bash .codex/hooks/shell/require-implementer.sh'
-for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent collaborationspawn_agent resume_agent spawn_agents_on_csv; do
+for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent collaborationspawn_agent; do
   matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("require-implementer.sh"))' "$REPO/codex/hooks.json")
   check test -n "$matched"
   input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{agent_type:"default",fork_turns:"none"}}')
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
 done
-for role in implementer nesting-reviewer; do
+for role in nesting-reviewer; do
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:$role,fork_turns:"none"}}')
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
   for field in model reasoning_effort effort config model_provider; do
@@ -353,8 +273,28 @@ for agent in claude codex; do
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{hook_event_name:"PreToolUse",cwd:$cwd,session_id:"DIRECT1",tool_name:"Agent",tool_input:{($role):"explorer",fork_turns:"none"}}')
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
   input=$(printf '%s' "$input" | jq --arg role "$role_key" '.tool_input[$role]="implementer"')
-  check implementer_denied "$input" '設定が無い'
+  check implementer_denied "$input" '実装委任は禁止'
   mv ".$agent/agents.disabled" ".$agent/agents"
+done
+cd "$TMP/codex project"
+
+# 両環境でbackground・resume・一括起動を拒否する。
+for agent in claude codex; do
+  cd "$TMP/$agent project"
+  export CLAUDE_PROJECT_DIR=$PWD
+  command="bash .$agent/hooks/shell/require-implementer.sh"
+  for tool_name in Agent spawn_agent collaboration.spawn_agent; do
+    input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{}}')
+    check test -z "$(printf '%s' "$input" | bash -c "$command")"
+    for mutation in '.run_in_background=true' '.background=true' '.resume="child-1"'; do
+      invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
+      check implementer_denied "$invalid" '並列実行は禁止'
+    done
+  done
+  for tool_name in resume_agent collaboration.resume_agent spawn_agents_on_csv; do
+    input=$(jq -cn --arg tool "$tool_name" '{hook_event_name:"PreToolUse",tool_name:$tool,tool_input:{}}')
+    check implementer_denied "$input" '並列実行は禁止'
+  done
 done
 cd "$TMP/codex project"
 
