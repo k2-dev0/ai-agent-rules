@@ -59,18 +59,18 @@ package単位の検査は各1回。設定競合で一意に選べない、tool�
 
 ## 診断・修正
 
-[診断のscope帰属](../REVIEW_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書を全文読み、大小判定・担当・最終レビューに従う。
+[診断のscope帰属](../REVIEW_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書を全文読み、モデルの再判定・修正・最終レビューに従う。
 
 | 原因 | 修正後 |
 |---|---|
 | formatterがformat差分を自動修正 | lintへ進む |
 | linterが自動修正 | formatter・lintを再確認して続行 |
-| `scope-related`な型・構文・lint・Prisma・build error | `REVIEW_FLOW.md`で大小判定。修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
+| `scope-related`な型・構文・lint・Prisma・build error | `REVIEW_FLOW.md`に従って修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
 | `unrelated`・`uncertain` | 対象外fileを変更せず分類を報告して続行 |
-| `unwind`の修正 | 大小判定に従って修正・検証・commit後、同じ対象pathでpolishを再実行 |
+| `unwind`の修正 | メインが修正・検証・commit後、同じ対象pathでpolishを再実行 |
 | tool未導入・設定競合・実行不能 | `not run`を報告して続行 |
 
-コードの判断を伴う修正は、どちらが修正しても全品質ゲートを再実行する。
+コードの判断を伴う修正後は、全品質ゲートを再実行する。
 
 ## ネスト検査
 
