@@ -62,7 +62,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 
 | 入口 | 処理 |
 |---|---|
-| [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。設計書を直接作成・簡素化 |
+| [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。メインが設計書を作成・修正し、ponytailが独立監査 |
 | [tdd](skills/tdd/SKILL.md) | 引数なしで先頭未完了設計書1枚を実装・レビュー・polish |
 | [errand](skills/errand/SKILL.md) | 明示起動で既存パターンの小修正・定型追加。設計書なし |
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
