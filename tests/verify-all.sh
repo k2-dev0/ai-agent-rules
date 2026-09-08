@@ -194,6 +194,13 @@ else
   cat "$S/context-mcp.out"
 fi
 
+if python3 "$SUITE/test_independent_review.py" > "$S/independent-review.out" 2>&1; then
+  ok "両配置の独立レビューlifecycleを検証"
+else
+  ng "独立レビューlifecycleが不正"
+  cat "$S/independent-review.out"
+fi
+
 echo "== メイン実装と直列の独立レビュー =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/SCENARIO_FLOW.md"
@@ -244,7 +251,7 @@ grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && [ -f "$FIX_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && grep -Fq 'FIX_FLOW.md' "$SCENARIO_FLOW" "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・errand・polish・unwindは検証・修正契約を共有" || ng "共通実装・レビューフロー参照が不正"
 grep -Fq "共通フローのStep 0〜7" "$TDD_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" "$FIX_FLOW" && ! grep -Eq 'require-implementer|専用定義' "$TDD_SKILL" "$ERRAND_SKILL" && ok "tdd・errandは専用agentなしで直接実装できる" || ng "tdd・errandに専用agentの必須条件が残存"
-grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq 'SUBAGENT_RULES.md' "$SCENARIO_FLOW" && ok "共通フローはメインの調査と限定的な委任を共有" || ng "共通フローの直接調査境界が不正"
+grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && ! grep -Fq 'SUBAGENT_RULES.md' "$SCENARIO_FLOW" && ok "共通フローはメインの調査と限定的な委任を共有" || ng "共通フローの直接調査境界が不正"
 grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '実装・修正をサブエージェントへ委任しない' "$SCENARIO_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・メイン実装を維持" || ng "共通フローのtest選択権・実装境界が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
 ! grep -Eq '自己確認|最終レビュー|再レビュー' "$FIX_FLOW" "$SCENARIO_FLOW" && grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
