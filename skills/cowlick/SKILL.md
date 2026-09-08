@@ -26,7 +26,7 @@ meetingから呼ぶ。開始時に[判断基準](../IMPLEMENTATION_RULES.md)・�
 2. 既存・新設予定の実行・永続化・運用境界を整理し、preflightの基準案とコード根拠を共通判断基準へ照合する。
 3. [agent_name]が各設計書をコードベースと照合する。サブエージェントへ調査を委任しない。
 4. 設計書形式に従い、`.[agent_name]/prompt/`の`.prompt.md`と`branch-<機能名>-prompt.md`を直接更新する。初回はWrite、改訂はEdit。
-5. 全設計書を横断レビューし、共通判断基準を満たし、設計書形式の実装情報を保持していることを確認する。
+5. 設計書形式の必須sectionを埋め、設計書形式の実装情報を保持する。設計全体の監査は後段のponytailへ渡す。
 
 | 調査・レビュー | 確認 |
 |---|---|
@@ -41,7 +41,7 @@ meetingから呼ぶ。開始時に[判断基準](../IMPLEMENTATION_RULES.md)・�
 
 | status | 条件 |
 |---|---|
-| `design_ready` | 横断レビュー完了。file名と内容で識別できるdesign revisionを返す |
+| `design_ready` | 設計書一式の作成・更新完了。file名と内容で識別できるdesign revisionを返す |
 | `research_blocked` | 参照先・必須根拠が不足。未調査範囲を返す |
 | `consultation_required` | 要件revisionと異なる判断が必要。選択肢・挙動差・推奨を返す |
 
