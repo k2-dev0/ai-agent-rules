@@ -40,7 +40,7 @@ bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示p
 
 ## 実行表
 
-両モードともpackageごとに上から実行する。既存scriptを優先し、なければ同じpackageの`node_modules/.bin`を使う。`npx`・installは禁止。
+両モードともpackageごとに上から実行する。既存scriptを優先し、なければ同じpackageの`node_modules/.bin`を使う。
 
 | 条件 | command |
 |---|---|
@@ -55,11 +55,11 @@ bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示p
 | `schema.prisma`変更 | Prismaの`format`・`validate`・`generate` |
 | 所属packageに`build` scriptあり | packageで`yarn build` |
 
-package単位の検査は各1回。設定競合で一意に選べない、tool未導入、commandなしは`not run`とし、推測・installで補わない。品質検査をPrettier / ESLintだけへ縮小しない。polish自体はtestを追加実行しない。
+package単位の検査は各1回。設定競合で一意に選べない、tool未導入、commandなしは`not run`とし、推測で補わない。品質検査をPrettier / ESLintだけへ縮小しない。polish自体はtestを追加実行しない。
 
 ## 診断・修正
 
-[診断のscope帰属](../FIX_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書の修正ループに従う。
+診断がある場合だけ[診断のscope帰属](../FIX_FLOW.md#診断のscope帰属)を読み、分類する。コード修正が必要な場合だけ同文書の修正ループを読む。
 
 | 原因 | 修正後 |
 |---|---|
