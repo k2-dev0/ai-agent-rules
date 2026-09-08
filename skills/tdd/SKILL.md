@@ -13,7 +13,7 @@ disable-model-invocation: true
 
 ## 手順
 
-1. 対象設計書を読み、[共通実装フロー](../SCENARIO_FLOW.md)を全文読む。
+1. 対象設計書を読み、[共通実装フロー](../SCENARIO_FLOW.md)を読む。参照先は各工程の読込条件を満たした時点で読む。
 2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜7を実行する。ユーザー由来のdirty fileがあっても調査はできるが、Red用testのcommit後も残る場合は実装を開始しない。
 3. 設計書の完了条件、Greenまたはtest除外、追跡対象のcommitを確認し、次を実行する。
 
@@ -23,7 +23,7 @@ bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 
 この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。
 
-4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行する。指摘対応はメインが行い、修正後の検証・polish・commit・再レビューまで完了する。
+4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。指摘対応はメインが行い、修正後の検証・polish・commit・再レビューまで完了する。
 5. 実差分・検証結果・独立レビューの結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
 
 ```bash
