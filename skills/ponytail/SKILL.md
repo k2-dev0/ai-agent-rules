@@ -14,7 +14,7 @@ user-invocable: false
 1. repository絶対path、参照コードのHEAD、対象index・全設計書のpathとSHA-256を保持する。対象設計書以外の参照コードに未commit変更があれば`blocked`。設計書のcommitは要求しない。
 2. briefは上記対象・revision・元の要件と制約だけ。前段の調査結果・作成経緯・採用理由・会話要約・過去のレビュー結果を渡さない。
 3. 専用`design-reviewer`を新規起動する。Codexは`agent_type: "design-reviewer"`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type: "design-reviewer"`。CodexはAstra / high、ClaudeはOpus / highの専用定義を使い、model・effortを上書きしない。
-4. [子・待機の規則](../SUBAGENT_RULES.md)に従い、1体の完了までメインも作業を止める。最終結果だけ取得して子を終了・解放する。対応role・toolが利用不能、拒否、中断なら`blocked`。同じ会話内の確認で代用しない。
+4. 子の起動直前に[子・待機の規則](../SUBAGENT_RULES.md)を読み、1体の完了までメインも作業を止める。最終結果だけ取得して子を終了・解放する。対応role・toolが利用不能、拒否、中断なら`blocked`。同じ会話内の確認で代用しない。
 
 ## 結果・修正
 
