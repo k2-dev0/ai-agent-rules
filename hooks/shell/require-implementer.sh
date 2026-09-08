@@ -7,14 +7,15 @@ hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。backg
 ROLE=$(hook_agent_type)
 [ "$ROLE" != implementer ] || hook_deny "実装委任は禁止です。メインで実装してください。"
 case "$ROLE" in
-  code-reviewer|deep-reviewer)
+  code-reviewer|deep-reviewer|design-reviewer)
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
     REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "reviewerのリポジトリを確認できません。"
     if [ "$HOOK_AGENT" = codex ]; then
       AGENT_FILE="$REPOSITORY/.codex/agents/$ROLE.toml"
       CONTRACT=.agents/skills/CODE_REVIEW_CONTRACT.md
+      [ "$ROLE" != design-reviewer ] || CONTRACT=.agents/skills/ponytail/REVIEW_CONTRACT.md
       MODEL=gpt-5.6-sol
-      [ "$ROLE" != deep-reviewer ] || MODEL=gpt-6-astra
+      [ "$ROLE" = code-reviewer ] || MODEL=gpt-6-astra
       EXPECTED_SETTINGS="name = \"$ROLE\"
 model = \"$MODEL\"
 model_reasoning_effort = \"high\"
@@ -23,13 +24,14 @@ sandbox_mode = \"read-only\""
       SETTINGS=$(sed '/^developer_instructions[[:space:]]*=/,$d' "$AGENT_FILE")
       grep -Fxq 'enabled = false' "$AGENT_FILE" || hook_deny "reviewerの再委任は禁止です。"
     else
-      [ "$ROLE" = code-reviewer ] || hook_deny "Claudeのコードレビューはcode-reviewerを使ってください。"
-      AGENT_FILE="$REPOSITORY/.claude/agents/code-reviewer.md"
+      [ "$ROLE" != deep-reviewer ] || hook_deny "Claudeのコードレビューはcode-reviewerを使ってください。"
+      AGENT_FILE="$REPOSITORY/.claude/agents/$ROLE.md"
       CONTRACT=.claude/skills/CODE_REVIEW_CONTRACT.md
-      EXPECTED_SETTINGS='name: code-reviewer
+      [ "$ROLE" != design-reviewer ] || CONTRACT=.claude/skills/ponytail/REVIEW_CONTRACT.md
+      EXPECTED_SETTINGS="name: $ROLE
 model: opus
 effort: high
-tools: Read, Grep, Glob, Bash'
+tools: Read, Grep, Glob, Bash"
       [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
       SETTINGS=$(awk 'NR == 1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$AGENT_FILE")
     fi
