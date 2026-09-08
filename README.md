@@ -54,7 +54,7 @@ $bootstrap codex
 3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する。hook変更時も再レビューする。未trustのproject-local設定は適用されない。
 4. Claudeはproject rootの`.mcp.json`にあるSerena・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
 
-更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、tdd／errandの`require-implementer.sh workflow`登録は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
+更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、tdd／errandの`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
 
@@ -72,7 +72,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-調査・要件・設計・実装・レビュー・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。サブエージェントは独立した並列作業・文脈の隔離・独立レビューに限る。並列実装にはimplementer、ネストの独立検出には読み取り専用nesting-reviewerを使う。
+調査・要件・設計・実装・レビュー・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは読み取りの文脈隔離・独立レビューに限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
 
 Codexの子はLuna/maxだけを起動hookで許可し、Claudeの子はSonnet/maxを使う。Codexの短い子待機はhookで60秒へ補正する。会話継承・短周期poll・全文ログ再取得は避ける。詳細は[子・待機の規則](skills/SUBAGENT_RULES.md)。
 
@@ -82,8 +82,6 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 |---|---|
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | メインモデルの選択 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
-| [IMPLEMENTER_CONTRACT.md](skills/IMPLEMENTER_CONTRACT.md) | 実装役の変更範囲・検証・報告 |
-| [IMPLEMENTER_LAUNCH.md](skills/IMPLEMENTER_LAUNCH.md) | 専用agentの起動・待機・識別 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
 | [REVIEW_FLOW.md](skills/REVIEW_FLOW.md) | 差分検証・診断分類・修正担当・最終レビュー |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
@@ -105,9 +103,9 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 設定・秘密情報・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh`（hooks/shell配下） |
 | migration／履歴制限 | `hooks/shell/deny-migration.sh`・`hooks/shell/deny-history.sh` |
 | 全面Write確認・commit契約 | `hooks/shell/overwrite.sh`・`hooks/shell/commit-gate.sh` |
-| 必須資料・実装役の検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
+| 必須資料・子の直列起動の検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
 
-専用implementerのmodel・effortは起動引数で上書きしない。親のplan/read-onlyは起動前に解決し、専用定義で解除できると考えない。roleをnicknameから推測しない。
+Codexの子は`max_threads = 1`で同時起動数を制限する。hookは実装委任・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
 
 | 操作 | 扱い |
 |---|---|
@@ -143,4 +141,4 @@ bash tests/verify-all.sh
 
 成功は`PASS=n FAIL=0`。Claude／Codexへの一時配置、placeholder解決、hookのdeny/ask/棄権、権限・commit・MCP・参照先、rebase・並行編集・専用agentを検証する。作業用directoryは終了時に削除する。
 
-Codex CLIがあればversion・strict config・execpolicyも検証し、なければ省略する。skill形式検査は`SKILL_VALIDATOR`または標準配置のvalidatorがある場合だけ実行する。`tests/run-tests.sh`は全体テストから呼び、単体では使わない。
+Codex CLIがあればversion・strict config・execpolicyも検証し、なければ省略する。skill形式検査は配布形式に対応した`python3 tests/validate-skills.py skills/<skill名>`を使い、全体テストでは全skillと検査器の異常系を検証する。`tests/run-tests.sh`は全体テストから呼び、単体では使わない。
