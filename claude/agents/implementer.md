@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: 上位モデルの確定済み要件またはレビュー指示どおりにproduction codeを実装し、指定済みテストを実行する
+description: 独立した並列実装の担当path内で、メインの確定済み要件を実装し指定済みテストを実行する。通常の直列実装には使わない。
 model: claude-sonnet-5
 effort: max
 tools: Read, Grep, Glob, Edit, Write, Bash
