@@ -3,12 +3,6 @@ name: errand
 description: "明示的な$errandで、既存パターンから一意に決まる小修正・定型追加・Prisma schema変更を設計書なしで実装する。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
-hooks:
-  PreToolUse:
-    - matcher: Agent
-      hooks:
-        - type: command
-          command: .[agent_name]/hooks/shell/require-implementer.sh workflow
 ---
 
 ## 対象・停止条件
@@ -30,11 +24,11 @@ Prismaのfield・型・主キー・relationを一意に決められれば`schema
 ## 手順
 
 1. 依頼から公開挙動・完了条件・ASCII kebab-caseのscope名を決める。識別子、path、番号、固有名詞を省略・翻訳・一般化しない。
-2. 共通フローStep 0で上位モデルが直接調査する。最寄りの同型実装1件のpath、置換する識別子・値、想定変更先、検証commandを確認する。
+2. 共通フローStep 0でメインが直接調査する。最寄りの同型実装1件のpath、置換する識別子・値、想定変更先、検証commandを確認する。
 3. 新しいテストまたはテストファイルが必要なことは停止理由にしない。ユーザーが選択したものだけをテストへ変換する。
 4. 要求根拠をユーザー依頼として共通フローのStep 1〜8を実行する。同型実装から名前・内容を一意に決められる新規本体ファイルも含める。
 5. 共通フローStep 7に対象path指定可能な既存lintを加える。commandがなければ`not run`とする。
 
 ## 報告
 
-依頼、選択済みシナリオ、Red・Green、調査結果、実装の採否・大小判定・修正主体・最終レビュー、検証の`scope-related`／`unrelated`／`uncertain`／`not run`、commitを報告して停止する。対象外の失敗だけで未完了と決めない。
+依頼、選択済みシナリオ、Red・Green、調査結果、実装の採否・残作業・最終レビュー、検証の`scope-related`／`unrelated`／`uncertain`／`not run`、commitを報告して停止する。対象外の失敗だけで未完了と決めない。
