@@ -92,8 +92,8 @@
 | `schema.prisma`変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の追加完了条件 | 指定command |
 
-commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。[修正ループ](VERIFICATION_FLOW.md#修正ループ)で失敗の修正・再検証を完了する。
+commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。[修正ループ](FIX_FLOW.md#修正ループ)で失敗の修正・再検証を完了する。
 
 ## 7. 失敗の分類
 
-[診断のscope帰属](VERIFICATION_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
+[診断のscope帰属](FIX_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
