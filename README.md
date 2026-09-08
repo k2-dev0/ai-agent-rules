@@ -151,7 +151,7 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 配布先は`SubagentStart`・`SubagentStop`・`Stop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
 
-読込条件はAGENTS.mdと各参照元に置く。共通基準は設計・実装・reviewerが共有し、起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。
+読込条件は各skillの参照元と、必要な操作で案内するhookに置く。AGENTS.mdへ文書の案内表は置かない。共通基準は設計・実装・reviewerが共有し、起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。skillを使わない通常作業では、共通基準のhook注入は最初の対象コード編集時であり、調査開始時の読込は保証しない。
 
 | 禁止・制約の種類 | 実施箇所・境界 |
 |---|---|
