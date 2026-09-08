@@ -72,7 +72,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-調査・要件・設計・実装・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは読み取りの文脈隔離・独立レビューに限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
+調査・要件・設計・実装・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは独立コードレビュー・設計監査・ネスト候補抽出に限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
 
 確定済みの実装はメインのLuna、未解決の判断はモデル選択に従って昇格する。実装・検証・整形後に会話継承なしの独立レビューを自動起動する。CodexはSol/high、複雑な整合性検証はAstra/high、ClaudeはOpus/high。ネスト検出役のLuna/max・Sonnet/maxとは分ける。短周期poll・全文ログ再取得は避け、指摘だけをメインへ戻す。詳細は[独立レビュー](skills/INDEPENDENT_REVIEW.md)と[子・待機の規則](skills/SUBAGENT_RULES.md)。
 
@@ -105,9 +105,9 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 設定・秘密情報・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh`（hooks/shell配下） |
 | migration／履歴制限 | `hooks/shell/deny-migration.sh`・`hooks/shell/deny-history.sh` |
 | 全面Write確認・commit契約 | `hooks/shell/overwrite.sh`・`hooks/shell/commit-gate.sh` |
-| 必須資料・子の直列起動の検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
+| 必須資料・専用の子の起動検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
 
-Codexの子は`max_threads = 1`で同時起動数を制限する。hookは実装委任・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
+Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用role以外の起動・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
 
 | 操作 | 扱い |
 |---|---|
@@ -144,3 +144,27 @@ bash tests/verify-all.sh
 成功は`PASS=n FAIL=0`。Claude／Codexへの一時配置、placeholder解決、hookのdeny/ask/棄権、権限・commit・MCP・参照先、rebase・並行編集・専用agentを検証する。作業用directoryは終了時に削除する。
 
 Codex CLIがあればversion・strict config・execpolicyも検証し、なければ省略する。skill形式検査は配布形式に対応した`python3 tests/validate-skills.py skills/<skill名>`を使い、全体テストでは全skillと検査器の異常系を検証する。`tests/run-tests.sh`は全体テストから呼び、単体では使わない。
+
+### 独立レビューと文書の読込
+
+`independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、専用子の起動入力と`SubagentStop`のJSON結果を照合する。`Stop`では現在HEAD・追跡fileのclean状態・未追跡の編集対象・未確認範囲を検査する。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。相談・実行不能の報告は未完了状態を保持する。指摘の採否やレビューの品質は機械的な完了判定の対象外。
+
+配布先は`SubagentStart`・`SubagentStop`・`Stop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
+
+読込条件はAGENTS.mdと各参照元に置く。共通基準は設計・実装・reviewerが共有し、起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。
+
+| 禁止・制約の種類 | 実施箇所・境界 |
+|---|---|
+| push・一括commit・強制stage | `commit-gate.sh`。認識対象のGitコマンドとindexを検査 |
+| registry取得・Prisma反映 | `deny-registry.sh`・`deny-migration.sh`。コマンド検査。任意script内部の通信・副作用は保証しない |
+| 一般調査・実装の委任、起動設定の上書き | `require-implementer.sh`。専用roleだけ許可 |
+| reviewerの編集・再委任 | Codexのread-only sandboxとagents無効化。Claudeはtool制限。Bashの意味的な読み取り専用性は文書だけでは保証しない |
+| 開始HEAD保持・独立レビュー未実行での通常完了 | `independent-review.sh`。状態・対象SHA・専用子の最終結果を検査 |
+| 設定・秘密・lockfile・migration fileの編集 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
+| polishの対象path・tracked・clean | `polish/capture-scope.sh`・`polish/quality-gate.sh`。検査scriptの実行自体の省略は防がない |
+| assertionの弱体化・不要な抽象化・要件の推測・検証結果の誤認 | 共通基準・各工程・独立レビュー。操作名だけでは判定できないため文書に残す |
+| シナリオの選択・設計revision・指摘の採否 | 各workflow。ユーザーの自然言語の意味や判断の妥当性をhookで代行しない |
+| 履歴の書き換え・script経由の迂回 | `deny-history.sh`・`deny-eval.sh`。rebaseは固定実行器に限定 |
+| skill実装の直接取得・既存fileの全上書き | `deny-skill-source.sh`・`overwrite.sh`。対象tool・pathを検査 |
+| 短い子の完了待ち | `agent-wait.sh`がCodexのtimeoutを補正。無意味な再確認かどうかはメインが判断 |
+| E2Eの承認前操作・passwordの平文保存 | E2E手順に残す。承認状態・秘密値と全browser／出力経路がhookへ連携されていない |
