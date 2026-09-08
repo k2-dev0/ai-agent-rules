@@ -52,5 +52,3 @@ group順が完成履歴の順序となり、group内は元履歴順に処理さ�
 完成履歴、元HEAD、exactly-once・tree一致の結果を報告する。
 
 成功後のbackupは残さず、元HEADはreflogから参照できる。`backup/rebase-*`が残ったら報告し、削除はユーザーに任せる。
-
-生成commitはsubject一行・bodyなし、本人のGit identity、AI署名なし、`--no-verify`。元のauthor dateは保持しない。
