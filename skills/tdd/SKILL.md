@@ -14,7 +14,7 @@ disable-model-invocation: true
 ## 手順
 
 1. 対象設計書を読み、[共通実装フロー](../SCENARIO_FLOW.md)を読む。参照先は各工程の読込条件を満たした時点で読む。
-2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜7を実行する。ユーザー由来のdirty fileがあっても調査はできるが、Red用testのcommit後も残る場合は実装を開始しない。
+2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜7を実行する。
 3. 設計書の完了条件、Greenまたはtest除外、追跡対象のcommitを確認し、次を実行する。
 
 ```bash
@@ -23,7 +23,7 @@ bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 
 この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。
 
-4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。指摘対応はメインが行い、修正後の検証・polish・commit・再レビューまで完了する。
+4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。
 5. 実差分・検証結果・独立レビューの結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
 
 ```bash
@@ -32,6 +32,6 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 
 ## 停止・報告
 
-dirty file、承認範囲外のDB・依存・公開API変更、新しい設計判断が必要な場合は実装を止め、未解決事項を報告する。
+承認範囲外のDB・依存・公開API変更、新しい設計判断が必要な場合は実装を止め、未解決事項を報告する。
 
 対象設計書、選択済みシナリオ、Red・Green／test除外、調査結果、残作業・独立レビュー結果、polish・検証分類、commit、index残件数を簡潔に報告する。
