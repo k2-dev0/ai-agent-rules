@@ -197,7 +197,7 @@ else
   cat "$S/context-mcp.out"
 fi
 
-echo "== 上位モデル直接調査と下位モデル初回・再実装 =="
+echo "== メインの直接実装と任意の並列実装 =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/SCENARIO_FLOW.md"
 REVIEW_FLOW="$REPO/skills/REVIEW_FLOW.md"
@@ -214,12 +214,12 @@ for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
   fi
 done
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
-grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq '上位モデルが直接調査する' "$ERRAND_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$SCENARIO_FLOW" && ok "errand は上位モデルの直接調査へ固定" || ng "errand の直接調査境界が不正"
+grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'メインが直接調査する' "$ERRAND_SKILL" && ok "errand はメインが直接調査" || ng "errand の直接調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && ! grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
-grep -Fq "共通フローのStep 1〜8" "$ERRAND_SKILL" && grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && grep -Fq "Git管理ファイルを変更しない" "$IMPLEMENTER_CONTRACT" && ok "errand は上位モデル調査と下位モデル初回実装を分離" || ng "errand の調査・実装境界が不正"
+grep -Fq "共通フローのStep 1〜8" "$ERRAND_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" && ! grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && ok "errand はモデル選択を共有し子専用契約をメインへ適用しない" || ng "errand のメイン実装契約が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q '親directoryが存在しない' "$REPO/skills/polish/capture-scope.sh" && grep -q 'ignoredされている' "$REPO/skills/polish/capture-scope.sh" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装、複数path、対応test未作成' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
-grep -Fq "共通フローのStep 1〜8" "$ERRAND_SKILL" && grep -Fq "初回実装を先に代行せず" "$SCENARIO_FLOW" && grep -Fq "cleanな状態からの初回実装再実行も一度失敗" "$SCENARIO_FLOW" && grep -Fq "下位モデルに再実装させる" "$REVIEW_FLOW" && ok "errand は共有フローで上位判断・下位実装へ固定" || ng "errand の初回実装・修正責務が不正"
+grep -Fq "メインが実装する" "$SCENARIO_FLOW" && grep -Fq "メインが指摘範囲を直接修正する" "$REVIEW_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$SCENARIO_FLOW" "$REVIEW_FLOW" && ok "共通フローは初回実装・修正をメインで続行" || ng "直列委任の強制または失敗回数による代行制限が残存"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -249,7 +249,7 @@ else
 fi
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq '検出候補の抽出だけを下位モデル' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -q '返却された候補だけ' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はすべて上位モデル' "$UNWIND_SKILL" && ok "unwind はnesting候補抽出だけを下位モデルへ限定" || ng "unwind の限定QA・判断責務分離が無い"
+grep -Fq '独立レビューとして検出候補の抽出だけ' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -q '返却された候補だけ' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はメイン' "$UNWIND_SKILL" && ok "unwind は独立検出とメインの修正を分離" || ng "unwind の限定QA・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
 [ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -f "$IMPLEMENTER_LAUNCH" ] && grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq 'polish/SKILL.md#実装前baseline' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
 ! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
@@ -257,12 +257,12 @@ grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && 
 grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq '品質検査をPrettier / ESLintだけへ縮小しない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && [ -f "$REVIEW_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && grep -Fq 'REVIEW_FLOW.md' "$SCENARIO_FLOW" "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・errand・polish・unwindはレビュー・再実装契約を共有" || ng "共通実装・レビューフロー参照が不正"
-grep -Fq "共通フローのStep 0〜8" "$TDD_SKILL" && grep -Fq "サブエージェントへ調査を委任しない" "$SCENARIO_FLOW" && grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && grep -Fq "REVIEW_FLOW.md" "$SCENARIO_FLOW" && ok "tdd は上位モデル調査・判断と下位モデル初回・再実装へ固定" || ng "tdd の調査・実装・修正境界が不正"
-grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq 'サブエージェントへ調査を委任しない' "$SCENARIO_FLOW" && ok "共通フローは上位モデルの直接調査へ固定" || ng "共通フローの直接調査境界が不正"
-grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq 'IMPLEMENTER_LAUNCH.md' "$SCENARIO_FLOW" && grep -Fq 'IMPLEMENTER_LAUNCH.md' "$REVIEW_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・freshなimplementerを固定" || ng "共通フローのtest選択権・実装境界またはimplementer起動が不正"
+grep -Fq "共通フローのStep 0〜8" "$TDD_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" "$REVIEW_FLOW" && ! grep -Eq 'require-implementer|専用定義' "$TDD_SKILL" "$ERRAND_SKILL" && ok "tdd・errandは専用agentなしで直接実装できる" || ng "tdd・errandに専用agentの必須条件が残存"
+grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq 'SUBAGENT_RULES.md' "$SCENARIO_FLOW" && ok "共通フローはメインの調査と限定的な委任を共有" || ng "共通フローの直接調査境界が不正"
+grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '独立した並列実装を委任する場合だけ' "$SCENARIO_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・任意の並列実装を維持" || ng "共通フローのtest選択権・実装境界が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$REVIEW_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
-grep -Fq 'すべて満たす場合だけ' "$REVIEW_FLOW" && grep -Fq '変更行数が10行以下' "$REVIEW_FLOW" && grep -Fq '一つでも該当' "$REVIEW_FLOW" && grep -Fq '変更先が2ファイル以上、または変更行数が11行以上' "$REVIEW_FLOW" && grep -Fq '1行の条件反転でも' "$REVIEW_FLOW" && grep -Fq '2回連続' "$REVIEW_FLOW" && grep -Fq '最終レビュー' "$REVIEW_FLOW" && ok "レビュー契約は大小判定・2回失敗fallback・最終レビューを固定" || ng "レビュー・再実装契約が不足"
-grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$REVIEW_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$REVIEW_FLOW" && grep -Fq '採用:' "$REVIEW_FLOW" && grep -Fq '問題:' "$REVIEW_FLOW" && grep -Fq '修正主体:' "$REVIEW_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$REVIEW_FLOW" && ok "上位モデルは実装差分の評価と修正主体を後続処理前に簡潔に報告" || ng "上位モデルの実装差分レビュー報告契約が不足"
+grep -Fq '要求・不変条件に照らして再レビュー' "$REVIEW_FLOW" && grep -Fq '最終レビュー' "$REVIEW_FLOW" && ! grep -Eq '変更行数|大小判定|10行|11行' "$REVIEW_FLOW" && ok "レビューは行数で担当を分けず要求と不変条件を検証" || ng "レビューに行数による委任条件が残存"
+grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$REVIEW_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$REVIEW_FLOW" && grep -Fq '採用:' "$REVIEW_FLOW" && grep -Fq '問題:' "$REVIEW_FLOW" && grep -Fq '残作業:' "$REVIEW_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$REVIEW_FLOW" && ok "メインは実装差分の評価と残作業を後続処理前に簡潔に報告" || ng "メインの実装差分レビュー報告契約が不足"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq "REVIEW_FLOW.md#診断のscope帰属" "$SCENARIO_FLOW" && grep -Fq "REVIEW_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$REVIEW_FLOW" && grep -Fq "unrelated" "$REVIEW_FLOW" && grep -Fq "uncertain" "$REVIEW_FLOW" && grep -Fq "ignored / untracked test" "$REVIEW_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$REVIEW_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
@@ -270,7 +270,7 @@ grep -Fq 'この出力と完全一致する相対path全件を一括入力' "$PO
 grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq 'commandなしは`not run`' "$POLISH_SKILL" && grep -Fq '親の`polish`が実行した同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
 grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq 'この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
 grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq '実装直前に[polishの実装前baseline]' "$SCENARIO_FLOW" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
-grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '`REVIEW_FLOW.md`で大小判定' "$POLISH_SKILL" && grep -Fq 'どちらが修正しても全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
+grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '`REVIEW_FLOW.md`に従って修正' "$POLISH_SKILL" && grep -Fq '全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
 
 echo "== 2. claude 配置シミュレーション =="
 mkdir -p "$S/claude-sim/.claude"
@@ -757,13 +757,13 @@ echo "$UP" | bash $H/session.sh
 [ -f .codex/tmp/session.cowlick.SESS1 ] && ok "session: \$cowlick 起動で marker 記録" || ng "session: marker 記録失敗"
 UPE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"ERR1",cwd:$cwd,prompt:"$errand boolean変更を実装して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPE" | bash $H/session.sh
-[ -f .codex/tmp/session.errand.ERR1 ] && ok "session: errandの専用agent guardを有効化" || ng "session: errand markerが無い"
+[ ! -f .codex/tmp/session.errand.ERR1 ] && ok "session: errandは委任用markerを作らない" || ng "session: errandの委任用markerが残存"
 UP2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"SESS9",cwd:$cwd,prompt:"cowlick について教えて",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UP2" | bash $H/session.sh
 [ ! -f .codex/tmp/session.cowlick.SESS9 ] && ok "session: \$ 無しの言及では発火しない" || ng "session: 誤発火"
 UPE2=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"ERR9",cwd:$cwd,prompt:"$tdd 修正して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPE2" | bash $H/session.sh
-[ -f .codex/tmp/session.tdd.ERR9 ] && ok "session: tddの専用agent guardを有効化" || ng "session: tdd markerが無い"
+[ ! -f .codex/tmp/session.tdd.ERR9 ] && ok "session: tddは委任用markerを作らない" || ng "session: tddの委任用markerが残存"
 UPM=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"MEET1",cwd:$cwd,prompt:"$meeting 新機能を設計して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPM" | bash $H/session.sh
 COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"MEET1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: .codex/prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
