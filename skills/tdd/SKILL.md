@@ -23,7 +23,8 @@ bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 
 この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。
 
-4. 実差分・検証結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
+4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行する。指摘対応はメインが行い、修正後の検証・polish・commit・再レビューまで完了する。
+5. 実差分・検証結果・独立レビューの結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
