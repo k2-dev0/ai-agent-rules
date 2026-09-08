@@ -21,7 +21,7 @@ test・設定・文書・Prisma schema・生成物・vendor・依存物・未変
 1. 親スキルが渡した本体コードのpathだけを、専用`nesting-reviewer`へ渡す。briefは機能名・repository絶対path・HEAD・対象path。Codexは`agent_type: "nesting-reviewer"`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type: "nesting-reviewer"`。model・effortは専用定義を使い、上書き・resume・backgroundは指定しない。利用不能なら親へ失敗を返す。
 2. 返却されたchild ID／task pathで完了を待ち、全対象pathの検出完了と候補のfile・行・最大深さ・到達条件を確認する。待機先なし・未読pathありは失敗。検出中は対象を変更せず、HEAD・対象内容が変わった結果は破棄して新規起動する。失敗・中断・対象外変更は品質ゲート失敗。候補なしなら「3段階以上の制御フローネストなし」と返す。
 3. guard clause（return/continue/break/throw）→ 条件反転 → 排他的分岐のswitch・状態表・dispatch map化 → 不要な反復の除外、の順で検討する。
-4. 修正時は[修正ループ](../VERIFICATION_FLOW.md#修正ループ)に従い、メインが修正・検証する。対象test・型検査・lintと、親の`polish`が実行した同じpackageのbuildを再実行する。build未実行は理由を引き継ぎ、新しいbuild commandを発明しない。
+4. 修正時は[修正ループ](../FIX_FLOW.md#修正ループ)に従い、メインが修正・検証する。対象test・型検査・lintと、親の`polish`が実行した同じpackageのbuildを再実行する。build未実行は理由を引き継ぎ、新しいbuild commandを発明しない。
 5. 修正をcommit後、新HEADと新しいサブエージェントで再検出する。安全に縮退できない候補は理由・却下案を親へ返す。
 
 ## 禁止
