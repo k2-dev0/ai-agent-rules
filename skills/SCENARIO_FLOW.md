@@ -8,7 +8,7 @@
 | scope名 | 設計書の機能名 | ASCII kebab-case名 |
 | 実装後 | polish・必要ならindex更新 | 限定検証・完了報告 |
 
-調査・実装・自己確認・修正・検証はメインが行い、[モデル選択](MODEL_SELECTION.md)に従って残作業に必要なモデルへ切り替える。サブエージェントは[利用条件](SUBAGENT_RULES.md)に従う。変更開始前のHEADを独立レビュー用に保持する。
+調査・実装・修正・検証はメインが行い、[モデル選択](MODEL_SELECTION.md)に従って残作業に必要なモデルへ切り替える。サブエージェントは[利用条件](SUBAGENT_RULES.md)に従う。変更開始前のHEADを独立レビュー用に保持する。
 
 ## 0. [agent_name]が直接調査する
 
@@ -80,11 +80,7 @@
 
 任意の委任が失敗した場合は子の終了と実差分を確認し、メインが残作業を引き継ぐ。
 
-## 6. 自己確認
-
-[レビューフロー](REVIEW_FLOW.md)を全文読み、全差分の検証、修正、採否・未解決事項の報告を完了する。
-
-## 7. Green・最終自己確認
+## 6. Green・静的検証
 
 メインが次を順に実行する。子の自己申告で代用せず、無関係なpackageのtestやproject全体のtestを追加しない。
 
@@ -96,8 +92,8 @@
 | `schema.prisma`変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の追加完了条件 | 指定command |
 
-commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。[修正ループ](REVIEW_FLOW.md#修正ループ)で最終レビュー・修正・再検証を完了する。
+commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。[修正ループ](VERIFICATION_FLOW.md#修正ループ)で失敗の修正・再検証を完了する。
 
-## 8. 失敗の分類
+## 7. 失敗の分類
 
-[診断のscope帰属](REVIEW_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
+[診断のscope帰属](VERIFICATION_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
