@@ -105,4 +105,4 @@ export const t67_01__hdb_karaden_soushin = defineHandler(
 
 圧縮してよいのは重複説明と同一の外枠だけ。guard順・条件式・等号・計算式・sort・tie-break・返却field・状態遷移・副作用・dataの権威を文章一行へ畳まない。Summary・完了条件でChangesを言い直さない。
 
-対象file・参照ruleは正確な相対pathとし、[判断基準](../IMPLEMENTATION_RULES.md)を適用する。
+対象file・参照ruleは正確な相対pathとする。
