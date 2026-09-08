@@ -234,6 +234,59 @@ for agent in claude codex; do
   check implementer_denied "$input" '定義が無い'
   mv "$definition.missing" "$definition"
 done
+# 独立レビュー役は上位モデル・読み取り専用・会話継承なしを固定する。
+for agent in claude codex; do
+  cd "$TMP/$agent project"
+  export CLAUDE_PROJECT_DIR=$PWD
+  command="bash .$agent/hooks/shell/require-implementer.sh"
+  if [ "$agent" = codex ]; then
+    roles='code-reviewer deep-reviewer'
+    role_key=agent_type
+    extension=toml
+    contract=.agents/skills/CODE_REVIEW_CONTRACT.md
+  else
+    roles=code-reviewer
+    role_key=subagent_type
+    extension=md
+    contract=.claude/skills/CODE_REVIEW_CONTRACT.md
+  fi
+  for role in $roles; do
+    definition=".$agent/agents/$role.$extension"
+    input=$(jq -cn --arg cwd "$PWD" --arg key "$role_key" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{($key):$role,fork_turns:"none"}}')
+    check test -z "$(printf '%s' "$input" | bash -c "$command")"
+    for mutation in '.model="gpt-5.6-luna"' '.effort="low"' '.fork_turns="all"' '.fork_context=true'; do
+      invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
+      check implementer_denied "$invalid" '専用定義で新規起動'
+    done
+    if [ "$agent" = codex ]; then
+      invalid=$(printf '%s' "$input" | jq 'del(.tool_input.fork_turns)')
+      check implementer_denied "$invalid" '専用定義で新規起動'
+    fi
+    cp "$definition" "$definition.original"
+    if [ "$agent" = codex ]; then
+      sed 's/sandbox_mode = "read-only"/sandbox_mode = "workspace-write"/' "$definition.original" > "$definition"
+    else
+      sed 's/tools: Read, Grep, Glob, Bash/tools: Read, Grep, Glob, Bash, Edit/' "$definition.original" > "$definition"
+    fi
+    check implementer_denied "$input" '配布設定と一致しません'
+    if [ "$agent" = codex ]; then
+      sed 's/model_reasoning_effort = "high"/model_reasoning_effort = "low"/' "$definition.original" > "$definition"
+    else
+      sed 's/effort: high/effort: low/' "$definition.original" > "$definition"
+    fi
+    check implementer_denied "$input" '配布設定と一致しません'
+    sed 's/^model[: =].*/model: wrong-model/' "$definition.original" > "$definition"
+    check implementer_denied "$input" '配布設定と一致しません'
+    mv "$definition.original" "$definition"
+    mv "$contract" "$contract.missing"
+    check implementer_denied "$input" '契約が無い'
+    mv "$contract.missing" "$contract"
+    mv "$definition" "$definition.missing"
+    check implementer_denied "$input" '定義が無い'
+    mv "$definition.missing" "$definition"
+  done
+done
+
 # 専用role以外は通常の権限判断へ委ねる。namespace付き起動もhookへ到達する。
 cd "$TMP/codex project"
 command='bash .codex/hooks/shell/require-implementer.sh'
