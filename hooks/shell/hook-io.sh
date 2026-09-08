@@ -66,7 +66,7 @@ hook_agent_type() {
   esac
 }
 
-# 専用定義の設定を起動引数で上書きせず、新規の実装役だけを起動する。
+# 子の直列起動と、専用reviewerの設定・文脈継承を検査する。
 hook_serial_agent_launch_valid() {
   echo "$HOOK_INPUT" | jq -e '
     ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv)$") | not) and
@@ -75,8 +75,8 @@ hook_serial_agent_launch_valid() {
     (.tool_input.resume == null or .tool_input.resume == "")
   ' >/dev/null
 }
-hook_nesting_launch_valid() {
-  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "nesting-reviewer" '
+hook_review_launch_valid() {
+  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "$1" '
     .tool_input | select(type == "object") |
     ([.model, .reasoning_effort, .model_reasoning_effort, .reasoningEffort, .effort, .thinking,
       .config, .config_file, .model_provider, .sandbox_mode] | all(. == null)) and
@@ -88,7 +88,9 @@ hook_nesting_launch_valid() {
       (if has("fork_context") then .fork_context == false else true end) and
       (if has("fork_turns") then .fork_turns == "none" else true end)
     else
-      (.agent_type == null or .agent_type == $role)
+      (.agent_type == null or .agent_type == $role) and
+      (.fork_context == null or .fork_context == false) and
+      (.fork_turns == null or .fork_turns == "none")
     end)
   ' >/dev/null
 }
