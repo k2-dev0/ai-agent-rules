@@ -36,7 +36,7 @@ for agent in claude codex; do
   check grep -Fq '現在のモデルで続行する' "$target/$skill_root/MODEL_SELECTION.md"
   check grep -Fq 'その判断に依存する変更を止め' "$target/$skill_root/MODEL_SELECTION.md"
   check test ! -e "$target/$skill_root/REVIEW_FLOW.md"
-  check test -f "$target/$skill_root/VERIFICATION_FLOW.md"
+  check test -f "$target/$skill_root/FIX_FLOW.md"
   check grep -Fq '`switch_model`だけを1回呼び直す' "$target/$skill_root/MODEL_SELECTION.md"
   check grep -Fq '切り替え前に後続作業を続けない' "$target/$skill_root/MODEL_SELECTION.md"
   check test -n "$rule_paths"
