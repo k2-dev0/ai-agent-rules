@@ -298,14 +298,14 @@ for agent in claude codex; do
   done
 done
 
-# 専用role以外は通常の権限判断へ委ねる。namespace付き起動もhookへ到達する。
+# 専用role以外を拒否する。namespace付き起動もhookへ到達する。
 cd "$TMP/codex project"
 command='bash .codex/hooks/shell/require-implementer.sh'
 for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent collaborationspawn_agent; do
   matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("require-implementer.sh"))' "$REPO/codex/hooks.json")
   check test -n "$matched"
   input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{agent_type:"default",fork_turns:"none"}}')
-  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  check implementer_denied "$input" '専用roleだけ'
 done
 for role in nesting-reviewer; do
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:$role,fork_turns:"none"}}')
@@ -335,7 +335,7 @@ for agent in claude codex; do
   done
   if [ "$agent" = codex ]; then role_key=agent_type; else role_key=subagent_type; fi
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{hook_event_name:"PreToolUse",cwd:$cwd,session_id:"DIRECT1",tool_name:"Agent",tool_input:{($role):"explorer",fork_turns:"none"}}')
-  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  check implementer_denied "$input" '専用roleだけ'
   input=$(printf '%s' "$input" | jq --arg role "$role_key" '.tool_input[$role]="implementer"')
   check implementer_denied "$input" '実装委任は禁止'
   mv ".$agent/agents.disabled" ".$agent/agents"
@@ -349,7 +349,7 @@ for agent in claude codex; do
   command="bash .$agent/hooks/shell/require-implementer.sh"
   for tool_name in Agent spawn_agent collaboration.spawn_agent; do
     input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{}}')
-    check test -z "$(printf '%s' "$input" | bash -c "$command")"
+    check implementer_denied "$input" '専用roleだけ'
     for mutation in '.run_in_background=true' '.background=true' '.resume="child-1"'; do
       invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
       check implementer_denied "$invalid" '並列実行は禁止'
