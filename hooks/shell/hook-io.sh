@@ -67,8 +67,16 @@ hook_agent_type() {
 }
 
 # 専用定義の設定を起動引数で上書きせず、新規の実装役だけを起動する。
-hook_implementer_launch_valid() {
-  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "${1:-implementer}" '
+hook_serial_agent_launch_valid() {
+  echo "$HOOK_INPUT" | jq -e '
+    ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv)$") | not) and
+    (.tool_input.run_in_background == null or .tool_input.run_in_background == false) and
+    (.tool_input.background == null or .tool_input.background == false) and
+    (.tool_input.resume == null or .tool_input.resume == "")
+  ' >/dev/null
+}
+hook_nesting_launch_valid() {
+  echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "nesting-reviewer" '
     .tool_input | select(type == "object") |
     ([.model, .reasoning_effort, .model_reasoning_effort, .reasoningEffort, .effort, .thinking,
       .config, .config_file, .model_provider, .sandbox_mode] | all(. == null)) and
