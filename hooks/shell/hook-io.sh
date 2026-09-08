@@ -21,13 +21,16 @@ HOOK_INPUT=$(cat)
 # よって PreToolUse では deny 決定 JSON を直接書き出して確実に止める。
 # jq 不在時も出せるよう printf で組む（理由文は自前のリテラルのみでエスケープ不要）。
 # 各 hook は冒頭で stderr を捨てるため、原因はこの理由文でしかエージェントに届かない。
-# PreToolUse 以外（session.sh の UserPromptSubmit / SessionEnd）で同じ JSON を
+# Stopはblock JSONを返す。UserPromptSubmit / SessionEndで同じJSONを
 # 出すと、exit 0 の stdout がプロンプトへの追加コンテキストとして注入されるので棄権する。
 # PreToolUse側も同じ初期化検査を通るため、設定不備はその呼び出しで拒否する。
 hook_io_fatal() {
   case "$HOOK_INPUT" in
     *'"hook_event_name"'*'"PreToolUse"'*)
       printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+      ;;
+    *'"hook_event_name"'*'"Stop"'*)
+      printf '{"decision":"block","reason":"%s"}\n' "$1"
       ;;
   esac
   exit 0
@@ -186,3 +189,11 @@ hook_ask() {
       ;;
   esac
 }
+
+# 独立レビューのlifecycle入出力。transcriptの非公開形式には依存しない。
+hook_review_brief() { printf '%s' "$HOOK_INPUT" | jq -er '.tool_input.prompt // .tool_input.message | fromjson | select(type == "object")'; }
+hook_child_id() { printf '%s' "$HOOK_INPUT" | jq -r '.agent_id // empty'; }
+hook_child_role() { printf '%s' "$HOOK_INPUT" | jq -r '.agent_type // empty'; }
+hook_last_message() { printf '%s' "$HOOK_INPUT" | jq -r '.last_assistant_message // empty'; }
+hook_stop_block() { jq -n --arg reason "$1" '{decision:"block",reason:$reason}'; exit 0; }
+hook_review_context() { jq -n --arg context "$1" '{hookSpecificOutput:{hookEventName:"SubagentStart",additionalContext:$context}}'; }
