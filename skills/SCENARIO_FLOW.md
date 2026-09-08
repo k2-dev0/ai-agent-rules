@@ -8,7 +8,7 @@
 | scope名 | 設計書の機能名 | ASCII kebab-case名 |
 | 実装後 | polish・必要ならindex更新 | 限定検証・完了報告 |
 
-調査・実装・レビュー・修正・検証はメインが行い、[モデル選択](MODEL_SELECTION.md)に従って残作業に必要なモデルへ切り替える。サブエージェントが必要な場合だけ[利用条件](SUBAGENT_RULES.md)に従う。
+調査・実装・自己確認・修正・検証はメインが行い、[モデル選択](MODEL_SELECTION.md)に従って残作業に必要なモデルへ切り替える。サブエージェントは[利用条件](SUBAGENT_RULES.md)に従う。変更開始前のHEADを独立レビュー用に保持する。
 
 ## 0. [agent_name]が直接調査する
 
@@ -80,11 +80,11 @@
 
 任意の委任が失敗した場合は子の終了と実差分を確認し、メインが残作業を引き継ぐ。
 
-## 6. レビュー
+## 6. 自己確認
 
 [レビューフロー](REVIEW_FLOW.md)を全文読み、全差分の検証、修正、採否・未解決事項の報告を完了する。
 
-## 7. Green・最終レビュー
+## 7. Green・最終自己確認
 
 メインが次を順に実行する。子の自己申告で代用せず、無関係なpackageのtestやproject全体のtestを追加しない。
 
@@ -100,4 +100,4 @@ commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類�
 
 ## 8. 失敗の分類
 
-[診断のscope帰属](REVIEW_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。
+[診断のscope帰属](REVIEW_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
