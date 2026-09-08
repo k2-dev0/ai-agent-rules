@@ -128,6 +128,7 @@ MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
 PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
 COWLICK_SKILL="$REPO/skills/cowlick/SKILL.md"
 PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
+PONYTAIL_CONTRACT="$REPO/skills/ponytail/REVIEW_CONTRACT.md"
 COWLICK_FORMAT="$REPO/skills/cowlick/DESIGN_FORMAT.md"
 REQUIRED_READING_HOOK="$REPO/hooks/shell/load-required-contract.sh"
 for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
@@ -148,26 +149,26 @@ if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edi
 else
   ok "preflightは読み取り専用"
 fi
-if sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*Write' && sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*Edit' && ! sed -n '1,/^---$/p' "$PONYTAIL_SKILL" | grep -Eq 'allowed-tools:.*AskUserQuestion'; then
-  ok "ponytailはprompt設計書だけを直接更新できる"
+if grep -q '^allowed-tools:.*Agent' "$PONYTAIL_SKILL" && grep -Fq 'Skill(cowlick *)' "$PONYTAIL_SKILL" && ! grep -Eq '^allowed-tools:.*(Write|Edit|AskUserQuestion)' "$PONYTAIL_SKILL"; then
+  ok "ponytailは子の監査とcowlickの修正を接続"
 else
   ng "ponytailの設計書更新toolまたは質問境界が不正"
 fi
-grep -Fq '調査をサブエージェントへ委任しない' "$MEETING_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ! grep -Fq 'worker/delegate.sh' "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL" && ok "設計調査と判断を上位モデルへ固定" || ng "設計調査を下位モデルへ委任できる"
+grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計作成と独立監査を分離" || ng "設計作成と監査の責務が不正"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
 grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'client検証とserverの最新dataによる再検証' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && grep -Fq '設計書形式の実装情報を保持' "$COWLICK_SKILL" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
 grep -Fq '| 書き方 | 対象 | 例 |' "$COWLICK_FORMAT" && grep -Fq '予約語・演算子・構文・組み込み型/object' "$COWLICK_FORMAT" && grep -Fq '標準・外部library・framework API、method・property' "$COWLICK_FORMAT" && grep -Fq '新設する業務関数・引数・変数・型・結果field・error・処理' "$COWLICK_FORMAT" && grep -Fq '既存symbol・schema field・file path' "$COWLICK_FORMAT" && grep -Fq '設計書形式に従い' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
 grep -Fq '配列は`[]`、objectは`{}`を宣言・参照の両方へ付ける' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].length' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].slice(...)' "$COWLICK_FORMAT" && grep -Fq '利用結果{}' "$COWLICK_FORMAT" && grep -Fq '分岐・loopは構文で書く' "$COWLICK_FORMAT" && grep -Fq '共通処理と対象固有の差を残す' "$COWLICK_FORMAT" && ok "cowlick疑似コードの形状・制御構文" || ng "cowlick疑似コードの形状・制御構文が不足"
-grep -q '## 必須監査成果物' "$PONYTAIL_SKILL" && grep -Fq '`ponytail_audit`' "$PONYTAIL_SKILL" && grep -Fq '`minimalAlternative`' "$PONYTAIL_SKILL" && grep -Fq '`counterexamples`' "$PONYTAIL_SKILL" && grep -Fq '`unresolved`' "$PONYTAIL_SKILL" && grep -q '何も削らなかった場合' "$PONYTAIL_SKILL" && grep -q '全fieldが埋まり.*ponytail_ready' "$PONYTAIL_SKILL" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
-grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_SKILL" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_SKILL" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_SKILL" && grep -Fq '測定可能な条件' "$PONYTAIL_SKILL" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_SKILL" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_SKILL" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
-grep -Fq "../cowlick/DESIGN_FORMAT.md" "$PONYTAIL_SKILL" && grep -Fq "圧縮してよいのは重複説明と同一の外枠だけ" "$COWLICK_FORMAT" && grep -Fq "文章一行へ畳まない" "$COWLICK_FORMAT" && ok "ponytailは実装契約を失う圧縮を禁止" || ng "ponytailが疑似コードの重要契約を圧縮可能"
-grep -Fq '一つのfindingはIDを付けて一度だけ説明' "$PONYTAIL_SKILL" && grep -Fq '同じ要件・原因・判断・置換先を持つ要素は一行へまとめる' "$PONYTAIL_SKILL" && grep -Fq '同じtopologyや根拠を別fieldで言い換えない' "$PONYTAIL_SKILL" && ok "ponytailの監査正本は重複せず簡潔" || ng "ponytailの監査成果物が重複可能"
+grep -q '## 必須監査成果物' "$PONYTAIL_CONTRACT" && grep -Fq '`ponytail_audit`' "$PONYTAIL_CONTRACT" && grep -Fq '`minimalAlternative`' "$PONYTAIL_CONTRACT" && grep -Fq '`counterexamples`' "$PONYTAIL_CONTRACT" && grep -Fq '`unresolved`' "$PONYTAIL_CONTRACT" && grep -q '何も削らなかった場合' "$PONYTAIL_CONTRACT" && grep -q '全fieldが埋まり.*ponytail_ready' "$PONYTAIL_CONTRACT" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
+grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_CONTRACT" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_CONTRACT" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_CONTRACT" && grep -Fq '測定可能な条件' "$PONYTAIL_CONTRACT" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_CONTRACT" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_CONTRACT" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
+grep -Fq "../cowlick/DESIGN_FORMAT.md" "$PONYTAIL_CONTRACT" && grep -Fq "圧縮してよいのは重複説明と同一の外枠だけ" "$COWLICK_FORMAT" && grep -Fq "文章一行へ畳まない" "$COWLICK_FORMAT" && ok "ponytailは実装契約を失う圧縮を禁止" || ng "ponytailが疑似コードの重要契約を圧縮可能"
+grep -Fq '一つのfindingはIDを付けて一度だけ説明' "$PONYTAIL_CONTRACT" && grep -Fq '同じ要件・原因・判断・置換先を持つ要素は一行へまとめる' "$PONYTAIL_CONTRACT" && grep -Fq '同じtopologyや根拠を別fieldで言い換えない' "$PONYTAIL_CONTRACT" && ok "ponytailの監査正本は重複せず簡潔" || ng "ponytailの監査成果物が重複可能"
 grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -Fq '`ponytail_audit`の必須field' "$MEETING_SKILL" && grep -Fq '空の`unresolved`' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
-grep -Fq '入口から副作用までのtopologyが繋がっている' "$MEETING_SKILL" && grep -Fq '対応要件・直接のconsumer' "$MEETING_SKILL" && grep -Fq '具体的な反例' "$MEETING_SKILL" && ok "meetingがponytailの主要成果物を独立検証" || ng "meetingのponytail独立検証が不足"
-grep -Fq '内部skillの選択・再実行は自分で行い' "$MEETING_SKILL" && grep -Fq '調査・判断・編集は[agent_name]が行う' "$PONYTAIL_SKILL" && ok "ponytailの最終設計判断を上位モデルへ固定" || ng "ponytailが設計判断を下位モデルへ委任できる"
-grep -Fq 'meetingへ返して停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/`の' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "cowlickとponytailはprompt正本を直接更新" || ng "cowlick/ponytailのprompt直接更新境界が不正"
+grep -Fq '設計全体を自己レビューしない' "$MEETING_SKILL" && grep -Fq '要修正指摘が残れば完了にしない' "$MEETING_SKILL" && ok "meetingは独立監査の完了条件だけ確認" || ng "meetingの独立監査完了条件が不足"
+grep -Fq '内部skillの選択・再実行は自分で行い' "$MEETING_SKILL" && grep -Fq '採用分を`cowlick`で' "$PONYTAIL_SKILL" && grep -Fq '新revision・hashで新規レビュー' "$PONYTAIL_SKILL" && ok "ponytailの指摘修正はメインで再レビューは新規の子" || ng "ponytailの指摘対応が不正"
+grep -Fq 'meetingへ返して停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/`の' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "設計書の更新はcowlickへ集約" || ng "cowlick/ponytailのprompt直接更新境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
   [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
