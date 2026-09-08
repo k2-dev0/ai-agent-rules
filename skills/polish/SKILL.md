@@ -76,7 +76,7 @@ package単位の検査は各1回。設定競合で一意に選べない、tool�
 
 `scope-related`失敗の解消と他の診断の分類後、確定済みの対象pathから本体コードだけを選び、`unwind`を必ず呼ぶ。test・設定・文書・Prisma schema・生成物・vendor・依存物は除外し、本体コードなしなら検出も省略する。対象を再探索しない。
 
-返却された候補だけを確認し、関数抽出で深さを隠さない。修正後は対象test・型検査・lint・同じpackageのbuildを再実行する。縮退不能は理由・却下案・child ID／task path・検出結果を報告する。
+unwindの結果を品質ゲートの結果へ含める。
 
 ## scope path検査
 
@@ -88,8 +88,6 @@ bash [skills_root]/polish/quality-gate.sh <機能名> -- <実変更path>...
 # direct（空入力不可）
 bash [skills_root]/polish/quality-gate.sh <機能名> --direct -- <明示path>...
 ```
-
-verifiedはreceiptのrepository・基準commit・modeと照合し、現存する実変更pathの順序込み完全一致、全件のtracked・cleanを検査する。個別path receiptは候補一覧も照合する。directはpathの形式・重複・存在・symlink・ignore・tracked・cleanを検査するが、完全性は証明しない。
 
 完了receiptの記録や後続での再検証は行わない。独自のESLint rule、`no-magic-numbers`、import規則を追加しない。
 
