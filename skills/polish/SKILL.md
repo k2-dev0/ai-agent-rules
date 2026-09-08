@@ -59,13 +59,13 @@ package単位の検査は各1回。設定競合で一意に選べない、tool�
 
 ## 診断・修正
 
-[診断のscope帰属](../VERIFICATION_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書の修正ループに従う。
+[診断のscope帰属](../FIX_FLOW.md#診断のscope帰属)で分類する。コード修正が必要なら同文書の修正ループに従う。
 
 | 原因 | 修正後 |
 |---|---|
 | formatterがformat差分を自動修正 | lintへ進む |
 | linterが自動修正 | formatter・lintを再確認して続行 |
-| `scope-related`な型・構文・lint・Prisma・build error | `VERIFICATION_FLOW.md`に従って修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
+| `scope-related`な型・構文・lint・Prisma・build error | `FIX_FLOW.md`に従って修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
 | `unrelated`・`uncertain` | 対象外fileを変更せず分類を報告して続行 |
 | `unwind`の修正 | メインが修正・検証・commit後、同じ対象pathでpolishを再実行 |
 | tool未導入・設定競合・実行不能 | `not run`を報告して続行 |
