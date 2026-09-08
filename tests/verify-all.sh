@@ -109,14 +109,10 @@ for f in "$REPO"/hooks/shell/*.sh; do
   case "$f" in */hook-io.sh) continue ;; esac
   [ -x "$f" ] || append_group_failure "exec bit: $f"
 done
-CLAUDE_IMPLEMENTER="$REPO/claude/agents/implementer.md"
-CODEX_IMPLEMENTER="$REPO/codex/agents/implementer.toml"
-IMPLEMENTER_CONTRACT="$REPO/skills/IMPLEMENTER_CONTRACT.md"
 IMPLEMENTATION_RULES="$REPO/skills/IMPLEMENTATION_RULES.md"
 FUNCTION_RULES="$REPO/rules/typescript/function-pattern.md"
 CLAUDE_SURVEYOR="$REPO/claude/agents/surveyor.md"
 CODEX_SURVEYOR="$REPO/codex/agents/surveyor.toml"
-IMPLEMENTER_LAUNCH="$REPO/skills/IMPLEMENTER_LAUNCH.md"
 report_group "実行ビット: hookと実行器全件" "$GROUP_FAILURES"
 BOOTSTRAP_SKILL="$REPO/skills/bootstrap/SKILL.md"
 BOOTSTRAP_FAILURES="$REPO/skills/bootstrap/FAILURES.md"
@@ -197,22 +193,14 @@ else
   cat "$S/context-mcp.out"
 fi
 
-echo "== メインの直接実装と任意の並列実装 =="
+echo "== メイン実装と直列の独立レビュー =="
 ERRAND_SKILL="$REPO/skills/errand/SKILL.md"
 SCENARIO_FLOW="$REPO/skills/SCENARIO_FLOW.md"
 REVIEW_FLOW="$REPO/skills/REVIEW_FLOW.md"
-[ -f "$CLAUDE_IMPLEMENTER" ] && grep -q '^model: claude-sonnet-5$' "$CLAUDE_IMPLEMENTER" && grep -q '^effort: max$' "$CLAUDE_IMPLEMENTER" && grep -q '^tools: Read, Grep, Glob, Edit, Write, Bash$' "$CLAUDE_IMPLEMENTER" && ! grep -Eq '^tools:.*Agent' "$CLAUDE_IMPLEMENTER" && ok "Claude implementer: Sonnet 5 maxと指定test用Bashを固定" || ng "Claude implementerのmodel・effort・tool境界が不正"
-[ -f "$CODEX_IMPLEMENTER" ] && grep -q '^model = "gpt-5.6-luna"$' "$CODEX_IMPLEMENTER" && grep -q '^model_reasoning_effort = "max"$' "$CODEX_IMPLEMENTER" && grep -q '^sandbox_mode = "workspace-write"$' "$CODEX_IMPLEMENTER" && ok "Codex下位モデル: model・effort max・workspace writeを固定" || ng "Codex下位モデルのmodel・effort・sandbox境界が不正"
-grep -Fq "初回実装またはレビュー後の再実装" "$IMPLEMENTER_CONTRACT" && grep -Fq "親の確定済み指示をコードへ変換" "$IMPLEMENTER_CONTRACT" && grep -Fq "Outcome: implemented" "$IMPLEMENTER_CONTRACT" && grep -Fq "要求に直接必要なproduction code" "$IMPLEMENTER_CONTRACT" && grep -Fq "briefに列挙したtest command" "$IMPLEMENTER_CONTRACT" && ok "implementer: 共通契約から初回・再実装と指定testを行う" || ng "implementerの実装専用境界が不足"
+[ ! -e "$REPO/claude/agents/implementer.md" ] && [ ! -e "$REPO/codex/agents/implementer.toml" ] && [ ! -e "$REPO/skills/IMPLEMENTER_LAUNCH.md" ] && [ ! -e "$REPO/skills/IMPLEMENTER_CONTRACT.md" ] && ok "実装委任資産を配布しない" || ng "実装委任資産が残存"
+grep -Fxq 'max_threads = 1' "$REPO/codex/config.toml" && ok "Codexの子の同時実行を1体に制限" || ng "Codexの子の同時実行上限が不正"
 [ ! -e "$CLAUDE_SURVEYOR" ] && [ ! -e "$CODEX_SURVEYOR" ] && ok "native surveyor定義を削除" || ng "native surveyor定義が残存"
-grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: implementer定義の配布先が不足"
-for IMPLEMENTER_FILE in "$CLAUDE_IMPLEMENTER" "$CODEX_IMPLEMENTER"; do
-  if grep -Fq "[skills_root]/IMPLEMENTER_CONTRACT.md" "$IMPLEMENTER_FILE" && grep -Fq "IMPLEMENTATION_RULES.md" "$IMPLEMENTER_CONTRACT" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES"; then
-    ok "implementer可読性契約: $(basename "$IMPLEMENTER_FILE")"
-  else
-    ng "implementer可読性契約が不足: $IMPLEMENTER_FILE"
-  fi
-done
+grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: agent定義の配布先が不足"
 [ -f "$ERRAND_SKILL" ] && grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは明示起動だけ許可" || ng "errand スキルの明示起動境界が不正"
 grep -Fq 'ユーザーが明示的にerrandを呼んだ場合だけ' "$ERRAND_SKILL" && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'メインが直接調査する' "$ERRAND_SKILL" && ok "errand はメインが直接調査" || ng "errand の直接調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && ! grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストまたはテストファイルが必要なことは停止理由にしない' "$ERRAND_SKILL" && grep -Fq 'ユーザーが選択したものだけをテストへ変換する' "$ERRAND_SKILL" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
@@ -241,17 +229,13 @@ TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 QUALITY_GATE_SCRIPT="$REPO/skills/polish/quality-gate.sh"
 CAPTURE_SCOPE_SCRIPT="$REPO/skills/polish/capture-scope.sh"
 MARK_PROMPT_DONE_SCRIPT="$REPO/skills/tdd/mark-prompt-done.sh"
-SKILL_VALIDATOR="${SKILL_VALIDATOR:-${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py}"
-if [ -r "$SKILL_VALIDATOR" ] && command -v python3 >/dev/null 2>&1; then
-  python3 "$SKILL_VALIDATOR" "$REPO/skills/unwind" >/dev/null && ok "unwind スキルが有効" || ng "unwind スキルが無効"
-else
-  echo "skip 任意のskill validatorが無いため追加検査を省略"
-fi
+if python3 "$REPO/tests/validate-skills.py" "$REPO"/skills/*/SKILL.md; then ok "全skillの配布形式を検証"; else ng "skillの配布形式が不正"; fi
+if python3 "$REPO/tests/test_validate_skills.py"; then ok "skill検査器の正常系・異常系"; else ng "skill検査器の回帰"; fi
 grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
 grep -Fq '独立レビューとして検出候補の抽出だけ' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -q '返却された候補だけ' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はメイン' "$UNWIND_SKILL" && ok "unwind は独立検出とメインの修正を分離" || ng "unwind の限定QA・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
-[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && [ -f "$IMPLEMENTER_LAUNCH" ] && grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq 'polish/SKILL.md#実装前baseline' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
+[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq 'polish/SKILL.md#実装前baseline' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
 ! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '現存する実変更pathの順序込み完全一致' "$POLISH_SKILL" && grep -Fq '全件のtracked・clean' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
 grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq '品質検査をPrettier / ESLintだけへ縮小しない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
@@ -259,7 +243,7 @@ grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && [ -f "$REVIEW_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && grep -Fq 'REVIEW_FLOW.md' "$SCENARIO_FLOW" "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・errand・polish・unwindはレビュー・再実装契約を共有" || ng "共通実装・レビューフロー参照が不正"
 grep -Fq "共通フローのStep 0〜8" "$TDD_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" "$REVIEW_FLOW" && ! grep -Eq 'require-implementer|専用定義' "$TDD_SKILL" "$ERRAND_SKILL" && ok "tdd・errandは専用agentなしで直接実装できる" || ng "tdd・errandに専用agentの必須条件が残存"
 grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && grep -Fq 'SUBAGENT_RULES.md' "$SCENARIO_FLOW" && ok "共通フローはメインの調査と限定的な委任を共有" || ng "共通フローの直接調査境界が不正"
-grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '独立した並列実装を委任する場合だけ' "$SCENARIO_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・任意の並列実装を維持" || ng "共通フローのtest選択権・実装境界が不正"
+grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '実装・修正をサブエージェントへ委任しない' "$SCENARIO_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・メイン実装を維持" || ng "共通フローのtest選択権・実装境界が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$REVIEW_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
 grep -Fq '要求・不変条件に照らして再レビュー' "$REVIEW_FLOW" && grep -Fq '最終レビュー' "$REVIEW_FLOW" && ! grep -Eq '変更行数|大小判定|10行|11行' "$REVIEW_FLOW" && ok "レビューは行数で担当を分けず要求と不変条件を検証" || ng "レビューに行数による委任条件が残存"
 grep -Fq 'Green、formatter、lint、polish、本体コードのcommitより先に' "$REVIEW_FLOW" && grep -Fq '次の3項目だけを簡潔に報告する' "$REVIEW_FLOW" && grep -Fq '採用:' "$REVIEW_FLOW" && grep -Fq '問題:' "$REVIEW_FLOW" && grep -Fq '残作業:' "$REVIEW_FLOW" && grep -Fq 'コードの再掲、作業手順、内部推論は報告しない' "$REVIEW_FLOW" && ok "メインは実装差分の評価と残作業を後続処理前に簡潔に報告" || ng "メインの実装差分レビュー報告契約が不足"
@@ -309,17 +293,6 @@ if [ -f .claude/skills/MODEL_SELECTION.md ] && grep -Fq '.claude/skills/MODEL_SE
 else
   ng "モデル選択基準: Claude配置または参照タイミングが不正"
 fi
-[ -f .claude/agents/implementer.md ] && grep -q '^model: claude-sonnet-5$' .claude/agents/implementer.md && grep -q '^effort: max$' .claude/agents/implementer.md && ok "bootstrap claude はimplementer定義を保持" || ng "bootstrap claude のimplementer定義が不正"
-IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{subagent_type:"implementer"}}')
-if [ -z "$(printf '%s' "$IMPLEMENTER_INPUT" | bash .claude/hooks/shell/require-implementer.sh)" ]; then ok "Claude implementer hook: 正常配置を受理"; else ng "Claude implementer hook: 正常配置を拒否"; fi
-mv .claude/agents/implementer.md .claude/agents/implementer.md.missing
-OUTPUT=$(printf '%s' "$IMPLEMENTER_INPUT" | bash .claude/hooks/shell/require-implementer.sh)
-if printf '%s' "$OUTPUT" | jq -e '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains("Claude implementer設定が無い"))' >/dev/null; then ok "Claude implementer hook: agent設定欠落を起動前に拒否"; else ng "Claude implementer hook: agent設定欠落を見逃す"; fi
-mv .claude/agents/implementer.md.missing .claude/agents/implementer.md
-mv .claude/skills/IMPLEMENTER_CONTRACT.md .claude/skills/IMPLEMENTER_CONTRACT.md.missing
-OUTPUT=$(printf '%s' "$IMPLEMENTER_INPUT" | bash .claude/hooks/shell/require-implementer.sh)
-if printf '%s' "$OUTPUT" | jq -e '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains("共通実装契約が無い"))' >/dev/null; then ok "Claude implementer hook: 共通契約欠落を起動前に拒否"; else ng "Claude implementer hook: 共通契約欠落を見逃す"; fi
-mv .claude/skills/IMPLEMENTER_CONTRACT.md.missing .claude/skills/IMPLEMENTER_CONTRACT.md
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
 if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
    [ "$(bash .claude/hooks/shell/commit-subject.sh --prefix foo.ts)" = "foo.ts: " ] && \
@@ -520,17 +493,6 @@ if [ -f .agents/skills/MODEL_SELECTION.md ] && grep -Fq '.agents/skills/MODEL_SE
 else
   ng "モデル選択基準: Codex配置または参照タイミングが不正"
 fi
-[ -f .codex/agents/implementer.toml ] && grep -q '^model = "gpt-5.6-luna"$' .codex/agents/implementer.toml && grep -q '^model_reasoning_effort = "max"$' .codex/agents/implementer.toml && ok "bootstrap codex はimplementer定義を保持" || ng "bootstrap codex のimplementer定義が不正"
-IMPLEMENTER_INPUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:"implementer",fork_turns:"none"}}')
-if [ -z "$(printf '%s' "$IMPLEMENTER_INPUT" | bash .codex/hooks/shell/require-implementer.sh)" ]; then ok "Codex implementer hook: 正常配置を受理"; else ng "Codex implementer hook: 正常配置を拒否"; fi
-mv .codex/agents/implementer.toml .codex/agents/implementer.toml.missing
-OUTPUT=$(printf '%s' "$IMPLEMENTER_INPUT" | bash .codex/hooks/shell/require-implementer.sh)
-if printf '%s' "$OUTPUT" | jq -e '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains("Codex implementer設定が無い"))' >/dev/null; then ok "Codex implementer hook: agent設定欠落を起動前に拒否"; else ng "Codex implementer hook: agent設定欠落を見逃す"; fi
-mv .codex/agents/implementer.toml.missing .codex/agents/implementer.toml
-mv .agents/skills/IMPLEMENTER_CONTRACT.md .agents/skills/IMPLEMENTER_CONTRACT.md.missing
-OUTPUT=$(printf '%s' "$IMPLEMENTER_INPUT" | bash .codex/hooks/shell/require-implementer.sh)
-if printf '%s' "$OUTPUT" | jq -e '.hookSpecificOutput | .permissionDecision == "deny" and (.permissionDecisionReason | contains("共通実装契約が無い"))' >/dev/null; then ok "Codex implementer hook: 共通契約欠落を起動前に拒否"; else ng "Codex implementer hook: 共通契約欠落を見逃す"; fi
-mv .agents/skills/IMPLEMENTER_CONTRACT.md.missing .agents/skills/IMPLEMENTER_CONTRACT.md
 if grep -q '^default_subagent_model = "gpt-5.6-luna"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "max"$' .codex/config.toml; then
   ok "bootstrap codex は子の既定値をLuna/maxへ固定"
 else
