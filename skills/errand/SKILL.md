@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 ## 対象・停止条件
 
-ユーザーが明示的にerrandを呼んだ場合だけ使う。meeting / cowlick / ponytail / tddは呼ばない。開始時に[共通実装フロー](../SCENARIO_FLOW.md)を全文読む。
+ユーザーが明示的にerrandを呼んだ場合だけ使う。meeting / cowlick / ponytail / tddは呼ばない。開始時に[共通実装フロー](../SCENARIO_FLOW.md)を読む。参照先は各工程の読込条件を満たした時点で読む。
 
 | 条件 | 対応 |
 |---|---|
@@ -17,7 +17,7 @@ disable-model-invocation: true
 | migration・設定・依存・CI・skill・Git管理fileの変更 | errandの対象外 |
 | Red用testのcommit後もユーザー由来のdirty fileが残る | 実装前に停止 |
 
-Prismaのfield・型・主キー・relationを一意に決められれば`schema.prisma`を変更できる。migration fileの作成、`prisma migrate`・`prisma db push`・`prisma db execute`は禁止。
+Prismaのfield・型・主キー・relationを一意に決められれば`schema.prisma`を変更できる。migration fileの作成は対象外。
 
 禁止対象の変更をユーザーが明示した場合は、errand終了と通常実装への移行を一文で伝え、指定範囲を扱う。
 
@@ -28,7 +28,7 @@ Prismaのfield・型・主キー・relationを一意に決められれば`schema
 3. 新しいテストまたはテストファイルが必要なことは停止理由にしない。ユーザーが選択したものだけをテストへ変換する。
 4. 要求根拠をユーザー依頼として共通フローのStep 1〜7を実行する。同型実装から名前・内容を一意に決められる新規本体ファイルも含める。
 5. 共通フローStep 6に対象path指定可能な既存lintを加える。commandがなければ`not run`とする。
-6. 検証・commit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行する。指摘対応はメインが行い、修正後の検証・commit・再レビューまで完了する。
+6. 検証・commit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。指摘対応はメインが行い、修正後の検証・commit・再レビューまで完了する。
 
 ## 報告
 
