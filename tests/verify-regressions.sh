@@ -118,7 +118,7 @@ output=$(printf '%s' "$input" | bash -c "$command")
 check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
 check test -z "$(printf '%s' "$input" | bash -c "$command")"
 
-# 登録済みhookを通し、誤ったrole・モデル上書き・専用定義の不整合を起動前に拒否する。
+# 専用roleの設定は検査し、通常のagent選択・直接編集へは介入しない。
 implementer_denied() {
   local output
   output=$(printf '%s' "$1" | bash -c "$command")
@@ -147,11 +147,11 @@ for agent in claude codex; do
   if [ "$agent" = claude ]; then command="$command workflow"; fi
   input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"ROLE1",cwd:$cwd,tool_name:"spawn_agent",permission_mode:"default",tool_input:{task_name:"implementer",model:"gpt-5.6-luna",reasoning_effort:"max"}}')
   output=$(printf '%s' "$input" | bash -c "$command")
-  check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
+  check test -z "$output"
   if [ "$agent" = claude ]; then role_key=subagent_type; else role_key=agent_type; fi
   input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input[$key]="unknown-role"')
   output=$(printf '%s' "$input" | bash -c "$command")
-  check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
+  check test -z "$output"
   input=$(printf '%s' "$input" | jq --arg key "$role_key" '.tool_input = {($key):"implementer"}')
   if [ "$agent" = codex ]; then input=$(printf '%s' "$input" | jq '.tool_input.fork_turns="none"'); fi
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
@@ -314,14 +314,14 @@ for agent in claude codex; do
   check implementer_denied "$input" '定義が無い'
   mv "$definition.missing" "$definition"
 done
-# workflow markerなしでも、Codexの未登録role・上書き・別起動経路を拒否する。
+# 専用role以外は通常の権限判断へ委ねる。namespace付き起動もhookへ到達する。
 cd "$TMP/codex project"
 command='bash .codex/hooks/shell/require-implementer.sh'
 for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent collaborationspawn_agent resume_agent spawn_agents_on_csv; do
   matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("require-implementer.sh"))' "$REPO/codex/hooks.json")
   check test -n "$matched"
   input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{agent_type:"default",fork_turns:"none"}}')
-  check implementer_denied "$input" 'Luna/max'
+  check test -z "$(printf '%s' "$input" | bash -c "$command")"
 done
 for role in implementer nesting-reviewer; do
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:$role,fork_turns:"none"}}')
@@ -333,6 +333,30 @@ for role in implementer nesting-reviewer; do
   done
   check grep -Fxq 'enabled = false' ".codex/agents/$role.toml"
 done
+
+# 専用agent未配置でもメインの読み取り・編集・モデル切替は妨げない。
+# 旧workflow登録とmarkerが残る更新途中の環境でも同じ結果になる。
+for agent in claude codex; do
+  cd "$TMP/$agent project"
+  export CLAUDE_PROJECT_DIR=$PWD
+  command="bash .$agent/hooks/shell/require-implementer.sh workflow"
+  mv ".$agent/agents" ".$agent/agents.disabled"
+  mkdir -p ".$agent/tmp"
+  for skill in tdd errand; do
+    : > ".$agent/tmp/session.$skill.DIRECT1"
+  done
+  for tool_name in Read Edit apply_patch switch_model; do
+    input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,session_id:"DIRECT1",tool_name:$tool,tool_input:{}}')
+    check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  done
+  if [ "$agent" = codex ]; then role_key=agent_type; else role_key=subagent_type; fi
+  input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{hook_event_name:"PreToolUse",cwd:$cwd,session_id:"DIRECT1",tool_name:"Agent",tool_input:{($role):"explorer",fork_turns:"none"}}')
+  check test -z "$(printf '%s' "$input" | bash -c "$command")"
+  input=$(printf '%s' "$input" | jq --arg role "$role_key" '.tool_input[$role]="implementer"')
+  check implementer_denied "$input" '設定が無い'
+  mv ".$agent/agents.disabled" ".$agent/agents"
+done
+cd "$TMP/codex project"
 
 # 待機時間だけを書き換え、待機先・cursor等は保つ。補正でモデルの再試行を発生させない。
 for tool_name in wait collaboration.wait collaborationwait wait_agent collaboration.wait_agent collaborationwait_agent; do
