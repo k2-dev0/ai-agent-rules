@@ -14,8 +14,8 @@ disable-model-invocation: true
 ## 手順
 
 1. 対象設計書を読み、[共通実装フロー](../SCENARIO_FLOW.md)を全文読む。
-2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜8を実行する。ユーザー由来のdirty fileがあっても調査はできるが、Red用testのcommit後も残る場合は実装を開始しない。
-3. 設計書の完了条件、Greenまたはtest除外、レビュー、追跡対象のcommitを確認し、次を実行する。
+2. 設計書を要求根拠、機能名をscope名として共通フローのStep 0〜7を実行する。ユーザー由来のdirty fileがあっても調査はできるが、Red用testのcommit後も残る場合は実装を開始しない。
+3. 設計書の完了条件、Greenまたはtest除外、追跡対象のcommitを確認し、次を実行する。
 
 ```bash
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
@@ -34,4 +34,4 @@ bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
 
 dirty file、承認範囲外のDB・依存・公開API変更、新しい設計判断が必要な場合は実装を止め、未解決事項を報告する。
 
-対象設計書、選択済みシナリオ、Red・Green／test除外、調査結果、実差分の採否・残作業・最終レビュー、polish・検証分類、commit、index残件数を簡潔に報告する。
+対象設計書、選択済みシナリオ、Red・Green／test除外、調査結果、残作業・独立レビュー結果、polish・検証分類、commit、index残件数を簡潔に報告する。
