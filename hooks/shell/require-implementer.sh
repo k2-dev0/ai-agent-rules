@@ -1,20 +1,9 @@
 #!/bin/bash
-# 実装workflowのAgent起動は専用implementerに限定する。
+# 専用agentを選んだ場合だけ、起動設定と契約を検査する。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
 ROLE=$(hook_agent_type)
-if [ "$HOOK_AGENT" = codex ]; then
-  case "$(hook_tool_name)" in
-    *resume_agent|*spawn_agents_on_csv)
-      hook_deny "Codexの子は専用roleのLuna/maxで新規起動してください。resumeと一括起動は許可しません。"
-      ;;
-  esac
-  case "$ROLE" in
-    implementer|nesting-reviewer) ;;
-    *) hook_deny "Codexの子はimplementerまたはnesting-reviewerのLuna/maxだけを許可します。代替role・モデル継承は使えません。" ;;
-  esac
-fi
 if [ "$ROLE" = nesting-reviewer ]; then
   hook_implementer_launch_valid nesting-reviewer || hook_deny "nesting-reviewerは専用定義で新規起動してください。モデル・effort上書き、resume、background、文脈継承は使えません。"
   REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "nesting-reviewerのリポジトリを確認できません。"
@@ -47,15 +36,6 @@ tools: Read, Grep, Glob'
   CONTRACT="$SKILLS_ROOT/unwind/NESTING_CONTRACT.md"
   [ -s "$REPOSITORY/$CONTRACT" ] && [ -r "$REPOSITORY/$CONTRACT" ] && grep -Fq "$CONTRACT" "$AGENT_FILE" || hook_deny "nesting-reviewerの検出契約が無い、または参照されていません。"
   exit 0
-fi
-WORKFLOW=false
-[ "${1:-}" = workflow ] && WORKFLOW=true
-if [ "$HOOK_AGENT" = codex ] && { hook_skill_session_active tdd || hook_skill_session_active errand; }; then
-  WORKFLOW=true
-fi
-
-if [ "$WORKFLOW" = true ] && [ "$ROLE" != implementer ]; then
-  hook_deny "実装workflowでは専用implementerを選択してください。Codexはagent_type、Claudeはsubagent_typeにimplementerを指定します。task名やLuna/maxの指定だけでは代用できません。"
 fi
 [ "$ROLE" = implementer ] || exit 0
 
