@@ -6,8 +6,44 @@ exec 2>/dev/null
 hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。background・一括起動・resumeを使わず、子の完了後に次へ進んでください。"
 ROLE=$(hook_agent_type)
 [ "$ROLE" != implementer ] || hook_deny "実装委任は禁止です。メインで実装してください。"
+case "$ROLE" in
+  code-reviewer|deep-reviewer)
+    hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
+    REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "reviewerのリポジトリを確認できません。"
+    if [ "$HOOK_AGENT" = codex ]; then
+      AGENT_FILE="$REPOSITORY/.codex/agents/$ROLE.toml"
+      CONTRACT=.agents/skills/CODE_REVIEW_CONTRACT.md
+      MODEL=gpt-5.6-sol
+      [ "$ROLE" != deep-reviewer ] || MODEL=gpt-6-astra
+      EXPECTED_SETTINGS="name = \"$ROLE\"
+model = \"$MODEL\"
+model_reasoning_effort = \"high\"
+sandbox_mode = \"read-only\""
+      [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
+      SETTINGS=$(sed '/^developer_instructions[[:space:]]*=/,$d' "$AGENT_FILE")
+      grep -Fxq 'enabled = false' "$AGENT_FILE" || hook_deny "reviewerの再委任は禁止です。"
+    else
+      [ "$ROLE" = code-reviewer ] || hook_deny "Claudeのコードレビューはcode-reviewerを使ってください。"
+      AGENT_FILE="$REPOSITORY/.claude/agents/code-reviewer.md"
+      CONTRACT=.claude/skills/CODE_REVIEW_CONTRACT.md
+      EXPECTED_SETTINGS='name: code-reviewer
+model: opus
+effort: high
+tools: Read, Grep, Glob, Bash'
+      [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
+      SETTINGS=$(awk 'NR == 1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$AGENT_FILE")
+    fi
+    while IFS= read -r EXPECTED; do
+      KEY=${EXPECTED%%[: =]*}
+      ACTUAL=$(printf '%s\n' "$SETTINGS" | grep -E "^$KEY[[:space:]]*[:=]")
+      [ "$ACTUAL" = "$EXPECTED" ] || hook_deny "reviewer定義の $KEY が配布設定と一致しません。"
+    done <<< "$EXPECTED_SETTINGS"
+    [ -s "$REPOSITORY/$CONTRACT" ] && grep -Fq "$CONTRACT" "$AGENT_FILE" || hook_deny "reviewerの契約が無い、または参照されていません。"
+    exit 0
+    ;;
+esac
 if [ "$ROLE" = nesting-reviewer ]; then
-  hook_nesting_launch_valid || hook_deny "nesting-reviewerは専用定義で新規起動してください。モデル・effort上書き、resume、background、文脈継承は使えません。"
+  hook_review_launch_valid nesting-reviewer || hook_deny "nesting-reviewerは専用定義で新規起動してください。モデル・effort上書き、resume、background、文脈継承は使えません。"
   REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "nesting-reviewerのリポジトリを確認できません。"
   case "$HOOK_AGENT" in
     codex)
