@@ -3,9 +3,17 @@
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
+# 旧skill内の全tool登録が残っていても、起動以外は対象にしない。
+case "$(hook_tool_name)" in
+  Read|Edit|Write|apply_patch|switch_model|Bash) exit 0 ;;
+esac
 hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。background・一括起動・resumeを使わず、子の完了後に次へ進んでください。"
 ROLE=$(hook_agent_type)
 [ "$ROLE" != implementer ] || hook_deny "実装委任は禁止です。メインで実装してください。"
+case "$ROLE" in
+  code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;;
+  *) hook_deny "子は独立コードレビュー・設計監査・ネスト候補抽出の専用roleだけ起動できます。一般調査・実装はメインで行ってください。" ;;
+esac
 case "$ROLE" in
   code-reviewer|deep-reviewer|design-reviewer)
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
