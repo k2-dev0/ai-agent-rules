@@ -83,7 +83,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | メインモデルの選択 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
-| [VERIFICATION_FLOW.md](skills/VERIFICATION_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
+| [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | 固定差分の独立レビュー起動・待機・指摘対応 |
 | [CODE_REVIEW_CONTRACT.md](skills/CODE_REVIEW_CONTRACT.md) | 読み取り専用レビュー役の入力・確認・返却 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
