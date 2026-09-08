@@ -8,13 +8,13 @@
 | scope名 | 設計書の機能名 | ASCII kebab-case名 |
 | 実装後 | polish・必要ならindex更新 | 限定検証・完了報告 |
 
-調査・実装・修正・検証はメインが行い、[モデル選択](MODEL_SELECTION.md)に従って残作業に必要なモデルへ切り替える。サブエージェントは[利用条件](SUBAGENT_RULES.md)に従う。変更開始前のHEADを独立レビュー用に保持する。
+調査・実装・修正・検証はメインが行う。作業の性質が変わったときは[モデル選択](MODEL_SELECTION.md)で再判定する。
 
 ## 0. [agent_name]が直接調査する
 
 要求の識別子・path・番号・固有名詞から対象、同型実装、schema・test・route、検証commandを確認する。
 
-`path:line`、想定変更先、関連test・command、未確認事項を保持する。事実と推測を分け、必須事実が不足する場合は[agent_name]が追加調査する。新しい設計判断が必要なら呼び出し元へ戻す。[判断基準](IMPLEMENTATION_RULES.md)と該当規約を適用する。
+`path:line`、想定変更先、関連test・command、未確認事項を保持する。事実と推測を分け、必須事実が不足する場合は[agent_name]が追加調査する。新しい設計判断が必要なら呼び出し元へ戻す。調査開始時に[共通基準](IMPLEMENTATION_RULES.md)と該当規約を読む。
 
 ## 1. テストシナリオ候補をまとめて提示する
 
@@ -78,8 +78,6 @@
 | 説明・分類のみ、または実差分0 | 要件が既存実装で満たされている根拠を確認し、不足があれば実装を続行 |
 | 中断後の再開 | 実差分と検証結果から未完了作業を特定し、完了済み操作を繰り返さない |
 
-任意の委任が失敗した場合は子の終了と実差分を確認し、メインが残作業を引き継ぐ。
-
 ## 6. Green・静的検証
 
 メインが次を順に実行する。子の自己申告で代用せず、無関係なpackageのtestやproject全体のtestを追加しない。
@@ -92,8 +90,8 @@
 | `schema.prisma`変更 | 所属packageのPrisma `format`、`validate`、`generate` |
 | 呼び出し元の追加完了条件 | 指定command |
 
-commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。[修正ループ](FIX_FLOW.md#修正ループ)で失敗の修正・再検証を完了する。
+commandは`target-test`、`direct-regression`、`typecheck`、`schema`に分類し、対象pathと対応を示す。commandがなければ発明せず未実行と報告する。検証が失敗した場合だけ[修正ループ](FIX_FLOW.md#修正ループ)を読み、修正・再検証する。
 
 ## 7. 失敗の分類
 
-[診断のscope帰属](FIX_FLOW.md#診断のscope帰属)に従って分類し、完了処理は呼び出し元へ戻す。呼び出し元の検証・整形後に[独立レビュー](INDEPENDENT_REVIEW.md)を行う。
+診断がある場合だけ[診断のscope帰属](FIX_FLOW.md#診断のscope帰属)を読み、分類する。完了処理は呼び出し元へ戻す。
