@@ -54,7 +54,7 @@ $bootstrap codex
 3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する。hook変更時も再レビューする。未trustのproject-local設定は適用されない。
 4. Claudeはproject rootの`.mcp.json`にあるSerena・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
 
-更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
+更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、tdd／errandの`require-implementer.sh workflow`登録は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
 
@@ -72,7 +72,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-調査・要件・設計・レビュー・テスト・Gitは親が担当する。初回実装と確定済みの大きい修正は専用implementer、ネスト候補抽出だけは読み取り専用nesting-reviewerへ渡す。
+調査・要件・設計・実装・レビュー・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。サブエージェントは独立した並列作業・文脈の隔離・独立レビューに限る。並列実装にはimplementer、ネストの独立検出には読み取り専用nesting-reviewerを使う。
 
 Codexの子はLuna/maxだけを起動hookで許可し、Claudeの子はSonnet/maxを使う。Codexの短い子待機はhookで60秒へ補正する。会話継承・短周期poll・全文ログ再取得は避ける。詳細は[子・待機の規則](skills/SUBAGENT_RULES.md)。
 
