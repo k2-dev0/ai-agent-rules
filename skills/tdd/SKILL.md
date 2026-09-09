@@ -1,7 +1,7 @@
 ---
 name: tdd
 description: "引数なしの$tddで、先頭未完了設計書1枚を実装・レビュー・polishする。"
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent, Skill(polish)
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 disable-model-invocation: true
 ---
 
@@ -21,7 +21,7 @@ disable-model-invocation: true
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-この出力にある実変更pathだけをまとめて`polish`へ渡し、ファイルごとには呼ばない。
+この出力にある実変更pathだけをまとめて[polishの手順](../polish/PROCEDURE.md)へ渡し、verifiedで実行する。ファイルごとには呼ばない。
 
 4. polish後に[独立レビュー](../INDEPENDENT_REVIEW.md)を読み、実行する。
 5. 実差分・検証結果・独立レビューの結果・`unrelated`・`uncertain`・`not run`を報告し、完了マークを付けるか明示的に確認する。ユーザーが付けると回答した場合だけ単独実行する。
