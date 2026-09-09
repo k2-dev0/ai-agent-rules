@@ -2,3 +2,6 @@ interface:
   display_name: "unwind"
   short_description: "サブエージェントで深い制御ネストを検出し、安全に縮退する"
   default_prompt: "$unwind を使い、サブエージェントの検出結果だけを基に深いネストを見直してください。"
+
+policy:
+  allow_implicit_invocation: false
