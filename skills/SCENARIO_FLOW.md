@@ -58,7 +58,7 @@
 | 最初からGreen | 要求を検出できるtestか確認 |
 | シナリオ変更が必要 | Step 1へ戻る |
 
-追跡対象testをコミットし、worktreeがcleanであることを確認する。ユーザー由来のdirty fileが残れば実装を停止する。ignored testはdirtyに含めない。実装直前に[polishの実装前baseline](polish/SKILL.md#実装前baseline)をscope名で記録する。
+追跡対象testをコミットし、worktreeがcleanであることを確認する。ユーザー由来のdirty fileが残れば実装を停止する。ignored testはdirtyに含めない。実装直前に[polishの実装前baseline](polish/BASELINE.md)をscope名で記録する。
 
 ## 4. 実装する
 
