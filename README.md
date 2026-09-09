@@ -66,15 +66,13 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [tdd](skills/tdd/SKILL.md) | 引数なしで先頭未完了設計書1枚を実装・レビュー・polish |
 | [errand](skills/errand/SKILL.md) | 明示起動で既存パターンの小修正・定型追加。設計書なし |
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
-| [unwind](skills/unwind/SKILL.md) | polish内部で3段以上の制御フローネストを検出・縮退 |
+| [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
 | [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
 | [e2e](skills/e2e/SKILL.md) | 計画を承認・保存し、ブラウザで検証 |
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-調査・要件・設計・実装・テスト・Gitはメインが担当し、残作業に応じてモデルを切り替える。並列実行は禁止。サブエージェントは独立コードレビュー・設計監査・ネスト候補抽出に限り、1体ずつ起動して完了までメインも待機する。ネストの独立検出には読み取り専用nesting-reviewerを使う。
-
-確定済みの実装はメインのLuna、未解決の判断はモデル選択に従って昇格する。実装・検証・整形後に会話継承なしの独立レビューを自動起動する。CodexはSol/high、複雑な整合性検証はAstra/high、ClaudeはOpus/high。ネスト検出役のLuna/max・Sonnet/maxとは分ける。短周期poll・全文ログ再取得は避け、指摘だけをメインへ戻す。詳細は[独立レビュー](skills/INDEPENDENT_REVIEW.md)と[子・待機の規則](skills/SUBAGENT_RULES.md)。
+メインが設計・実装を担当し、専用reviewerが独立検証する。モデルは[モデル選択](skills/MODEL_SELECTION.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
@@ -150,6 +148,8 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 `independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、専用子の起動入力と`SubagentStop`のJSON結果を照合する。`Stop`では現在HEAD・追跡fileのclean状態・未追跡の編集対象・未確認範囲を検査する。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。相談・実行不能の報告は未完了状態を保持する。指摘の採否やレビューの品質は機械的な完了判定の対象外。
 
 配布先は`SubagentStart`・`SubagentStop`・`Stop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
+
+cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。
 
 読込条件は各skillの参照元と、必要な操作で案内するhookに置く。AGENTS.mdへ文書の案内表は置かない。共通基準は設計・実装・reviewerが共有し、起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。skillを使わない通常作業では、共通基準のhook注入は最初の対象コード編集時であり、調査開始時の読込は保証しない。
 
