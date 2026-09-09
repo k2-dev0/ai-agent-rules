@@ -1,10 +1,9 @@
 #!/bin/bash
 # PreToolUse hook: 判断前に圧縮した必須契約を、最初の保護操作を止めて注入する。
-# task-idやmodeにかかわらず、同一session・同一内容ではreceiptを検証して棄権し、後続操作を通す。
+# スキル起動にかかわらず、同一session・同一内容ではreceiptを検証して棄権し、後続操作を通す。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
-MODE="${1:-auto}"
 TOOL=$(hook_tool_name)
 ROOT=$(hook_cwd)
 [ -n "$ROOT" ] || ROOT=$PWD
@@ -56,15 +55,6 @@ load_contract_once() {
   exit 0
 }
 
-# Claudeはcowlickのfrontmatterからmodeを渡す。Codexはmeeting/cowlickのsession markerで
-# 適用範囲を限定し、最初のprompt設計書編集前に設計形式を注入する。
-REQUIRE_COWLICK_FORMAT=false
-if [ "$MODE" = "cowlick-design" ]; then
-  REQUIRE_COWLICK_FORMAT=true
-elif [ "$HOOK_AGENT" = "codex" ] && { hook_skill_session_active "meeting" || hook_skill_session_active "cowlick"; }; then
-  REQUIRE_COWLICK_FORMAT=true
-fi
-
 case "$TOOL" in
   Edit|Write|MultiEdit|apply_patch)
     while IFS= read -r FILE; do
@@ -77,18 +67,18 @@ case "$TOOL" in
     ;;
 esac
 
-if [ "$REQUIRE_COWLICK_FORMAT" = true ]; then
-  case "$TOOL" in
-    Edit|Write|MultiEdit|apply_patch)
-      while IFS= read -r FILE; do
-        case "$FILE" in
-          .codex/prompt/*.md|*/.codex/prompt/*.md|.claude/prompt/*.md|*/.claude/prompt/*.md)
-            load_contract_once "cowlick-design-format" "cowlick/DESIGN_FORMAT.md"
-            ;;
-        esac
-      done < <(hook_file_paths)
-      ;;
-  esac
-fi
+# 設計書への編集は、内部手順の直接参照でも設計形式を適用する。
+
+case "$TOOL" in
+  Edit|Write|MultiEdit|apply_patch)
+    while IFS= read -r FILE; do
+      case "$FILE" in
+        .codex/prompt/*.md|*/.codex/prompt/*.md|.claude/prompt/*.md|*/.claude/prompt/*.md)
+          load_contract_once "cowlick-design-format" "cowlick/DESIGN_FORMAT.md"
+          ;;
+      esac
+    done < <(hook_file_paths)
+    ;;
+esac
 
 exit 0
