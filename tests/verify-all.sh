@@ -608,15 +608,19 @@ for MCP_SERVER in serena chrome-devtools; do
     report_group "$MCP_SERVER: 全有効toolを自動承認" "$GROUP_FAILURES"
     continue
   fi
-  mcp_server_prompts_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "未登録toolの既定値がpromptではない"
-  APPROVED_COUNT=0
-  while IFS= read -r MCP_TOOL; do
-    APPROVED_COUNT=$((APPROVED_COUNT+1))
-    mcp_tool_approved "$MCP_SERVER" "$MCP_TOOL" .codex/config.toml || append_group_failure "approve漏れ: $MCP_TOOL"
-  done < <(jq -r --arg prefix "mcp__${MCP_SERVER}__" '.permissions.allow[] | select(startswith($prefix)) | ltrimstr($prefix)' "$REPO/claude/settings.local.json")
-  CONFIGURED_COUNT=$(grep -c "^\[mcp_servers\.$MCP_SERVER\.tools\." .codex/config.toml)
-  [ "$CONFIGURED_COUNT" = "$APPROVED_COUNT" ] || append_group_failure "allow一覧外のapprove混入"
-  report_group "$MCP_SERVER: approval境界" "$GROUP_FAILURES"
+  mcp_server_approves_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "既定値がapproveではない"
+  awk '
+    $0 == "[mcp_servers.chrome-devtools.tools.upload_file]" { tool=1; next }
+    /^\[/ { tool=0 }
+    tool && $0 == "approval_mode = \"prompt\"" { found=1 }
+    END { exit !found }
+  ' .codex/config.toml || append_group_failure "upload_fileの承認がない"
+  CONFIGURED_COUNT=$(grep -c '^\[mcp_servers.chrome-devtools.tools.' .codex/config.toml)
+  [ "$CONFIGURED_COUNT" = "1" ] || append_group_failure "不要なtool個別設定が残存"
+  for LOCAL_PATTERN in '--allowed-url-pattern=*://localhost:*/*' '--allowed-url-pattern=*://127.0.0.1:*/*' '--allowed-url-pattern=*://[\\:\\:1]:*/*'; do
+    grep -Fq -- "$LOCAL_PATTERN" .codex/config.toml || append_group_failure "localhost制限なし: $LOCAL_PATTERN"
+  done
+  report_group "$MCP_SERVER: localhost限定・uploadだけ承認" "$GROUP_FAILURES"
 done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
