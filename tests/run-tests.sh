@@ -66,18 +66,20 @@ check_bash_rewrite() { # name expected-command hook command
 READING_CWD=$PWD
 rm -f .claude/tmp/required-reading.*.READ1 .claude/tmp/required-reading.*.READ2
 COWLICK_EDIT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"READ1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:".claude/prompt/branch-sample-prompt.md"}}')
-COWLICK_FIRST=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh" cowlick-design)
+COWLICK_FIRST=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh")
 if matches_expected deny "$COWLICK_FIRST" && echo "$COWLICK_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '## Changes'; then
   PASS=$((PASS+1)); echo "ok   required-reading: cowlick形式を初回編集前に全文注入"
 else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式を注入できない -> [$COWLICK_FIRST]"
 fi
-COWLICK_SECOND=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh" cowlick-design)
+COWLICK_SECOND=$(echo "$COWLICK_EDIT" | bash "$H/load-required-contract.sh")
 if matches_expected empty "$COWLICK_SECOND"; then
   PASS=$((PASS+1)); echo "ok   required-reading: cowlick形式receipt後は棄権"
 else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
 fi
+
+check "required-reading: 通常文書は設計形式の対象外" empty load-required-contract.sh '{"hook_event_name":"PreToolUse","session_id":"READOTHER","tool_name":"Edit","tool_input":{"file_path":"docs/notes.md"}}'
 
 # --- protect-git ---
 check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'
