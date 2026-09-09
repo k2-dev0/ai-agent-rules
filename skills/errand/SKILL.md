@@ -1,13 +1,12 @@
 ---
 name: errand
-description: "明示的な$errandで、既存パターンから一意に決まる小修正・定型追加・Prisma schema変更を設計書なしで実装する。"
+description: "スキル未指定の実装・修正依頼、または明示的な$errandで使う。既存パターンの小修正・定型追加・Prisma schema変更が対象。明示された別スキルと進行中の工程を優先し、質問・説明・読み取りだけの調査では起動しない。"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
-disable-model-invocation: true
 ---
 
 ## 対象・停止条件
 
-ユーザーが明示的にerrandを呼んだ場合だけ使う。meeting / cowlick / ponytail / tddは呼ばない。開始時に[共通実装フロー](../SCENARIO_FLOW.md)を読む。参照先は各工程の読込条件を満たした時点で読む。
+meeting / cowlick / ponytail / tddは呼ばない。開始時に[共通実装フロー](../SCENARIO_FLOW.md)を読む。参照先は各工程の読込条件を満たした時点で読む。
 
 | 条件 | 対応 |
 |---|---|
