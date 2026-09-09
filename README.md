@@ -125,7 +125,7 @@ Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用
 | Prisma migrate/db push/db execute、Git push/cherry-pick、依存install/add | 拒否 |
 | 複数stage・対象名不一致・日本語なし・AI署名・amendのcommit | 拒否 |
 
-Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。MCPの未登録toolは両方で確認する。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
+Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。Codexのchrome-devtoolsはChrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
 
 ## 文書の編集
 
