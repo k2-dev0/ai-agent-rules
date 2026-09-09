@@ -4,4 +4,4 @@ interface:
   default_prompt: "$errand を使い、設計書なしでメインが調査し、testシナリオ候補の提示と選択、テスト、実装、Greenまで進めてください。"
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true
