@@ -126,17 +126,17 @@ fi
 echo "== 設計pipelineのskill境界 =="
 MEETING_SKILL="$REPO/skills/meeting/SKILL.md"
 PREFLIGHT_SKILL="$REPO/skills/preflight/SKILL.md"
-COWLICK_SKILL="$REPO/skills/cowlick/SKILL.md"
-PONYTAIL_SKILL="$REPO/skills/ponytail/SKILL.md"
+COWLICK_SKILL="$REPO/skills/cowlick/PROCEDURE.md"
+PONYTAIL_SKILL="$REPO/skills/ponytail/PROCEDURE.md"
 PONYTAIL_CONTRACT="$REPO/skills/ponytail/REVIEW_CONTRACT.md"
 COWLICK_FORMAT="$REPO/skills/cowlick/DESIGN_FORMAT.md"
 REQUIRED_READING_HOOK="$REPO/hooks/shell/load-required-contract.sh"
 for SKILL_FILE in "$MEETING_SKILL" "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
   [ -f "$SKILL_FILE" ] && ok "design skill存在: $(basename "$(dirname "$SKILL_FILE")")" || ng "design skill不在: $SKILL_FILE"
 done
-grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq 'ユーザーが `$meeting` を明示して' "$MEETING_SKILL" && grep -Fq '`$meeting` の明示呼び出しでだけ起動する' "$MEETING_SKILL" && grep -Fq '通常の自然言語による軽微な修正・追加依頼では起動しない' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '  - Skill(cowlick *)' "$MEETING_SKILL" && grep -Fq '  - Skill(ponytail)' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && ! grep -Fq '  - Bash' "$MEETING_SKILL" && ok "meetingを明示起動だけに限定する" || ng "meetingの起動境界・skill境界が不正"
+grep -q '^disable-model-invocation: true$' "$MEETING_SKILL" && grep -Fq 'ユーザーが `$meeting` を明示して' "$MEETING_SKILL" && grep -Fq '`$meeting` の明示呼び出しでだけ起動する' "$MEETING_SKILL" && grep -Fq '通常の自然言語による軽微な修正・追加依頼では起動しない' "$MEETING_SKILL" && grep -Fq '  - Skill(preflight)' "$MEETING_SKILL" && grep -Fq '../cowlick/PROCEDURE.md' "$MEETING_SKILL" && grep -Fq '../ponytail/PROCEDURE.md' "$MEETING_SKILL" && grep -Fq '  - AskUserQuestion' "$MEETING_SKILL" && grep -Fq '  - Bash' "$MEETING_SKILL" && ok "meetingを明示起動だけに限定する" || ng "meetingの起動境界・skill境界が不正"
 grep -q 'preflight → cowlick → ponytail' "$MEETING_SKILL" && ! grep -q 'cowlick apply\|最終承認を得る' "$MEETING_SKILL" && ok "meetingは承認・反映phaseなしで設計する" || ng "meetingの基本順序または承認gateが不正"
-for INTERNAL_SKILL in "$PREFLIGHT_SKILL" "$COWLICK_SKILL" "$PONYTAIL_SKILL"; do
+for INTERNAL_SKILL in "$PREFLIGHT_SKILL"; do
   grep -q '^user-invocable: false$' "$INTERNAL_SKILL" && ok "内部skillをmenuから隠す: $(basename "$(dirname "$INTERNAL_SKILL")")" || ng "内部skillがユーザー起動可能: $INTERNAL_SKILL"
   if grep -q '^disable-model-invocation: true$' "$INTERNAL_SKILL"; then
     ng "内部skillをmodelが呼べない: $INTERNAL_SKILL"
@@ -149,11 +149,11 @@ if sed -n '1,/^---$/p' "$PREFLIGHT_SKILL" | grep -Eq 'allowed-tools:.*(Write|Edi
 else
   ok "preflightは読み取り専用"
 fi
-if grep -q '^allowed-tools:.*Agent' "$PONYTAIL_SKILL" && grep -Fq 'Skill(cowlick *)' "$PONYTAIL_SKILL" && ! grep -Eq '^allowed-tools:.*(Write|Edit|AskUserQuestion)' "$PONYTAIL_SKILL"; then
-  ok "ponytailは子の監査とcowlickの修正を接続"
-else
-  ng "ponytailの設計書更新toolまたは質問境界が不正"
-fi
+grep -Fq '../cowlick/PROCEDURE.md' "$PONYTAIL_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "ponytailは独立監査とcowlick手順を接続" || ng "ponytailの呼出先が不足"
+for ENTRY_NAME in cowlick ponytail polish unwind; do
+  ENTRY="$REPO/skills/$ENTRY_NAME/SKILL.md"
+  grep -q '^disable-model-invocation: true$' "$ENTRY" && ! grep -q '^user-invocable: false$' "$ENTRY" && grep -Fq '(PROCEDURE.md)' "$ENTRY" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/$ENTRY_NAME/agents/openai.yaml" && ok "明示入口と内部手順を分離: $ENTRY_NAME" || ng "明示入口の参照・起動policyが不正: $ENTRY_NAME"
+done
 grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計作成と独立監査を分離" || ng "設計作成と監査の責務が不正"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
@@ -165,10 +165,10 @@ grep -q '## 必須監査成果物' "$PONYTAIL_CONTRACT" && grep -Fq '`ponytail_a
 grep -Fq '入口、共有責務、全caller・consumer' "$PONYTAIL_CONTRACT" && grep -Fq '報告された症状とroot causeを分ける' "$PONYTAIL_CONTRACT" && grep -Fq '実装が一つだけのinterface' "$PONYTAIL_CONTRACT" && grep -Fq '測定可能な条件' "$PONYTAIL_CONTRACT" && grep -Fq '[delete|reuse|stdlib|native|yagni|shrink]' "$PONYTAIL_CONTRACT" && grep -Fq '最小の実行可能なテスト' "$PONYTAIL_CONTRACT" && ok "ponytailの理解・root cause・簡素化負債契約" || ng "ponytailの理解または簡素化境界が不足"
 grep -Fq "../cowlick/DESIGN_FORMAT.md" "$PONYTAIL_CONTRACT" && grep -Fq "圧縮してよいのは重複説明と同一の外枠だけ" "$COWLICK_FORMAT" && grep -Fq "文章一行へ畳まない" "$COWLICK_FORMAT" && ok "ponytailは実装契約を失う圧縮を禁止" || ng "ponytailが疑似コードの重要契約を圧縮可能"
 grep -Fq '一つのfindingはIDを付けて一度だけ説明' "$PONYTAIL_CONTRACT" && grep -Fq '同じ要件・原因・判断・置換先を持つ要素は一行へまとめる' "$PONYTAIL_CONTRACT" && grep -Fq '同じtopologyや根拠を別fieldで言い換えない' "$PONYTAIL_CONTRACT" && ok "ponytailの監査正本は重複せず簡潔" || ng "ponytailの監査成果物が重複可能"
-grep -q 'ponytail_ready.*文字列だけでは通過させない' "$MEETING_SKILL" && grep -Fq '`ponytail_audit`の必須field' "$MEETING_SKILL" && grep -Fq '空の`unresolved`' "$MEETING_SKILL" && ok "meetingのponytail成果物検証" || ng "meetingがponytailのstatusだけを信用している"
-grep -Fq '設計全体を自己レビューしない' "$MEETING_SKILL" && grep -Fq '要修正指摘が残れば完了にしない' "$MEETING_SKILL" && ok "meetingは独立監査の完了条件だけ確認" || ng "meetingの独立監査完了条件が不足"
-grep -Fq '内部skillの選択・再実行は自分で行い' "$MEETING_SKILL" && grep -Fq '採用分を`cowlick`で' "$PONYTAIL_SKILL" && grep -Fq '新revision・hashで新規レビュー' "$PONYTAIL_SKILL" && ok "ponytailの指摘修正はメインで再レビューは新規の子" || ng "ponytailの指摘対応が不正"
-grep -Fq 'meetingへ返して停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/`の' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "設計書の更新はcowlickへ集約" || ng "cowlick/ponytailのprompt直接更新境界が不正"
+grep -Fq "REVIEW_CONTRACT.md#必須監査成果物" "$PONYTAIL_SKILL" && grep -Fq "全field・非該当理由・完了条件を検証" "$PONYTAIL_SKILL" && ! grep -Fq "必須field" "$MEETING_SKILL" && ok "監査成果物の詳細検証はponytailへ集約" || ng "監査成果物検証の責務が不正"
+grep -Fq "対象path・hash・HEADを現在の対象と照合" "$MEETING_SKILL" && grep -Fq '一致した`ponytail_ready`だけで完了' "$MEETING_SKILL" && ok "meetingは現在の対象との一致とstatusを確認" || ng "meetingの結果照合が不足"
+grep -Fq '内部工程の選択・再実行は自分で行い' "$MEETING_SKILL" && grep -Fq '../cowlick/PROCEDURE.md' "$PONYTAIL_SKILL" && grep -Fq '新revision・hashで新規レビュー' "$PONYTAIL_SKILL" && ok "ponytailの指摘修正はメインで再レビューは新規の子" || ng "ponytailの指摘対応が不正"
+grep -Fq '呼出元へ返して停止' "$COWLICK_SKILL" && grep -Fq '`.[agent_name]/prompt/`の' "$COWLICK_SKILL" && ! grep -q '^## apply\|draft-prompt\|最終承認' "$COWLICK_SKILL" && ! grep -q 'draft-prompt\|正式反映を行わない' "$PONYTAIL_SKILL" && ok "設計書の更新はcowlickへ集約" || ng "cowlick/ponytailのprompt直接更新境界が不正"
 GROUP_FAILURES=
 for LEGACY_DESIGN_SKILL in design-preflight design-pipeline compose-prompt; do
   [ ! -d "$REPO/skills/$LEGACY_DESIGN_SKILL" ] || append_group_failure "旧directory: skills/$LEGACY_DESIGN_SKILL"
@@ -232,19 +232,19 @@ done
 report_group "未使用skill audit・interview・conductor・prototypeのdirectory・参照なし" "$GROUP_FAILURES"
 
 echo "== tdd の設計書実装と最終品質ゲート =="
-POLISH_SKILL="$REPO/skills/polish/SKILL.md"
-UNWIND_SKILL="$REPO/skills/unwind/SKILL.md"
+POLISH_SKILL="$REPO/skills/polish/PROCEDURE.md"
+UNWIND_SKILL="$REPO/skills/unwind/PROCEDURE.md"
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 QUALITY_GATE_SCRIPT="$REPO/skills/polish/quality-gate.sh"
 CAPTURE_SCOPE_SCRIPT="$REPO/skills/polish/capture-scope.sh"
 MARK_PROMPT_DONE_SCRIPT="$REPO/skills/tdd/mark-prompt-done.sh"
 if python3 "$REPO/tests/validate-skills.py" "$REPO"/skills/*/SKILL.md; then ok "全skillの配布形式を検証"; else ng "skillの配布形式が不正"; fi
 if python3 "$REPO/tests/test_validate_skills.py"; then ok "skill検査器の正常系・異常系"; else ng "skill検査器の回帰"; fi
-grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -q '必ず呼ぶ' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
+grep -Fq '../unwind/PROCEDURE.md' "$POLISH_SKILL" && grep -q '必ず実行する' "$POLISH_SKILL" && ok "polish はunwindを必須化" || ng "polish のunwind連携が無い"
 grep -q '新しい関数・メソッド・helperへ切り出して直後に呼ぶ' "$UNWIND_SKILL" && grep -q 'IIFE、callback、lambda、local functionへ押し込む' "$UNWIND_SKILL" && ok "unwind は見せかけの関数抽出を禁止" || ng "unwind の関数抽出禁止が無い"
-grep -Fq '独立レビューとして検出候補の抽出だけ' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '親スキルが渡した本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -Fq 'Skill(unwind)' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はメイン' "$UNWIND_SKILL" && ok "unwind は独立検出とメインの修正を分離" || ng "unwind の限定QA・判断責務分離が無い"
+grep -Fq '独立レビューとして検出候補の抽出だけ' "$UNWIND_SKILL" && grep -Fq '専用`nesting-reviewer`' "$UNWIND_SKILL" && grep -Fq '入力された本体コードのpathだけ' "$UNWIND_SKILL" && grep -Fq '機能の目的、要件、設計、変更範囲の調査は依頼しない' "$UNWIND_SKILL" && grep -Fq '../unwind/PROCEDURE.md' "$POLISH_SKILL" && grep -Fq '候補の採否、修正・却下判断、検証はメイン' "$UNWIND_SKILL" && ok "unwind は独立検出とメインの修正を分離" || ng "unwind の限定QA・判断責務分離が無い"
 [ -x "$QUALITY_GATE_SCRIPT" ] && bash -n "$QUALITY_GATE_SCRIPT" && grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && ! grep -Eq 'record|verify|HEAD.*receipt' "$QUALITY_GATE_SCRIPT" && ok "polish の単回path検査器が有効" || ng "polish の単回path検査器が不正"
-[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq 'polish/SKILL.md#実装前baseline' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
+[ -x "$CAPTURE_SCOPE_SCRIPT" ] && bash -n "$CAPTURE_SCOPE_SCRIPT" && grep -Fq 'capture-scope.sh <scope名> --auto' "$REPO/skills/polish/BASELINE.md" && grep -Fq 'polish/BASELINE.md' "$SCENARIO_FLOW" && grep -Fq 'capture-scope.sh list-changed <機能名>' "$TDD_SKILL" && ! grep -Eq 'capture-scope.sh (status|activate|recover-to-parent|handoff-to-parent|deactivate)' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandは自動baselineと実変更pathだけを使う" || ng "tdd/errandにactive implementation scopeが残存"
 ! grep -Fq 'validate-implementation-request.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'implementer-read.sh' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ! grep -Fq 'allowed_paths' "$TDD_SKILL" "$SCENARIO_FLOW" "$ERRAND_SKILL" && ok "tddとerrandはartifact validator・quoted reader・exact許可pathに依存しない" || ng "tdd/errandに過剰な実装制御が残存"
 grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && grep -Fq '完了receiptの記録や後続での再検証は行わない' "$POLISH_SKILL" && grep -Fq '独自のESLint rule、`no-magic-numbers`、import規則を追加しない' "$POLISH_SKILL" && ! grep -Eq 'eslint|no-magic-numbers|no-restricted-syntax' "$QUALITY_GATE_SCRIPT" && ok "polish は実変更path一致とtracked・cleanだけを単回検査" || ng "polish の実変更path検査が不正"
 grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq '品質検査をPrettier / ESLintだけへ縮小しない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
@@ -260,9 +260,9 @@ grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・�
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq "FIX_FLOW.md#診断のscope帰属" "$SCENARIO_FLOW" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq "ignored / untracked test" "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
 grep -Fq 'この出力と完全一致する相対path全件を一括入力' "$POLISH_SKILL" && grep -Fq 'directory、glob、`git diff`・`git status`から推測・拡張しない' "$POLISH_SKILL" && grep -Fq 'typecheck・build・Prisma検証には所属package/schemaだけ' "$POLISH_SKILL" && grep -Fq '確定済みの対象pathから本体コードだけを選び'  "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
-grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq 'commandなしは`not run`' "$POLISH_SKILL" && grep -Fq '親の`polish`が実行した同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
-grep -Fq 'Skill(polish)' "$TDD_SKILL" && grep -Fq 'この出力にある実変更pathだけをまとめて`polish`へ渡し' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
-grep -Fq 'capture-scope.sh <scope名> --auto' "$POLISH_SKILL" && grep -Fq '実装直前に[polishの実装前baseline]' "$SCENARIO_FLOW" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
+grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq 'commandなしは`not run`' "$POLISH_SKILL" && grep -Fq '入力の検証結果にある同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
+grep -Fq '../polish/PROCEDURE.md' "$TDD_SKILL" && grep -Fq 'この出力にある実変更pathだけをまとめて[polishの手順]' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_SKILL" && ok "tdd は実変更pathのpolish後だけindexを更新" || ng "tdd のpolish対象または品質ゲートが不正"
+grep -Fq 'capture-scope.sh <scope名> --auto' "$REPO/skills/polish/BASELINE.md" && grep -Fq '実装直前に[polishの実装前baseline]' "$SCENARIO_FLOW" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
 grep -Fq 'ファイルごとには呼ばない' "$TDD_SKILL" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '`FIX_FLOW.md`に従って修正' "$POLISH_SKILL" && grep -Fq '全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
 
 echo "== 2. claude 配置シミュレーション =="
@@ -737,12 +737,12 @@ echo "$UPE2" | bash $H/session.sh
 [ ! -f .codex/tmp/session.tdd.ERR9 ] && ok "session: tddは委任用markerを作らない" || ng "session: tddの委任用markerが残存"
 UPM=$(jq -n --arg cwd "$PWD" '{hook_event_name:"UserPromptSubmit",session_id:"MEET1",cwd:$cwd,prompt:"$meeting 新機能を設計して",model:"m",permission_mode:"default",transcript_path:null,turn_id:"t"}')
 echo "$UPM" | bash $H/session.sh
-COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"MEET1",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: .codex/prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
+COWLICK_PATCH=$(jq -n --arg cwd "$PWD" '{session_id:"DIRECTDESIGN",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Add File: .codex/prompt/branch-sample-prompt.md\n+x\n*** End Patch"}}')
 COWLICK_LOAD=$(echo "$COWLICK_PATCH" | bash $H/load-required-contract.sh)
 if [ "$(echo "$COWLICK_LOAD" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && echo "$COWLICK_LOAD" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '## Changes'; then
-  ok "required-reading: Codex meetingの初回prompt編集で設計形式を注入"
+  ok "required-reading: Codexのskill起動なしの初回prompt編集で設計形式を注入"
 else
-  ng "required-reading: Codex meetingで設計形式を注入できない"
+  ng "required-reading: Codexのskill起動なしで設計形式を注入できない"
 fi
 [ -z "$(echo "$COWLICK_PATCH" | bash $H/load-required-contract.sh)" ] && ok "required-reading: Codex設計形式receipt後は棄権" || ng "required-reading: Codex設計形式receiptを再利用できない"
 SE=$(jq -n --arg cwd "$PWD" '{hook_event_name:"SessionEnd",session_id:"SESS1",cwd:$cwd}')
@@ -835,7 +835,7 @@ jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq 
 jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && grep -Fq 'load-required-contract.sh cowlick-design' "$REPO/skills/cowlick/SKILL.md" && ! grep -Fq 'worker/DELEGATION.md' "$REPO/hooks/shell/load-required-contract.sh" && ok "Claude必須契約hookを編集時の読み込みへ配線" || ng "Claude必須契約hookの配線漏れ"
+[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && ! grep -q '^hooks:' "$REPO/skills/cowlick/SKILL.md" && ! grep -Fq 'worker/DELEGATION.md' "$REPO/hooks/shell/load-required-contract.sh" && ok "Claude必須契約hookを編集時の読み込みへ配線" || ng "Claude必須契約hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' "$SJ")" = "1" ] && jq -e '.permissions.ask | index("Edit(**/schema.prisma)") | not' "$SL" >/dev/null && ok "Claude: schema.prismaは自動編集・migrationはhook拒否" || ng "Claude: Prisma境界が不正"
 GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
