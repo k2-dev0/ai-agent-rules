@@ -64,7 +64,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 |---|---|
 | [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。メインが設計書を作成・修正し、ponytailが独立監査 |
 | [tdd](skills/tdd/SKILL.md) | 引数なしで先頭未完了設計書1枚を実装・レビュー・polish |
-| [errand](skills/errand/SKILL.md) | 明示起動で既存パターンの小修正・定型追加。設計書なし |
+| [errand](skills/errand/SKILL.md) | スキル未指定の実装・修正依頼で自動選択。明示起動も可能。既存パターンの小修正・定型追加を設計書なしで扱う |
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
 | [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
 | [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
