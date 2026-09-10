@@ -72,13 +72,14 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-メインが設計・実装を担当し、専用reviewerが独立検証する。モデル選択は[AGENTS.md](AGENTS.md)、実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
+メインが調査・実装方針を決定し、最初の編集前に`difficulty-evaluator`が方針だけから独立調査して実装難度を判定する。Codexの評価役はAstra / medium、ClaudeはOpus / medium。会話・背景・主担当の調査結果は渡さない。メインは評価結果を使って実装し、専用reviewerが独立検証する。モデル選択は[AGENTS.md](AGENTS.md)、実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
 | 正本 | 内容 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 常時使うメインモデル選択基準 |
+| [AGENTS.md](AGENTS.md) | 評価の起動・再利用条件、レビューseverityによる昇格 |
+| [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点・返却契約 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
@@ -107,6 +108,8 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 必須資料・専用の子の起動検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
 
 Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用role以外の起動・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
+
+難易度評価の起動hookは専用設定とbriefの2キーを検査する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。
 
 | 操作 | 扱い |
 |---|---|
