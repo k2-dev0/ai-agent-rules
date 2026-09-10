@@ -330,6 +330,21 @@ for agent in claude codex; do
       message_input=$(printf '%s' "$input" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
       check test -z "$(printf '%s' "$message_input" | bash -c "$command")"
       if [ "$agent" = codex ]; then
+        # native起動のmessageは本文が不透明でも通す。設定・文脈の検査は維持する。
+        for tool_name in spawn_agent collaboration.spawn_agent collaborationspawn_agent; do
+          native_input=$(printf '%s' "$message_input" | jq --arg name "$tool_name" '.tool_name=$name | .tool_input.message="opaque-transport-fixture"')
+          check test -z "$(printf '%s' "$native_input" | bash -c "$command")"
+          plain_input=$(printf '%s' "$message_input" | jq --arg name "$tool_name" '.tool_name=$name')
+          check test -z "$(printf '%s' "$plain_input" | bash -c "$command")"
+          for mutation in 'del(.tool_input.message)' '.tool_input.message=" "' '.tool_input.message={}' '.tool_input.prompt="extra"'; do
+            invalid=$(printf '%s' "$native_input" | jq "$mutation")
+            check implementer_denied "$invalid" 'messageに依頼'
+          done
+          for mutation in '.tool_input.model="override"' '.tool_input.fork_turns="all"'; do
+            invalid=$(printf '%s' "$native_input" | jq "$mutation")
+            check implementer_denied "$invalid" '専用定義で新規起動'
+          done
+        done
         cp "$definition" "$definition.original"
         sed 's/enabled = false/enabled = true/' "$definition.original" > "$definition"
         check implementer_denied "$input" '再委任は禁止'
