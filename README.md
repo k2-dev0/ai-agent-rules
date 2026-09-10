@@ -41,8 +41,11 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
 ### 初期化・更新
 
-1. `setup-agent`で配置する。初回・`--update`ともcontext-dictionaryの実pathと`[agent_name]`・`[skills_root]`を解決し、検証・bootstrap削除後に起動する。起動省略時も初期化し、失敗時は起動しない。
-2. 手動配置では`__CONTEXT_DICTIONARY_ROOT__`を実pathへ置換し、projectをtrustしてから次を実行する。`setup-agent`利用時は不要。
+1. `setup-agent`で配置する
+   - 初回・`--update`ともcontext-dictionaryの実pathと`[agent_name]`・`[skills_root]`を解決し、検証・bootstrap削除後に起動する
+   - 起動省略時も初期化し、失敗時は起動しない
+2. 手動配置では`__CONTEXT_DICTIONARY_ROOT__`を実pathへ置換し、projectをtrustしてから次を実行する
+   - `setup-agent`利用時は不要
 
 ```text
 # Claude Code
@@ -51,8 +54,11 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 $bootstrap codex
 ```
 
-3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する。hook変更時も再レビューする。未trustのproject-local設定は適用されない。
-4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
+3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する
+   - hook変更時も再レビューする
+   - 未trustのproject-local設定は適用されない
+4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する
+   - 両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する
 
 更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
