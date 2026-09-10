@@ -182,6 +182,17 @@ echo "== skill context圧縮と参照整合性 =="
 SKILL_LINE_CEILING=1300
 SKILL_LINE_COUNT=$(wc -l "$REPO"/skills/*/SKILL.md | awk 'END {print $1}')
 [ "$SKILL_LINE_COUNT" -le "$SKILL_LINE_CEILING" ] && ok "SKILL.md総量を${SKILL_LINE_CEILING}行以下へ制限: $SKILL_LINE_COUNT" || ng "SKILL.md総量が肥大化: $SKILL_LINE_COUNT"
+E2E_SKILL="$REPO/skills/e2e/SKILL.md"
+E2E_ARTIFACT_IGNORE="$REPO/e2e/artifacts/.gitignore"
+if grep -Fq '`screencast_start`' "$E2E_SKILL" &&
+   grep -Fq '`screencast_stop`' "$E2E_SKILL" &&
+   grep -Fq '成功・失敗の両方を残す' "$E2E_SKILL" &&
+   grep -Fq '成果物は削除しない' "$E2E_SKILL" &&
+   [ -f "$E2E_ARTIFACT_IGNORE" ] && grep -Fxq '*' "$E2E_ARTIFACT_IGNORE" && grep -Fxq '!.gitignore' "$E2E_ARTIFACT_IGNORE"; then
+  ok "e2eは動画・全screenshotをGit管理外の成果物として残す"
+else
+  ng "e2eの録画・screenshot保存契約が不足"
+fi
 GROUP_FAILURES=
 [ -f "$COWLICK_FORMAT" ] || append_group_failure "cowlick設計形式なし"
 [ -f "$REPO/skills/SCENARIO_FLOW.md" ] || append_group_failure "tdd/errand共通シナリオフローなし"
@@ -272,8 +283,11 @@ cp -R "$REPO/hooks" "$S/claude-sim/.claude/hooks"
 cp -R "$REPO/skills" "$S/claude-sim/.claude/skills"
 cp -R "$REPO/rules" "$S/claude-sim/.claude/rules"
 cp -R "$REPO/claude/agents" "$S/claude-sim/.claude/agents"
+cp -R "$REPO/e2e" "$S/claude-sim/.claude/e2e"
 cd "$S/claude-sim"
 git init -q
+touch .claude/e2e/artifacts/test.webm
+git check-ignore -q .claude/e2e/artifacts/test.webm && ok "ClaudeのE2E成果物をGit管理外にする" || ng "ClaudeのE2E成果物がGit管理対象"
 git config user.email tester@example.com
 git config user.name tester
 git commit --allow-empty -qm "test: 品質ゲートfixtureを初期化"
@@ -494,6 +508,8 @@ cp -R "$REPO/e2e" "$S/codex-sim/.codex/e2e"
 cp -R "$REPO/skills" "$S/codex-sim/.agents/skills"
 cd "$S/codex-sim"
 git init -q
+touch .codex/e2e/artifacts/test.webm
+git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物をGit管理外にする" || ng "CodexのE2E成果物がGit管理対象"
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
@@ -593,6 +609,19 @@ if jq -e --arg source "$CODEX_SERENA_SOURCE" '
 else
   ng "serena: Claude MCP起動設定が不正"
 fi
+if jq -e '
+  .mcpServers["chrome-devtools"].type == "stdio" and
+  .mcpServers["chrome-devtools"].command == "npx" and
+  (.mcpServers["chrome-devtools"].args | index("chrome-devtools-mcp@1.6.0")) and
+  (.mcpServers["chrome-devtools"].args | index("--experimentalScreencast=true")) and
+  (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://localhost:*/*")) and
+  (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://127.0.0.1:*/*")) and
+  (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://[\\:\\:1]:*/*"))
+' "$CM" >/dev/null 2>&1; then
+  ok "chrome-devtools: Claudeで固定版・localhost限定・screencast有効"
+else
+  ng "chrome-devtools: Claude MCP起動設定が不正"
+fi
 GROUP_FAILURES=
 for DISABLED_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
   grep -q "\"$DISABLED_TOOL\"" .codex/config.toml || append_group_failure "$DISABLED_TOOL"
@@ -617,12 +646,13 @@ for MCP_SERVER in serena chrome-devtools; do
   ' .codex/config.toml || append_group_failure "upload_fileの承認がない"
   CONFIGURED_COUNT=$(grep -c '^\[mcp_servers.chrome-devtools.tools.' .codex/config.toml)
   [ "$CONFIGURED_COUNT" = "1" ] || append_group_failure "不要なtool個別設定が残存"
+  grep -Fq -- '--experimentalScreencast=true' .codex/config.toml || append_group_failure "screencastが無効"
   for LOCAL_PATTERN in '--allowed-url-pattern=*://localhost:*/*' '--allowed-url-pattern=*://127.0.0.1:*/*' '--allowed-url-pattern=*://[\\:\\:1]:*/*'; do
     grep -Fq -- "$LOCAL_PATTERN" .codex/config.toml || append_group_failure "localhost制限なし: $LOCAL_PATTERN"
   done
-  report_group "$MCP_SERVER: localhost限定・uploadだけ承認" "$GROUP_FAILURES"
+  report_group "$MCP_SERVER: localhost限定・screencast有効・uploadだけ承認" "$GROUP_FAILURES"
 done
-[ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
+[ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && [ -f .codex/e2e/artifacts/.gitignore ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
 GROUP_FAILURES=
@@ -836,6 +866,11 @@ done
 report_group "Claude: shellの内容変更をdeny" "$GROUP_FAILURES"
 jq -e '.permissions.allow | index("Bash(cp -n --:*)")' "$SL" >/dev/null && ok "Claude: 上書きしないcpをallow" || ng "Claude: cp -nが未許可"
 jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq -e '.permissions.ask | index("Bash(mkdir:*)") | not' "$SL" >/dev/null 2>&1 && ok "Claude: sandbox内mkdirをallow" || ng "Claude: mkdirが承認対象"
+jq -e '
+  (.permissions.allow | index("mcp__chrome-devtools__screencast_start")) and
+  (.permissions.allow | index("mcp__chrome-devtools__screencast_stop")) and
+  (.enabledMcpjsonServers | index("chrome-devtools"))
+' "$SL" >/dev/null 2>&1 && ok "Claude: chrome-devtoolsのscreencastを有効化" || ng "Claude: chrome-devtoolsのscreencast設定が不足"
 jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
