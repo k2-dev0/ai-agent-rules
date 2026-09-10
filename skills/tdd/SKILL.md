@@ -52,11 +52,12 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 選択済みシナリオを実装し、既存assertionを弱めない。配置は既存規約に合わせ、追跡対象はGit規約どおりコミットする。ignore規則に一致するtestはローカルで使う。追跡・ignoreのどちらにも該当しない未追跡testは停止対象。
 
-- 1 test 1 assertionを原則とし、describeは2階層まで。
-- 結合テストを優先し、API・DB処理はPrisma mockでなくテストDBを使う。
-- 外部API関数はmockで呼び出し条件・異常系、複雑な分岐はunit testで境界値・全分岐を検証する。その他のunit testは回帰防止・原因分離が必要な場合だけ追加する。
-- `.jsx` / `.tsx` component・React hook専用の隣接unit testは新設せず、既存integration / E2E境界で検証する。
-- 非公開関数は公開API経由で検証する。
+- 1 test 1 assertionを原則とし、describeは2階層まで
+- 結合テストを優先し、API・DB処理はPrisma mockでなくテストDBを使う
+- 外部API関数はmockで呼び出し条件・異常系、複雑な分岐はunit testで境界値・全分岐を検証する
+  - その他のunit testは回帰防止・原因分離が必要な場合だけ追加する
+- `.jsx` / `.tsx` component・React hook専用の隣接unit testは新設せず、既存integration / E2E境界で検証する
+- 非公開関数は公開API経由で検証する
 
 ユーザーがテスト作成済みと明示した場合は、候補提示・作成を省略できる。対象test、要求を検出できること、実装前のRedは確認する。
 
