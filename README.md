@@ -83,7 +83,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 
 | 正本 | 内容 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 評価の起動・再利用条件、レビューseverityによる昇格 |
+| [AGENTS.md](AGENTS.md) | 評価の起動・再利用条件、レビューseverityと再発時の昇格処理 |
 | [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点。返却は点数と200文字目安の理由 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
