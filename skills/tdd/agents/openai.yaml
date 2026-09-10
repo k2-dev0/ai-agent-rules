@@ -1,7 +1,7 @@
 interface:
   display_name: "tdd"
-  short_description: "設計書の要件と選択済みシナリオから実装とレビューを進める"
-  default_prompt: "$tdd を使い、設計書に沿ってテストシナリオ選択から実装と検証を進めてください。"
+  short_description: "依頼からシナリオ選択・実装・検証を進め、--from-docで設計書を使う"
+  default_prompt: "$tdd を使い、依頼に沿ってテストシナリオ選択から実装と検証を進めてください。"
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true
