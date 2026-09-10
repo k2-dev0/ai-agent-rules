@@ -113,7 +113,8 @@ case "$EVENT" in
          $r.status == "reviewed" and $r.review_base == .pending.brief.review_base and
          $r.review_head == .pending.brief.review_head and
          $r.request_id == .pending.request_id and
-         $r.unchecked == [] and ($r.findings | type == "array")' >/dev/null; then
+         $r.unchecked == [] and ($r.findings | type == "array") and
+         all($r.findings[]; type == "object" and (.severity == "critical" or .severity == "high" or .severity == "medium" or .severity == "low"))' >/dev/null; then
       save "$(printf '%s' "$DATA" | jq --argjson result "$RESULT" '.result = $result | del(.pending)')"
     fi
     ;;
