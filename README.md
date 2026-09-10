@@ -69,7 +69,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | 入口 | 処理 |
 |---|---|
 | [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。メインが設計書を作成・修正し、ponytailが独立監査 |
-| [tdd](skills/tdd/SKILL.md) | スキル未指定の実装・修正依頼で自動選択。通常は依頼からシナリオ選択・実装・検証・レビュー。`$tdd --from-doc`の時だけ先頭未完了設計書1枚を読み、polish・完了マーク確認まで行う |
+| [tdd](skills/tdd/SKILL.md) | runtime挙動の実装・修正で自動選択。質問・調査・review、文書・設定・書式だけの変更、挙動不変の整理では選択しない。`$tdd --from-doc`だけ設計書モードを読む |
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
 | [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
 | [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
@@ -77,13 +77,14 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-メインが調査・実装方針を決定し、最初の編集前に`difficulty-evaluator`が方針だけから独立調査して実装難度を判定する。Codexの評価役はAstra / medium、ClaudeはOpus / medium。会話・背景・主担当の調査結果は渡さない。メインは評価結果を使って実装し、専用reviewerが独立検証する。モデル選択は[AGENTS.md](AGENTS.md)、実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
+変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、子の起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
 | 正本 | 内容 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 評価の起動・再利用条件、レビューseverityと再発時の昇格処理 |
+| [AGENTS.md](AGENTS.md) | 全変更に共通するモデル選択の目標と入口 |
+| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 評価の適用条件、モデル対応、再利用・再評価条件 |
 | [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点。返却は点数と200文字目安の理由 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
@@ -139,7 +140,7 @@ Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのloc
 
 ## 文書の編集
 
-skill・文書には実行条件、手順、command、判定・返却内容を書く。背景・理由・重複説明は削り、意味が変わらない範囲で短くする。共通基準は一か所に置き、必要な工程から参照する。AGENTS.mdは全行動に共通する短い指示だけにする。
+skill・文書には実行条件、手順、command、判定・返却内容を書く。背景・理由・重複説明は削り、意味が変わらない範囲で短くする。共通基準は一か所に置き、必要な工程から参照する。AGENTS.mdは全行動に共通する短い目標だけにし、自動選択skillの入口には通常経路だけを置く。
 
 ## 検証
 
@@ -159,7 +160,7 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 配布先は`SubagentStart`・`SubagentStop`・`Stop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
 
-cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。
+cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。tddの`FROM_DOC.md`は`$tdd --from-doc`だけが読む。
 
 読込条件は各skillの参照元と、必要な操作で案内するhookに置く。AGENTS.mdへ文書の案内表は置かない。共通基準はコード変更時の設計・実装・reviewerが共有し、文書変更のreviewerは変更fileと直接依存先だけを読む。起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。skillを使わない通常作業では、共通基準のhook注入は最初の対象コード編集時であり、調査開始時の読込は保証しない。
 
