@@ -10,9 +10,11 @@
    - 比較元・対象HEAD・追跡fileのclean状態は起動hookが検査する
 2. 起動toolの`prompt`（`message`を使うtoolでは`message`）はJSON文字列とし、`repository`に絶対path、`review_base`・`review_head`に完全SHA、`requirements`に元の要求・制約の本文を入れる
    - 実装経緯・採用理由・自己評価・過去のレビュー結果・会話履歴を渡さない
+   - 採点・モデル選択・切替手順はrequirementsへ含めない
    - 会話中の要件は意味を変えず必要部分だけ抜き出す
 3. 差分全体を対象にする
    - ignored / untrackedの検証資産を含められない場合は未確認範囲として明示し、検証済みと扱わない
+   - 参照範囲は[レビュー契約](CODE_REVIEW_CONTRACT.md)の直接依存先までとする
 
 ## 起動・待機
 
