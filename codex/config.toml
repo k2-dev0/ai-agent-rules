@@ -26,7 +26,7 @@ default_subagent_reasoning_effort = "max"
 [mcp_servers.chrome-devtools]
 command = "npx"
 # Chrome 149以上。localhostの全ポートだけを操作対象にする。
-args = ["-y", "chrome-devtools-mcp@1.6.0", "--allowed-url-pattern=*://localhost:*/*", "--allowed-url-pattern=*://127.0.0.1:*/*", "--allowed-url-pattern=*://[\\:\\:1]:*/*"]
+args = ["-y", "chrome-devtools-mcp@1.6.0", "--experimentalScreencast=true", "--allowed-url-pattern=*://localhost:*/*", "--allowed-url-pattern=*://127.0.0.1:*/*", "--allowed-url-pattern=*://[\\:\\:1]:*/*"]
 startup_timeout_sec = 20
 default_tools_approval_mode = "approve"
 
