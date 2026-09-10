@@ -86,6 +86,8 @@ class ReviewLifecycle(unittest.TestCase):
                 blocked()
                 end(result(brief, status='incomplete'))
                 blocked()
+                end(result(brief, findings=[{'severity': 'urgent'}]))
+                blocked()
                 end(result(brief))
                 self.assertIsNone(call('Stop'))
                 # A clean new user request starts a fresh scope after completion.
