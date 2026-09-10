@@ -32,9 +32,12 @@ for agent in claude codex; do
   check grep -Fq '文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない' "$target/AGENTS.md"
   check grep -Fq '同じ方針の修正・再開では再利用' "$target/AGENTS.md"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
-  check grep -Fq '成功時は1〜10の整数だけ' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '加点した軸とコード上の根拠を優先し、0点の軸は省略' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '`score`（1〜10の整数）と`reason`（200文字を目安にした理由）だけのJSONを受理' "$target/AGENTS.md"
   if grep -Eq 'Luna|Sol|Astra|gpt-|effort|モデル|"model"|"evidence"' "$target/$skill_root/DIFFICULTY_CONTRACT.md"; then
-    echo "FAIL 採点契約にモデル情報または根拠の返却が残存: $agent"
+    echo "FAIL 採点契約に実行担当のモデル情報が残存: $agent"
     exit 1
   fi
   check grep -Fq '主担当が1〜3をLuna / max、4〜7をSol / high、8〜10をAstra / highへ対応' "$target/AGENTS.md"
@@ -58,16 +61,22 @@ for agent in claude codex; do
     check test -s "$target/.$agent/rules/$rule"
   done <<< "$rule_paths"
   check test ! -e "$target/.$agent/hooks/shell/require-test.sh"
-  for explicit_skill in bootstrap meeting tdd polish rebase e2e; do
+  for explicit_skill in bootstrap meeting polish rebase e2e; do
     # bootstrapは初期化成功後に自己削除されるため、配布元で確認する。
     if [ "$explicit_skill" = bootstrap ]; then policy_root="$REPO/skills"; else policy_root="$target/$skill_root"; fi
     check grep -Fxq '  allow_implicit_invocation: false' "$policy_root/$explicit_skill/agents/openai.yaml"
   done
-  check grep -Fxq '  allow_implicit_invocation: true' "$target/$skill_root/errand/agents/openai.yaml"
-  if grep -q '^disable-model-invocation: true$' "$target/$skill_root/errand/SKILL.md"; then
-    echo "FAIL errandの自動選択が無効: $agent"
+  check grep -Fxq '  allow_implicit_invocation: true' "$target/$skill_root/tdd/agents/openai.yaml"
+  if grep -q '^disable-model-invocation: true$' "$target/$skill_root/tdd/SKILL.md"; then
+    echo "FAIL tddの自動選択が無効: $agent"
     exit 1
   fi
+  check test ! -e "$target/$skill_root/errand"
+  check test ! -e "$target/$skill_root/SCENARIO_FLOW.md"
+  check test ! -e "$target/.$agent/rules/typescript/tdd-pattern.md"
+  check grep -Fq '`prompt/`は読まない' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq '`$tdd --from-doc`' "$target/$skill_root/tdd/SKILL.md"
 done
 
 # 実際のBash登録hookをすべて通す。別hookのallowで内容変更のdenyが消えないことも検査する。
@@ -382,7 +391,7 @@ for agent in claude codex; do
   command="bash .$agent/hooks/shell/require-implementer.sh workflow"
   mv ".$agent/agents" ".$agent/agents.disabled"
   mkdir -p ".$agent/tmp"
-  for skill in tdd errand; do
+  for skill in tdd; do
     : > ".$agent/tmp/session.$skill.DIRECT1"
   done
   for tool_name in Read Edit apply_patch switch_model; do
