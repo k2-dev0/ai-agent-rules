@@ -52,7 +52,7 @@ $bootstrap codex
 ```
 
 3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する。hook変更時も再レビューする。未trustのproject-local設定は適用されない。
-4. Claudeはproject rootの`.mcp.json`にあるSerena・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
+4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
 
 更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、tdd／errandの`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
@@ -68,7 +68,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
 | [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
 | [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
-| [e2e](skills/e2e/SKILL.md) | 計画を承認・保存し、ブラウザで検証 |
+| [e2e](skills/e2e/SKILL.md) | 計画を承認・保存し、動画・screenshotを残してブラウザで検証 |
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
@@ -125,7 +125,7 @@ Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用
 | Prisma migrate/db push/db execute、Git push/cherry-pick、依存install/add | 拒否 |
 | 複数stage・対象名不一致・日本語なし・AI署名・amendのcommit | 拒否 |
 
-Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。Codexのchrome-devtoolsはChrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
+Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。両環境のchrome-devtoolsはChrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、PATH上の`ffmpeg`を使う実験screencastを有効化する。Codexでは`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
 
 ## 文書の編集
 
