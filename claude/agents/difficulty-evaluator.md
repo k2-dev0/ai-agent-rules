@@ -1,6 +1,6 @@
 ---
 name: difficulty-evaluator
-description: 実装方針だけを受け取り、独立調査で実装難度を採点する。返却は点数だけ。
+description: 実装方針だけを受け取り、独立調査で実装難度を採点し、短い理由を添えて返す。
 model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
