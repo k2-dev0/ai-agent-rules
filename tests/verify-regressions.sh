@@ -32,6 +32,12 @@ for agent in claude codex; do
   check grep -Fq '文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない' "$target/AGENTS.md"
   check grep -Fq '同じ方針の修正・再開では再利用' "$target/AGENTS.md"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '成功時は1〜10の整数だけ' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  if grep -Eq 'Luna|Sol|Astra|gpt-|effort|モデル|"model"|"evidence"' "$target/$skill_root/DIFFICULTY_CONTRACT.md"; then
+    echo "FAIL 採点契約にモデル情報または根拠の返却が残存: $agent"
+    exit 1
+  fi
+  check grep -Fq '主担当が1〜3をLuna / max、4〜7をSol / high、8〜10をAstra / highへ対応' "$target/AGENTS.md"
   check grep -Fq 'テストを含む最初の編集前' "$target/AGENTS.md"
   check grep -Fq '`critical`・`high`指摘が1件でもあれば' "$target/AGENTS.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
