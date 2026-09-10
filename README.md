@@ -54,7 +54,7 @@ $bootstrap codex
 3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する。hook変更時も再レビューする。未trustのproject-local設定は適用されない。
 4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する。両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する。
 
-更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、tdd／errandの`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
+更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
 
@@ -63,8 +63,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | 入口 | 処理 |
 |---|---|
 | [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。メインが設計書を作成・修正し、ponytailが独立監査 |
-| [tdd](skills/tdd/SKILL.md) | 引数なしで先頭未完了設計書1枚を実装・レビュー・polish |
-| [errand](skills/errand/SKILL.md) | スキル未指定の実装・修正依頼で自動選択。明示起動も可能。既存パターンの小修正・定型追加を設計書なしで扱う |
+| [tdd](skills/tdd/SKILL.md) | スキル未指定の実装・修正依頼で自動選択。通常は依頼からシナリオ選択・実装・検証・レビュー。`$tdd --from-doc`の時だけ先頭未完了設計書1枚を読み、polish・完了マーク確認まで行う |
 | [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
 | [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
 | [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
@@ -79,10 +78,9 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 正本 | 内容 |
 |---|---|
 | [AGENTS.md](AGENTS.md) | 評価の起動・再利用条件、レビューseverityによる昇格 |
-| [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点。返却は点数だけ |
+| [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点。返却は点数と200文字目安の理由 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
-| [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | 固定差分の独立レビュー起動・待機・指摘対応 |
 | [CODE_REVIEW_CONTRACT.md](skills/CODE_REVIEW_CONTRACT.md) | 読み取り専用レビュー役の入力・確認・返却 |
@@ -111,7 +109,7 @@ Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用
 
 難易度評価の起動hookは専用設定を検査する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
 
-評価役へモデル情報・選択基準は渡さず、返却は1〜10の整数だけとする。理由・内訳は返さない。主担当が点数をモデルへ対応させる。判定不能時は`null`を返し、主担当は編集を止める。
+評価役へモデル情報・選択基準は渡さず、返却は1〜10の点数と200文字を目安にした理由だけとする。主担当が点数をモデルへ対応させる。判定不能時は`null`を返し、主担当は編集を止める。
 
 | 操作 | 扱い |
 |---|---|
