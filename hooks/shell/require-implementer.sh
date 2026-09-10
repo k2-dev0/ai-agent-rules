@@ -21,11 +21,18 @@ case "$ROLE" in
     EFFORT=high
     if [ "$ROLE" = difficulty-evaluator ]; then
       EFFORT=medium
-      BRIEF=$(hook_review_brief) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。"
-      printf '%s' "$BRIEF" | jq -e --arg root "$REPOSITORY" '
-        keys == ["implementation_policy", "repository"] and .repository == $root and
-        (.implementation_policy | type == "string" and test("\\S"))
-      ' >/dev/null || hook_deny "難易度調査は現在repositoryの絶対pathと実装方針本文だけを渡してください。"
+      case "$HOOK_AGENT:$(hook_tool_name)" in
+        codex:*spawn_agent)
+          hook_agent_message_valid || hook_deny "Codexの難易度調査はspawn_agentのmessageに依頼を渡してください。promptは併用しないでください。"
+          ;;
+        *)
+          BRIEF=$(hook_review_brief) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。"
+          printf '%s' "$BRIEF" | jq -e --arg root "$REPOSITORY" '
+            keys == ["implementation_policy", "repository"] and .repository == $root and
+            (.implementation_policy | type == "string" and test("\\S"))
+          ' >/dev/null || hook_deny "難易度調査は現在repositoryの絶対pathと実装方針本文だけを渡してください。"
+          ;;
+      esac
     fi
     if [ "$HOOK_AGENT" = codex ]; then
       AGENT_FILE="$REPOSITORY/.codex/agents/$ROLE.toml"
