@@ -48,6 +48,8 @@ for agent in claude codex; do
   check grep -Fq 'severityは修正の優先度にだけ使い、モデルを自動昇格させない' "$target/AGENTS.md"
   check grep -Fq '同じfile内の関数・section・testへ再度指摘が出た場合' "$target/AGENTS.md"
   check grep -Fq 'Astra / highではそのまま続行する' "$target/AGENTS.md"
+  check grep -Fq '変更file・直接依存先以外の未変更文書' "$target/$skill_root/CODE_REVIEW_CONTRACT.md"
+  check grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$target/$skill_root/INDEPENDENT_REVIEW.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '切替要求の記録、受付結果`pending`、空のツール返答、要求内容の再掲だけでは適用成功とみなさない' "$target/$skill_root/MODEL_SWITCH.md"
