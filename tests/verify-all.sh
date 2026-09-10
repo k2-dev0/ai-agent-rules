@@ -224,7 +224,7 @@ grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep
 [ -f "$ERRAND_SKILL" ] && ! grep -q '^disable-model-invocation: true$' "$ERRAND_SKILL" && grep -q 'allow_implicit_invocation: true' "$REPO/skills/errand/agents/openai.yaml" && ok "errand スキルは自動選択と明示起動を許可" || ng "errand スキルの自動選択設定が不正"
 grep '^description:' "$ERRAND_SKILL" | grep -Fq '明示された別スキルと進行中の工程を優先し、質問・説明・読み取りだけの調査では起動しない' && grep -Fq 'meeting / cowlick / ponytail / tddは呼ばない' "$ERRAND_SKILL" && grep -Fq '識別子、path、番号、固有名詞を省略・翻訳・一般化しない' "$ERRAND_SKILL" && grep -Fq '最寄りの同型実装1件' "$ERRAND_SKILL" && grep -Fq 'メインが直接調査する' "$ERRAND_SKILL" && ok "errand は選択境界を保ちメインが直接調査" || ng "errand の選択・直接調査境界が不正"
 grep -q 'AskUserQuestion' "$ERRAND_SKILL" && ! grep -Fq 'command: .[agent_name]/hooks/shell/require-test.sh' "$ERRAND_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && grep -Fq '選択済みシナリオを実装し' "$SCENARIO_FLOW" && ok "errand はユーザー選択後のテスト追加を許可" || ng "errand が追加テストで停止またはユーザー選択なしで変更可能"
-grep -Fq "共通フローのStep 1〜7" "$ERRAND_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" && ! grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && ok "errand はモデル選択を共有し子専用契約をメインへ適用しない" || ng "errand のメイン実装契約が不正"
+grep -Fq "共通フローのStep 1〜7" "$ERRAND_SKILL" && grep -Fq "メインモデル選択基準" "$SCENARIO_FLOW" && ! grep -Fq "IMPLEMENTER_CONTRACT.md" "$SCENARIO_FLOW" && ok "errand はモデル選択を共有し子専用契約をメインへ適用しない" || ng "errand のメイン実装契約が不正"
 grep -Fq '同型実装から名前・内容を一意に決められる新規本体ファイル' "$ERRAND_SKILL" && grep -q '親directoryが存在しない' "$REPO/skills/polish/capture-scope.sh" && grep -q 'ignoredされている' "$REPO/skills/polish/capture-scope.sh" && ok "errand は一意な定型ファイル追加だけ許可" || ng "errand の新規ファイル境界が不正"
 grep -Fq '未実装、複数path、対応test未作成' "$ERRAND_SKILL" && grep -Fq 'schema.prisma' "$ERRAND_SKILL" && grep -Fq 'migration fileの作成' "$ERRAND_SKILL" && ok "errand は複数path・未作成test・Prisma schemaを許可しmigrationを禁止" || ng "errand の複数path・test・Prisma境界が不正"
 grep -Fq "調査・実装・修正・検証はメインが行う" "$SCENARIO_FLOW" && grep -Fq "メインが指摘範囲を直接修正する" "$FIX_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$SCENARIO_FLOW" "$FIX_FLOW" && ok "共通フローは初回実装・修正をメインで続行" || ng "直列委任の強制または失敗回数による代行制限が残存"
@@ -261,12 +261,13 @@ grep -Fq 'quality-gate.sh <機能名> -- <実変更path>...' "$POLISH_SKILL" && 
 grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL" && grep -Fq 'receipt欠落は停止し、directへ降格しない' "$POLISH_SKILL" && grep -Fq '品質検査をPrettier / ESLintだけへ縮小しない' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct-check -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'quality-gate.sh <機能名> --direct -- <明示path>...' "$POLISH_SKILL" && grep -Fq 'scope-unverified' "$POLISH_SKILL" "$REPO/README.md" && grep -Fq -- '--direct-check' "$QUALITY_GATE_SCRIPT" && grep -Fq -- '--direct' "$QUALITY_GATE_SCRIPT" && ok "polish はverifiedとdirectの保証差を明示" || ng "polish のverified/direct mode契約が不正"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了マークを付けるか明示的に確認する' "$TDD_SKILL" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_SKILL" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 grep -Fq 'SCENARIO_FLOW.md' "$TDD_SKILL" && grep -Fq '../SCENARIO_FLOW.md' "$ERRAND_SKILL" && [ -f "$SCENARIO_FLOW" ] && [ -f "$FIX_FLOW" ] && grep -Fq '`tdd`と`errand`は、調査後の実装をこの契約へ集約する' "$SCENARIO_FLOW" && grep -Fq 'FIX_FLOW.md' "$SCENARIO_FLOW" "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・errand・polish・unwindは検証・修正契約を共有" || ng "共通実装・レビューフロー参照が不正"
-grep -Fq "共通フローのStep 0〜7" "$TDD_SKILL" && grep -Fq "MODEL_SELECTION.md" "$SCENARIO_FLOW" "$FIX_FLOW" && ! grep -Eq 'require-implementer|専用定義' "$TDD_SKILL" "$ERRAND_SKILL" && ok "tdd・errandは専用agentなしで直接実装できる" || ng "tdd・errandに専用agentの必須条件が残存"
+grep -Fq "共通フローのStep 0〜7" "$TDD_SKILL" && grep -Fq "メインモデル選択基準" "$SCENARIO_FLOW" "$FIX_FLOW" && ! grep -Eq 'require-implementer|専用定義' "$TDD_SKILL" "$ERRAND_SKILL" && ok "tdd・errandは専用agentなしで直接実装できる" || ng "tdd・errandに専用agentの必須条件が残存"
 grep -Fq '## 0. [agent_name]が直接調査する' "$SCENARIO_FLOW" && grep -Fq 'path:line' "$SCENARIO_FLOW" && grep -Fq '必須事実が不足する場合は[agent_name]が追加調査' "$SCENARIO_FLOW" && ! grep -Fq 'SUBAGENT_RULES.md' "$SCENARIO_FLOW" && ok "共通フローはメインの調査と限定的な委任を共有" || ng "共通フローの直接調査境界が不正"
 grep -Fq '## 1. テストシナリオ候補をまとめて提示する' "$SCENARIO_FLOW" && grep -Fq '採用するシナリオ、外すシナリオ、修正点を指定してください。' "$SCENARIO_FLOW" && grep -Fq '全件採用を既定または要求する言い方をしない' "$SCENARIO_FLOW" && grep -Fq 'どの候補を採用・不採用・修正するかはユーザーが決める' "$SCENARIO_FLOW" && grep -Fq '実装要件を省略する根拠にしてはならない' "$SCENARIO_FLOW" && grep -Fq '選択が確定するまでファイルを変更しない' "$SCENARIO_FLOW" && grep -Fq '新しいテストが必要であることだけを理由に停止しない' "$SCENARIO_FLOW" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh|capture-scope.sh' "$SCENARIO_FLOW" && ok "共通フローはtest選択権・実装範囲・メイン実装を維持" || ng "共通フローのtest選択権・実装境界が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
 ! grep -Eq '自己確認|最終レビュー|再レビュー' "$FIX_FLOW" "$SCENARIO_FLOW" && grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
-grep -Fq '降格ができない' "$REPO/skills/MODEL_SELECTION.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SELECTION.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SELECTION.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SELECTION.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SELECTION.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
+grep -Fq '降格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SWITCH.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
+grep -Fq '`critical`・`high`指摘が1件でもあれば' "$REPO/AGENTS.md" && grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "レビューseverityで昇格とユーザー選択を分岐" || ng "レビューseverityの処理が不正"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq "FIX_FLOW.md#診断のscope帰属" "$SCENARIO_FLOW" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq "ignored / untracked test" "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
@@ -311,10 +312,10 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '作業開始時と作業の性質が変わったとき' AGENTS.md; then
-  ok "モデル選択基準: Claude配置と参照タイミング"
+if [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '依頼開始時、初期調査後の実装前' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
+  ok "モデル選択・切り替え: Claude配置と参照条件"
 else
-  ng "モデル選択基準: Claude配置または参照タイミングが不正"
+  ng "モデル選択・切り替え: Claude配置または参照条件が不正"
 fi
 grep -q 'HOOK_AGENT="claude"' .claude/hooks/shell/hook-io.sh && ok "hook-io HOOK_AGENT=claude" || ng "hook-io HOOK_AGENT=claude"
 if ! grep -q '\[\[agent_name\]\]' AGENTS.md && \
@@ -513,10 +514,10 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '作業開始時と作業の性質が変わったとき' AGENTS.md; then
-  ok "モデル選択基準: Codex配置と参照タイミング"
+if [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '依頼開始時、初期調査後の実装前' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
+  ok "モデル選択・切り替え: Codex配置と参照条件"
 else
-  ng "モデル選択基準: Codex配置または参照タイミングが不正"
+  ng "モデル選択・切り替え: Codex配置または参照条件が不正"
 fi
 if grep -q '^default_subagent_model = "gpt-5.6-luna"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "max"$' .codex/config.toml; then
   ok "bootstrap codex は子の既定値をLuna/maxへ固定"
