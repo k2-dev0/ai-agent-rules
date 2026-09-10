@@ -15,7 +15,7 @@
 | 環境・条件 | role |
 |---|---|
 | Codex・通常 | `code-reviewer` |
-| Codex・[モデル選択](MODEL_SELECTION.md)のAstra条件に該当する検証 | `deep-reviewer` |
+| Codex・メインモデル選択基準のAstra条件に該当する検証 | `deep-reviewer` |
 | Claude | `code-reviewer` |
 
 Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_turns: "none"`を明示する。Claudeは`subagent_type`にroleを指定する。model・effortは専用定義を使う。
@@ -27,7 +27,8 @@ Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_tu
 終了時のHEADと追跡fileの状態が開始時と違えば結果を完了判定に使わず、変更内容を確認して対象を固定し直す。最終結果だけ取得し、中間ログは読まない。
 
 - `reviewed`：両SHAと全差分の確認が一致した場合だけ受理する。未確認範囲がなく、全指摘が修正済みまたは根拠付きで却下済みなら独立レビュー完了。
-- 指摘あり：メインが根拠を確認し、採用・却下を判断する。採用分を修正する場合だけ[修正ループ](FIX_FLOW.md#修正ループ)を読み、必要なpolish・commit後、同じ`review_base`と新HEADを新規の子へ渡す。
+- `critical`・`high`：メインが成立条件を確認する。成立する指摘はメインモデル選択基準に従って昇格し、[修正ループ](FIX_FLOW.md#修正ループ)を読んで修正する。不成立なら根拠付きで却下する。
+- `medium`・`low`：`medium`、`low`の順で各指摘の先頭に通し番号を付け、成立条件と影響を示して「修正する番号を指定してください（例：`1,3`。修正しない場合は`なし`）。」と確認する。回答前に修正しない。指定された指摘だけ[修正ループ](FIX_FLOW.md#修正ループ)を読んで修正し、残りは却下として根拠を残す。
 - `incomplete`・対象不一致・未確認範囲あり：指摘なしとして扱わず、未解決事項を報告する。
 
 同一session・HEAD・要求・制約で確認済みの結果は再利用し、同じ入力で繰り返し起動しない。却下した指摘は根拠を短く残す。要件・制約が変わった場合は再レビューする。
