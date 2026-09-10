@@ -35,6 +35,9 @@ for agent in claude codex; do
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '加点した軸とコード上の根拠を優先し、0点の軸は省略' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '0点は対象要素がない場合だけでなく、調査により定型で追加判断が不要と確認できた場合も含む' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '同じ根拠を複数軸へ重複加点せず' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '期待値が一意な簡単な新規test・静的検査' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '`score`（1〜10の整数）と`reason`（200文字を目安にした理由）だけのJSONを受理' "$target/AGENTS.md"
   if grep -Eq 'Luna|Sol|Astra|gpt-|effort|モデル|"model"|"evidence"' "$target/$skill_root/DIFFICULTY_CONTRACT.md"; then
     echo "FAIL 採点契約に実行担当のモデル情報が残存: $agent"
@@ -42,7 +45,9 @@ for agent in claude codex; do
   fi
   check grep -Fq '主担当が1〜3をLuna / max、4〜7をSol / high、8〜10をAstra / highへ対応' "$target/AGENTS.md"
   check grep -Fq 'テストを含む最初の編集前' "$target/AGENTS.md"
-  check grep -Fq '`critical`・`high`指摘が1件でもあれば' "$target/AGENTS.md"
+  check grep -Fq 'severityは修正の優先度にだけ使い、モデルを自動昇格させない' "$target/AGENTS.md"
+  check grep -Fq '同じfile内の関数・section・testへ再度指摘が出た場合' "$target/AGENTS.md"
+  check grep -Fq 'Astra / highではそのまま続行する' "$target/AGENTS.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '切替要求の記録、受付結果`pending`、空のツール返答、要求内容の再掲だけでは適用成功とみなさない' "$target/$skill_root/MODEL_SWITCH.md"
