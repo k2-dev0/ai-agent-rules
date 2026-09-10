@@ -24,6 +24,10 @@ bash [skills_root]/bootstrap/bootstrap.sh <agent>
 
 ## 判定・報告
 
-- 成功：placeholderの置換・検査とbootstrapの削除が完了。置換値と削除結果を報告する。追加grepは不要。
-- 失敗：失敗した場合だけ [FAILURES.md](FAILURES.md) を読み、復旧後に再実行する。初期化・削除開始の失敗時はbootstrapを残す。
-- quarantine cleanupのwarningのみ：skill探索からの除外は完了。残存pathを報告する。
+- 成功：placeholderの置換・検査とbootstrapの削除が完了
+  - 置換値と削除結果を報告する
+  - 追加grepは不要
+- 失敗：失敗した場合だけ [FAILURES.md](FAILURES.md) を読み、復旧後に再実行する
+  - 初期化・削除開始の失敗時はbootstrapを残す
+- quarantine cleanupのwarningのみ：skill探索からの除外は完了
+  - 残存pathを報告する
