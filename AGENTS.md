@@ -1,29 +1,3 @@
-## HTTP Request
-- サンドボックス外で行うこと
+## メインモデル
 
-## メインモデルの選択
-
-- ユーザーの明示指定を優先する
-  - それ以外は現在モデルで調査・実装方針の決定まで行い、テストを含む最初の編集前に専用`difficulty-evaluator`へ難易度調査を依頼する
-  - 説明・調査だけの依頼では起動しない
-- 起動前に`[skills_root]/SUBAGENT_RULES.md`に従う
-  - briefは`repository`（絶対path）と`implementation_policy`（確定済み実装方針の本文）だけのJSON文字列
-  - 背景、会話、採用理由、主担当の調査結果・難度予想、設計書への参照、モデル情報・選択基準を渡さない
-  - Codexは`spawn_agent`の`message`にbriefを渡し、`agent_type: "difficulty-evaluator"`と`fork_turns: "none"`を指定する
-  - Claudeは`Agent`の`prompt`にbriefを渡し、`subagent_type: "difficulty-evaluator"`を指定する
-  - model・effortは専用定義を使う
-- 返却は`score`（1〜10の整数）と`reason`（200文字を目安にした理由）だけのJSONを受理し、主担当が1〜3をLuna / max、4〜7をSol / high、8〜10をAstra / highへ対応させる
-  - `null`・キーや型の不一致・範囲外・空の理由・起動不能なら編集を止めて報告する
-  - 方針・点数・理由を保持し、同じ方針の修正・再開では再利用する
-  - 方針・変更範囲・整合性条件・検証方法の変更が必要になった場合だけ、現在モデルで方針を更新して依存する編集前に再評価する
-  - 会話の長さ・圧縮・工程の移行だけでは再評価しない
-- 独立コードレビューのseverityは修正の優先度にだけ使い、モデルを自動昇格させない
-  - `critical`・`high`は成立条件を確認して修正する
-  - `medium`・`low`は修正するかユーザーへ確認する
-  - 修正に方針・変更範囲・整合性条件・検証方法の変更が必要な場合だけ、更新した方針を再評価して選び直す
-  - 修正後の新規レビューで、直前レビューと同じfile内の関数・section・testへ再度指摘が出た場合は、内容・severity・行番号のずれにかかわらず一段上のモデルへ昇格する
-  - LunaからSol、SolからAstraへ昇格し、Astra / highではそのまま続行する
-  - 異なる部分への指摘は昇格条件にしない
-- 選定したモデル・effortが現在値と異なる場合だけ `[skills_root]/MODEL_SWITCH.md` を読み、切り替える
-  - 一致する場合は読まない
-  - 文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない
+- 変更はユーザー指定を優先し、`[skills_root]/MODEL_SELECTION.md`で実装難度に適したモデル・effortを選んで行う
