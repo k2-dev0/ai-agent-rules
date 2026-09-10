@@ -27,12 +27,12 @@ for agent in claude codex; do
   check grep -Fq "$skill_root/MODEL_SWITCH.md" "$target/AGENTS.md"
   check test -s "$target/$skill_root/MODEL_SWITCH.md"
   check test ! -e "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '依頼開始時、初期調査後の実装前' "$target/AGENTS.md"
+  check grep -Fq '現在モデルで調査・実装方針の決定まで行い' "$target/AGENTS.md"
   check grep -Fq '現在値と異なる場合だけ' "$target/AGENTS.md"
   check grep -Fq '文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない' "$target/AGENTS.md"
-  check grep -Fq '方針確定だけでは下げない' "$target/AGENTS.md"
-  check grep -Fq '完全に同型な修正だけ' "$target/AGENTS.md"
-  check grep -Fq '方針確定後でも、新しいproduction logic' "$target/AGENTS.md"
+  check grep -Fq '同じ方針の修正・再開では再利用' "$target/AGENTS.md"
+  check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'テストを含む最初の編集前' "$target/AGENTS.md"
   check grep -Fq '`critical`・`high`指摘が1件でもあれば' "$target/AGENTS.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SWITCH.md"
@@ -260,12 +260,12 @@ for agent in claude codex; do
   export CLAUDE_PROJECT_DIR=$PWD
   command="bash .$agent/hooks/shell/require-implementer.sh"
   if [ "$agent" = codex ]; then
-    roles='code-reviewer deep-reviewer design-reviewer'
+    roles='code-reviewer deep-reviewer design-reviewer difficulty-evaluator'
     role_key=agent_type
     extension=toml
     contract=.agents/skills/CODE_REVIEW_CONTRACT.md
   else
-    roles='code-reviewer design-reviewer'
+    roles='code-reviewer design-reviewer difficulty-evaluator'
     role_key=subagent_type
     extension=md
     contract=.claude/skills/CODE_REVIEW_CONTRACT.md
@@ -275,8 +275,16 @@ for agent in claude codex; do
     if [ "$role" = design-reviewer ]; then
       if [ "$agent" = codex ]; then contract=.agents/skills/ponytail/REVIEW_CONTRACT.md; else contract=.claude/skills/ponytail/REVIEW_CONTRACT.md; fi
     fi
+    effort=high
+    if [ "$role" = difficulty-evaluator ]; then
+      effort=medium
+      if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
+    fi
     definition=".$agent/agents/$role.$extension"
     input=$(jq -cn --arg cwd "$PWD" --arg key "$role_key" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{($key):$role,fork_turns:"none"}}')
+    if [ "$role" = difficulty-evaluator ]; then
+      input=$(printf '%s' "$input" | jq --arg root "$(git rev-parse --show-toplevel)" '.tool_input.prompt = ({repository:$root,implementation_policy:"Add a single pure value conversion and its test."} | tojson)')
+    fi
     check test -z "$(printf '%s' "$input" | bash -c "$command")"
     for mutation in '.model="gpt-5.6-luna"' '.effort="low"' '.fork_turns="all"' '.fork_context=true'; do
       invalid=$(printf '%s' "$input" | jq ".tool_input |= ($mutation)")
@@ -294,9 +302,9 @@ for agent in claude codex; do
     fi
     check implementer_denied "$input" '配布設定と一致しません'
     if [ "$agent" = codex ]; then
-      sed 's/model_reasoning_effort = "high"/model_reasoning_effort = "low"/' "$definition.original" > "$definition"
+      sed "s/model_reasoning_effort = \"$effort\"/model_reasoning_effort = \"low\"/" "$definition.original" > "$definition"
     else
-      sed 's/effort: high/effort: low/' "$definition.original" > "$definition"
+      sed "s/effort: $effort/effort: low/" "$definition.original" > "$definition"
     fi
     check implementer_denied "$input" '配布設定と一致しません'
     sed 's/^model[: =].*/model: wrong-model/' "$definition.original" > "$definition"
@@ -308,6 +316,20 @@ for agent in claude codex; do
     mv "$definition" "$definition.missing"
     check implementer_denied "$input" '定義が無い'
     mv "$definition.missing" "$definition"
+    if [ "$role" = difficulty-evaluator ]; then
+      for mutation in 'del(.tool_input.prompt)' '.tool_input.prompt="plain text"' '.tool_input.prompt |= (fromjson | .background="history" | tojson)' '.tool_input.prompt |= (fromjson | .repository="/wrong" | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy="  " | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy=[] | tojson)'; do
+        invalid=$(printf '%s' "$input" | jq "$mutation")
+        check implementer_denied "$invalid" '難易度調査は'
+      done
+      message_input=$(printf '%s' "$input" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
+      check test -z "$(printf '%s' "$message_input" | bash -c "$command")"
+      if [ "$agent" = codex ]; then
+        cp "$definition" "$definition.original"
+        sed 's/enabled = false/enabled = true/' "$definition.original" > "$definition"
+        check implementer_denied "$input" '再委任は禁止'
+        mv "$definition.original" "$definition"
+      fi
+    fi
   done
 done
 
