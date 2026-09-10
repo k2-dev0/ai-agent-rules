@@ -1,5 +1,5 @@
 #!/bin/bash
-# mark-prompt-done: 引数なしのtdd が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
+# mark-prompt-done: tdd --from-doc が実装を終えた設計書を、.[agent_name]/prompt/.prompt.md の
 # 実装順リスト上で [ ] から [x] へ倒す。
 # 本スクリプトにできるのは「対象 1 行のチェックボックスを
 # [ ] から [x] にする」ことだけで、任意の内容の書き込みもファイルの削除もできない。
