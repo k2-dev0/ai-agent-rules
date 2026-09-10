@@ -12,7 +12,6 @@
 | DB schema | `typescript/db-pattern.md` |
 | 日付 | `typescript/date-pattern.md` |
 | UI | `typescript/ui-pattern.md` |
-| test | `typescript/tdd-pattern.md` |
 
 明示要件と実装手段を区別し、実装と矛盾する古い規約・設計案は訂正する。承認済みの挙動変更はユーザー判断へ戻す。適用規約・既存例・矛盾の解決を簡潔に記録する。
 
