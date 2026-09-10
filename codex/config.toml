@@ -10,7 +10,7 @@ approval_policy = "on-request"
 extends = ":workspace"
 
 [permissions.distributed.network]
-# AGENTS.md の HTTP Request 規約に合わせ、localhost を含む通信を sandbox 外承認へ送る。
+# localhost を含む通信はsandbox内で許可せず、外部実行の承認へ送る。
 enabled = false
 allow_local_binding = false
 
