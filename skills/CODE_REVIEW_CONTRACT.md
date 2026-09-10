@@ -2,7 +2,9 @@
 
 入力はJSONの`repository`、`review_base`、`review_head`、`requirements`。足りない場合は`incomplete`を返す。実装会話・親のログ・過去のレビュー結果を取得しない。
 
-両commitの存在と祖先関係を確認し、`git diff <base> <head>`で追加・削除・rename・testを含む全差分を読む。`git show <head>:<path>`と必要なcaller・型・test・設定から、要求漏れ、誤動作、互換性、副作用、保存・再処理・状態遷移、検証の不足を確認する。レビュー開始時に[共通基準](IMPLEMENTATION_RULES.md)と、同文書の表で対象に該当する規約を読む。
+両commitの存在と祖先関係を確認し、`git diff <base> <head>`で追加・削除・rename・testを含む全差分を読む。`git show <head>:<path>`で変更fileを確認し、要求漏れ、誤動作、互換性、副作用、保存・再処理・状態遷移、検証の不足を調べるために必要な直接caller・型・test・設定だけを読む。変更がコードや実行挙動に及ぶ場合だけ[共通基準](IMPLEMENTATION_RULES.md)と、同文書の表で対象に該当する規約を読む。文書だけの変更では、変更fileとその記述が直接参照する文書だけを読む。
+
+変更file・直接依存先以外の未変更文書、リンク先の一括巡回、repository全体のキーワード検索、会話・ログ・履歴の追加取得はしない。`AGENTS.md`・`SOURCE_REPOSITORY.md`・`AGENTS.override.md`・`CLAUDE.md`・`MODEL_SWITCH.md`などの運用文書は、差分または直接依存に含まれる場合だけ読む。
 
 閲覧は固定commitの内容を基準とする。worktreeを読む場合は対象HEADと一致し、追跡fileに未commit変更がないことを確認する。入力にない要件を推測して欠陥と断定しない。
 
