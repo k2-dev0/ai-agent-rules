@@ -3,9 +3,8 @@
 
 ## メインモデルの選択
 
-- ユーザーの明示指定を優先する。それ以外は依頼開始時、初期調査後の実装前、前提変更後、指摘の修正前に、残る判断と実装難度で選ぶ。上位の条件を優先し、方針確定だけでは下げない
-- Luna / max：採用方針、変更対象pathと影響caller、不変条件、検証test・commandが確定し、残作業が削除、rename、移動、参照追従、literal置換、既存実装への置換、複数fileの完全に同型な修正だけ。新しいproduction logic・分岐・data変換・状態遷移・error処理・caller調整・testシナリオ実装を含まない
-- Sol / high：方針確定後でも、新しいproduction logic・分岐・data変換・状態遷移・error処理・caller調整・testシナリオ実装が残る。または公開API、互換性、責務境界、data・error契約、UI表示・操作・状態遷移に新しい選択が必要
-- Astra / high：仕様・責務・影響範囲の組み直し、並行実行・保存・再処理の整合性判断、既存検証では重大な見落としが残る
+- ユーザーの明示指定を優先する。それ以外は現在モデルで調査・実装方針の決定まで行い、テストを含む最初の編集前に専用`difficulty-evaluator`へ難易度調査を依頼する。説明・調査だけの依頼では起動しない
+- 起動前に`[skills_root]/SUBAGENT_RULES.md`に従う。briefは`repository`（絶対path）と`implementation_policy`（確定済み実装方針の本文）だけのJSON文字列。背景、会話、採用理由、主担当の調査結果・難度予想、設計書への参照を渡さない。Codexは`agent_type: "difficulty-evaluator"`と`fork_turns: "none"`、Claudeは`subagent_type: "difficulty-evaluator"`。model・effortは専用定義を使う
+- `evaluated`かつ`unchecked: []`の最終結果から選定値を使う。入力不一致・不正な結果・`incomplete`・起動不能なら編集を止めて報告する。方針と評価結果を保持し、同じ方針の修正・再開では再利用する。方針・変更範囲・整合性条件・検証方法の変更が必要になった場合だけ、現在モデルで方針を更新して依存する編集前に再評価する。会話の長さ・圧縮・工程の移行だけでは再評価しない
 - 独立コードレビューの成立する`critical`・`high`指摘が1件でもあれば、修正前にLunaからSol、SolからAstraへ上げる。修正後HEADのレビューで`critical`・`high`がなくなるまで下げない。`medium`・`low`は昇格せず、修正するかユーザーへ確認する
 - 選定したモデル・effortが現在値と異なる場合だけ `[skills_root]/MODEL_SWITCH.md` を読み、切り替える。一致する場合は読まない。文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない
