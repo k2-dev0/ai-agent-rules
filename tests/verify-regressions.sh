@@ -11,7 +11,7 @@ check() {
   if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*" >&2; exit 1; fi
 }
 
-# 常時使うモデル選択基準と、変更時だけ読む切り替え手順を両配置で解決する。
+# 短いAGENTSからモデル選択・切り替え手順を両配置で解決する。
 for agent in claude codex; do
   target="$TMP/$agent project"
   mkdir -p "$target/.$agent"
@@ -24,13 +24,16 @@ for agent in claude codex; do
   cp -R "$REPO/skills" "$target/$skill_root"
   (cd "$target" && bash "$skill_root/bootstrap/bootstrap.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
-  check grep -Fq "$skill_root/MODEL_SWITCH.md" "$target/AGENTS.md"
+  model_selection="$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
+  check test -s "$model_selection"
   check test -s "$target/$skill_root/MODEL_SWITCH.md"
-  check test ! -e "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '現在モデルで調査・実装方針の決定まで行い' "$target/AGENTS.md"
-  check grep -Fq '現在値と異なる場合だけ' "$target/AGENTS.md"
-  check grep -Fq '文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない' "$target/AGENTS.md"
-  check grep -Fq '同じ方針の修正・再開では再利用' "$target/AGENTS.md"
+  check grep -Fq '変更を伴う依頼だけに使う' "$model_selection"
+  check grep -Fq 'ユーザー指定があれば評価せず指定を使う' "$model_selection"
+  check grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$model_selection"
+  check grep -Fq 'テストを含む最初の編集前' "$model_selection"
+  check grep -Fq '同じ方針の修正・再開では再利用' "$model_selection"
+  check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -38,16 +41,14 @@ for agent in claude codex; do
   check grep -Fq '0点は対象要素がない場合だけでなく、調査により定型で追加判断が不要と確認できた場合も含む' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '同じ根拠を複数軸へ重複加点せず' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '期待値が一意な簡単な新規test・静的検査' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
-  check grep -Fq '`score`（1〜10の整数）と`reason`（200文字を目安にした理由）だけのJSONを受理' "$target/AGENTS.md"
+  check grep -Fq '`score`と`reason`だけのJSONを受け取り' "$model_selection"
   if grep -Eq 'Luna|Sol|Astra|gpt-|effort|モデル|"model"|"evidence"' "$target/$skill_root/DIFFICULTY_CONTRACT.md"; then
     echo "FAIL 採点契約に実行担当のモデル情報が残存: $agent"
     exit 1
   fi
-  check grep -Fq '主担当が1〜3をLuna / max、4〜7をSol / high、8〜10をAstra / highへ対応' "$target/AGENTS.md"
-  check grep -Fq 'テストを含む最初の編集前' "$target/AGENTS.md"
-  check grep -Fq 'severityは修正の優先度にだけ使い、モデルを自動昇格させない' "$target/AGENTS.md"
-  check grep -Fq '同じfile内の関数・section・testへ再度指摘が出た場合' "$target/AGENTS.md"
-  check grep -Fq 'Astra / highではそのまま続行する' "$target/AGENTS.md"
+  check grep -Fq '1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / high' "$model_selection"
+  check grep -Fq '同じfile内の関数・section・testへの指摘が再発した場合' "$target/$skill_root/FIX_FLOW.md"
+  check grep -Fq 'LunaからSol、SolからAstraへ昇格し、Astra / highでは維持する' "$target/$skill_root/FIX_FLOW.md"
   check grep -Fq '変更file・直接依存先以外の未変更文書' "$target/$skill_root/CODE_REVIEW_CONTRACT.md"
   check grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$target/$skill_root/INDEPENDENT_REVIEW.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
@@ -81,9 +82,10 @@ for agent in claude codex; do
   check test ! -e "$target/$skill_root/errand"
   check test ! -e "$target/$skill_root/SCENARIO_FLOW.md"
   check test ! -e "$target/.$agent/rules/typescript/tdd-pattern.md"
-  check grep -Fq '`prompt/`は読まない' "$target/$skill_root/tdd/SKILL.md"
-  check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/SKILL.md"
-  check grep -Fq '`$tdd --from-doc`' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq '`prompt/`を読まない' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq '文書・設定・書式だけの変更、挙動を変えない整理では起動しない' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq '[設計書モード](FROM_DOC.md)' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/FROM_DOC.md"
 done
 
 # 実際のBash登録hookをすべて通す。別hookのallowで内容変更のdenyが消えないことも検査する。
