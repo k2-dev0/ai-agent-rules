@@ -15,7 +15,7 @@
 | 環境・条件 | role |
 |---|---|
 | Codex・通常 | `code-reviewer` |
-| Codex・メインモデル選択基準のAstra条件に該当する検証 | `deep-reviewer` |
+| Codex・難易度評価の選定値またはレビューによる昇格先がAstra | `deep-reviewer` |
 | Claude | `code-reviewer` |
 
 Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_turns: "none"`を明示する。Claudeは`subagent_type`にroleを指定する。model・effortは専用定義を使う。
