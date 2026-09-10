@@ -72,13 +72,14 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-メインが設計・実装を担当し、専用reviewerが独立検証する。モデルは[モデル選択](skills/MODEL_SELECTION.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
+メインが設計・実装を担当し、専用reviewerが独立検証する。モデル選択は[AGENTS.md](AGENTS.md)、実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
 | 正本 | 内容 |
 |---|---|
-| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | メインモデルの選択 |
+| [AGENTS.md](AGENTS.md) | 常時使うメインモデル選択基準 |
+| [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [SCENARIO_FLOW.md](skills/SCENARIO_FLOW.md) | 調査・シナリオ選択・Red・実装・Green |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
