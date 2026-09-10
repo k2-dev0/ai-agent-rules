@@ -36,10 +36,10 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 確定済み要件・不変条件・変更範囲・検証方法に従い、要求に必要なproduction code・schema・型・callerだけを変更する。test環境の検出、値のhardcode、assertion攻略で要件を回避しない。方針変更が必要なら[メインモデル選択](../MODEL_SELECTION.md)の再評価条件を適用する。
 
-選択済みtest、直接の回帰test、変更packageのtypecheck、対象pathのlint、変更schemaのPrisma `format`・`validate`・`generate`、要求された検証を実行する。無関係なpackage・repository全体へ広げず、commandがなければ発明せず`not run`とする。
+選択済みtest、直接の回帰test、変更packageのtypecheck、対象pathのlint、変更schemaのPrisma `format`・`validate`・`generate`、要求された検証を実行する。typecheck scriptがなくtsconfigがあれば`tsc -p <tsconfig> --noEmit`を使う。無関係なpackage・repository全体へ広げず、commandがなければ発明せず`not run`とする。
 
 失敗時だけ[修正手順](../FIX_FLOW.md)を読み、修正・再検証する。診断が残る場合は同文書のscope帰属で分類する。
 
 ## 完了
 
-検証とcommit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行する。要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
+通常起動は検証とcommit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行し、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
