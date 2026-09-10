@@ -192,6 +192,14 @@ hook_ask() {
 
 # 独立レビューのlifecycle入出力。transcriptの非公開形式には依存しない。
 hook_review_brief() { printf '%s' "$HOOK_INPUT" | jq -er '.tool_input.prompt // .tool_input.message | fromjson | select(type == "object")'; }
+# Codexのnative spawn_agentのmessageはhookで本文を解析できるとは限らない。
+# transportの形だけ検査し、本文の契約検査は受信した専用agentが行う。
+hook_agent_message_valid() {
+  printf '%s' "$HOOK_INPUT" | jq -e '
+    .tool_input | .prompt == null and
+    (.message | type == "string" and test("\\S"))
+  ' >/dev/null
+}
 hook_child_id() { printf '%s' "$HOOK_INPUT" | jq -r '.agent_id // empty'; }
 hook_child_role() { printf '%s' "$HOOK_INPUT" | jq -r '.agent_type // empty'; }
 hook_last_message() { printf '%s' "$HOOK_INPUT" | jq -r '.last_assistant_message // empty'; }
