@@ -42,10 +42,11 @@ bash [skills_root]/rebase/rebase.sh [--base <ref>] \
 
 group順が完成履歴の順序となり、group内は元履歴順に処理される。
 
-- 成功：全commitのexactly-once消費・tree一致を検証後、旧HEADを照合してswapする。
-- conflict：groupを併合するか、元履歴の連続範囲だけをまとめて再実行する。
-- 空group：revertとの相殺を確認して組み直す。
-- 並行commit・検証失敗：更新を拒否する。検証中のindex・作業file変更は保持する。
+- 成功：全commitのexactly-once消費・tree一致を検証後、旧HEADを照合してswapする
+- conflict：groupを併合するか、元履歴の連続範囲だけをまとめて再実行する
+- 空group：revertとの相殺を確認して組み直す
+- 並行commit・検証失敗：更新を拒否する
+  - 検証中のindex・作業file変更は保持する
 
 ## 報告
 
