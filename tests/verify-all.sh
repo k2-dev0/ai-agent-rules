@@ -823,6 +823,19 @@ GO=$(jq -n --arg cwd "$PWD" '{session_id:"SESS1",cwd:$cwd,tool_name:"Write",tool
 [ "$(echo "$GO" | bash $H/overwrite.sh | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ] && ok "hook-io: codex の未対応 ask は deny" || ng "hook-io: codex ask が fail-open"
 
 echo "== 6. テンプレート残渣チェック =="
+
+if git -C "$REPO" ls-files '*.md' | while IFS= read -r file; do
+  grep -HnE '^[[:space:]]*([-*+] |[0-9]+[.)] ).*。' "$REPO/$file" || true
+done > "$S/list-periods.out"; then
+  if [ -s "$S/list-periods.out" ]; then
+    ng "Markdownの箇条書きに句点が残存"
+    cat "$S/list-periods.out"
+  else
+    ok "Markdownの箇条書きは句点なし"
+  fi
+else
+  ng "Markdownの箇条書き検査に失敗"
+fi
 command grep -rn "allowed-tools:.*Shell" "$REPO/skills" >/dev/null 2>&1 && ng "allowed-tools に Shell が残存" || ok "allowed-tools: Shell 残存なし"
 command grep -rn "hookSpecificOutput" "$REPO/hooks/shell" 2>/dev/null | grep -v hook-io.sh | grep -q . && ng "hook-io 以外にスキーマ直書き" || ok "スキーマ直書きは hook-io のみ"
 command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md" 2>/dev/null | grep -q . && { ng "[claude] 直書き残存"; command grep -rn '\[claude\]' "$REPO/skills" "$REPO/hooks" "$REPO/AGENTS.md"; } || ok "[claude] 直書きゼロ"
