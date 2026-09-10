@@ -32,6 +32,7 @@ for agent in claude codex; do
   check grep -Fq 'ユーザー指定があれば評価せず指定を使う' "$model_selection"
   check grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$model_selection"
   check grep -Fq 'テストを含む最初の編集前' "$model_selection"
+  check grep -Fq '背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない' "$model_selection"
   check grep -Fq '同じ方針の修正・再開では再利用' "$model_selection"
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -85,6 +86,8 @@ for agent in claude codex; do
   check grep -Fq '`prompt/`を読まない' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '文書・設定・書式だけの変更、挙動を変えない整理では起動しない' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '[設計書モード](FROM_DOC.md)' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq '`tsc -p <tsconfig> --noEmit`' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq 'polish後に[独立レビュー]' "$target/$skill_root/tdd/FROM_DOC.md"
   check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/FROM_DOC.md"
 done
 
