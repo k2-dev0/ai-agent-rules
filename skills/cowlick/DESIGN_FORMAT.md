@@ -9,7 +9,7 @@
 | `.prompt.md` | 実装順の`- [ ] branch-<機能名>-prompt.md`だけ |
 | `branch-<機能名>-prompt.md` | 単独で実装・完了判定できる1機能 |
 
-機能名はASCII kebab-case。依存先を先に並べ、全項目を未完了で作る。`[x]`へ変えるのは引数なしtddだけ。
+機能名はASCII kebab-case。依存先を先に並べ、全項目を未完了で作る。`[x]`へ変えるのは`tdd --from-doc`だけ。
 
 1枚を原則1 branch・squash後1 commitにする。APIとschema、migrationとschema変更、helper・定数と利用箇所、testと対象実装は同じ設計書。UIはcomponent単位。
 
