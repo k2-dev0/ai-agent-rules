@@ -11,7 +11,7 @@ check() {
   if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*" >&2; exit 1; fi
 }
 
-# 必要時に読む規約と、対応するメインだけが使うモデル選択基準を両配置で解決する。
+# 常時使うモデル選択基準と、変更時だけ読む切り替え手順を両配置で解決する。
 for agent in claude codex; do
   target="$TMP/$agent project"
   mkdir -p "$target/.$agent"
@@ -24,23 +24,26 @@ for agent in claude codex; do
   cp -R "$REPO/skills" "$target/$skill_root"
   (cd "$target" && bash "$skill_root/bootstrap/bootstrap.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
-  check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
-  check test -s "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '作業開始時と作業の性質が変わったとき' "$target/AGENTS.md"
-  check grep -Fq '初期調査直後かつ実装開始前' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '切替要求の記録、受付結果`pending`、空のツール返答、要求内容の再掲だけでは適用成功とみなさない' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq 'status: "applied"' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '実際のモデル・effortが選定値に一致することを確認してから' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '一つでも確認できない場合は編集を開始せず' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '設定だけ変更済みの場合がある' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '現在のモデルで続行する' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq 'その判断に依存する変更を止め' "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq "$skill_root/MODEL_SWITCH.md" "$target/AGENTS.md"
+  check test -s "$target/$skill_root/MODEL_SWITCH.md"
+  check test ! -e "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq '依頼開始時、初期調査後の実装前' "$target/AGENTS.md"
+  check grep -Fq '現在値と異なる場合だけ' "$target/AGENTS.md"
+  check grep -Fq '文脈圧縮、会話の長さ、以前の読了記憶は読込条件にしない' "$target/AGENTS.md"
+  check grep -Fq '`critical`・`high`指摘が1件でもあれば' "$target/AGENTS.md"
+  check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '切替要求の記録、受付結果`pending`、空のツール返答、要求内容の再掲だけでは適用成功とみなさない' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq 'status: "applied"' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '実際のモデル・effortが選定値に一致することを確認してから' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '一つでも確認できない場合は編集を開始せず' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '設定だけ変更済みの場合がある' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '現在のモデルで続行する' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq 'その判断に依存する変更を止め' "$target/$skill_root/MODEL_SWITCH.md"
   check test ! -e "$target/$skill_root/REVIEW_FLOW.md"
   check test -f "$target/$skill_root/FIX_FLOW.md"
-  check grep -Fq '`switch_model`だけを1回呼び直す' "$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '切り替え前に後続作業を続けない' "$target/$skill_root/MODEL_SELECTION.md"
+  check grep -Fq '`switch_model`だけを1回呼び直す' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '切り替え前に後続作業を続けない' "$target/$skill_root/MODEL_SWITCH.md"
   check test -n "$rule_paths"
   while IFS= read -r rule; do
     check test -s "$target/.$agent/rules/$rule"
