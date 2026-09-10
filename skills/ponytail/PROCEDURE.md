@@ -16,7 +16,7 @@
 結果のrevisionと入力対象を照合し、HEAD・全対象hashが変わっていれば結果を破棄して対象を固定し直す。
 
 - `ponytail_ready`：[返却契約](REVIEW_CONTRACT.md#必須監査成果物)の「必須監査成果物」「成功・返却」を読み、全field・非該当理由・完了条件を検証して呼出元へ返す。欠落・条件不成立は`blocked`を返す。全差分の自己レビューは行わない。
-- `changes_requested`：メインが指摘の根拠を確認し、[モデル選択](../MODEL_SELECTION.md)に従う。採用分は[cowlickの手順](../cowlick/PROCEDURE.md)を読み、現在の設計書・indexへ反映し、新revision・hashで新規レビューする。子へ編集を委任しない。
+- `changes_requested`：メインが指摘の根拠を確認し、メインモデル選択基準に従う。採用分は[cowlickの手順](../cowlick/PROCEDURE.md)を読み、現在の設計書・indexへ反映し、新revision・hashで新規レビューする。子へ編集を委任しない。
 - `consultation_required`：要件・公開挙動・受入済みtrade-offの変更は、選択肢・挙動差・推奨を呼出元へ返す。ユーザー判断を代行しない。
 - `blocked`・対象不一致・未確認範囲あり：未完了として理由を返す。指摘なしと扱わない。
 
