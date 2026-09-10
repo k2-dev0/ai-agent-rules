@@ -13,6 +13,18 @@
         "--project-from-cwd"
       ]
     },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@1.6.0",
+        "--experimentalScreencast=true",
+        "--allowed-url-pattern=*://localhost:*/*",
+        "--allowed-url-pattern=*://127.0.0.1:*/*",
+        "--allowed-url-pattern=*://[\\:\\:1]:*/*"
+      ]
+    },
     "context-dictionary": {
       "type": "stdio",
       "command": "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx",
