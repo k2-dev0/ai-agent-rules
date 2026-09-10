@@ -29,12 +29,16 @@ bash [skills_root]/e2e/apply-e2e-plan.sh <ドラフトのパス>
 
 chrome-devtools-mcpで次の順に実行する。
 
-- 実行ごとに英数字とhyphenだけの一意な`run-id`を決め、成果物を`.[agent_name]/e2e/artifacts/`へ保存する。
-- 認証が前提ならログイン後、最初のシナリオ前に`screencast_start`を`filePath=.[agent_name]/e2e/artifacts/<run-id>.webm`で呼ぶ。ログイン自体が検証対象の場合だけ認証操作を録画する。toolがない、または録画を開始できなければシナリオを実行せず報告する。
-- 各操作後に表示の安定を待ち、`take_screenshot`を`filePath=.[agent_name]/e2e/artifacts/<run-id>-001.png`から連番で呼ぶ。成功・失敗の両方を残す。
-- error・表示崩れは状態と再現手順を記録する。
-- シナリオごとの期待結果と全体の完了条件を判定する。
-- 破壊的操作は直前に確認する。外部service・本番dataへの影響は伝え、継続判断を求める。
+- 実行ごとに英数字とhyphenだけの一意な`run-id`を決め、成果物を`.[agent_name]/e2e/artifacts/`へ保存する
+- 認証が前提ならログイン後、最初のシナリオ前に`screencast_start`を`filePath=.[agent_name]/e2e/artifacts/<run-id>.webm`で呼ぶ
+  - ログイン自体が検証対象の場合だけ認証操作を録画する
+  - toolがない、または録画を開始できなければシナリオを実行せず報告する
+- 各操作後に表示の安定を待ち、`take_screenshot`を`filePath=.[agent_name]/e2e/artifacts/<run-id>-001.png`から連番で呼ぶ
+  - 成功・失敗の両方を残す
+- error・表示崩れは状態と再現手順を記録する
+- シナリオごとの期待結果と全体の完了条件を判定する
+- 破壊的操作は直前に確認する
+  - 外部service・本番dataへの影響は伝え、継続判断を求める
 
 成否にかかわらず最後に`screencast_stop`を呼び、録画停止を確認してからbrowserを閉じる。中断時も停止を試み、停止・保存できなければ成果物不備として報告する。
 
