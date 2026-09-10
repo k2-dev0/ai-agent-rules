@@ -11,22 +11,32 @@ hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。backg
 ROLE=$(hook_agent_type)
 [ "$ROLE" != implementer ] || hook_deny "実装委任は禁止です。メインで実装してください。"
 case "$ROLE" in
-  code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;;
-  *) hook_deny "子は独立コードレビュー・設計監査・ネスト候補抽出の専用roleだけ起動できます。一般調査・実装はメインで行ってください。" ;;
+  difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;;
+  *) hook_deny "子は難易度調査・独立コードレビュー・設計監査・ネスト候補抽出の専用roleだけ起動できます。方針決定の調査・実装はメインで行ってください。" ;;
 esac
 case "$ROLE" in
-  code-reviewer|deep-reviewer|design-reviewer)
+  difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer)
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
     REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "reviewerのリポジトリを確認できません。"
+    EFFORT=high
+    if [ "$ROLE" = difficulty-evaluator ]; then
+      EFFORT=medium
+      BRIEF=$(hook_review_brief) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。"
+      printf '%s' "$BRIEF" | jq -e --arg root "$REPOSITORY" '
+        keys == ["implementation_policy", "repository"] and .repository == $root and
+        (.implementation_policy | type == "string" and test("\\S"))
+      ' >/dev/null || hook_deny "難易度調査は現在repositoryの絶対pathと実装方針本文だけを渡してください。"
+    fi
     if [ "$HOOK_AGENT" = codex ]; then
       AGENT_FILE="$REPOSITORY/.codex/agents/$ROLE.toml"
       CONTRACT=.agents/skills/CODE_REVIEW_CONTRACT.md
       [ "$ROLE" != design-reviewer ] || CONTRACT=.agents/skills/ponytail/REVIEW_CONTRACT.md
+      [ "$ROLE" != difficulty-evaluator ] || CONTRACT=.agents/skills/DIFFICULTY_CONTRACT.md
       MODEL=gpt-5.6-sol
       [ "$ROLE" = code-reviewer ] || MODEL=gpt-6-astra
       EXPECTED_SETTINGS="name = \"$ROLE\"
 model = \"$MODEL\"
-model_reasoning_effort = \"high\"
+model_reasoning_effort = \"$EFFORT\"
 sandbox_mode = \"read-only\""
       [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
       SETTINGS=$(sed '/^developer_instructions[[:space:]]*=/,$d' "$AGENT_FILE")
@@ -36,9 +46,10 @@ sandbox_mode = \"read-only\""
       AGENT_FILE="$REPOSITORY/.claude/agents/$ROLE.md"
       CONTRACT=.claude/skills/CODE_REVIEW_CONTRACT.md
       [ "$ROLE" != design-reviewer ] || CONTRACT=.claude/skills/ponytail/REVIEW_CONTRACT.md
+      [ "$ROLE" != difficulty-evaluator ] || CONTRACT=.claude/skills/DIFFICULTY_CONTRACT.md
       EXPECTED_SETTINGS="name: $ROLE
 model: opus
-effort: high
+effort: $EFFORT
 tools: Read, Grep, Glob, Bash"
       [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
       SETTINGS=$(awk 'NR == 1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$AGENT_FILE")
