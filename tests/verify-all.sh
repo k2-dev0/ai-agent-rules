@@ -268,7 +268,7 @@ grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとda
 ! grep -Eq '自己確認|最終レビュー|再レビュー' "$FIX_FLOW" "$SCENARIO_FLOW" && grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
 grep -Fq '降格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SWITCH.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
 grep -Fq '`critical`・`high`指摘が1件でもあれば' "$REPO/AGENTS.md" && grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "レビューseverityで昇格とユーザー選択を分岐" || ng "レビューseverityの処理が不正"
-grep -Fq '方針確定だけでは下げない' "$REPO/AGENTS.md" && grep -Fq '完全に同型な修正だけ' "$REPO/AGENTS.md" && grep -Fq '方針確定後でも、新しいproduction logic' "$REPO/AGENTS.md" && ok "方針確定と実装難度を分離してモデル選択" || ng "実装難度によるモデル選択が不足"
+grep -Fq '現在モデルで調査・実装方針の決定まで行い' "$REPO/AGENTS.md" && grep -Fq 'テストを含む最初の編集前' "$SCENARIO_FLOW" && grep -Fq '同じ方針の修正・再開では再利用' "$REPO/AGENTS.md" && [ -s "$REPO/skills/DIFFICULTY_CONTRACT.md" ] && ok "方針確定後・最初の編集前に独立難度評価" || ng "独立難度評価の順序または再利用条件が不正"
 grep -Fq '次のtest除外pathだけの変更では対応test/specの作成・実行とRed / Greenを要求せず' "$SCENARIO_FLOW" && grep -Fq 'basenameが`constants.ts`または`constants.js`' "$SCENARIO_FLOW" && grep -Fq '`constants/`配下' "$SCENARIO_FLOW" && grep -Fq 'その挙動だけを通常どおりシナリオ、Red、Greenの対象' "$SCENARIO_FLOW" && ok "共通フローはschema・定数のtest除外境界を固定" || ng "共通フローのschema・定数test除外境界が不正"
 grep -Fq '`target-test`、`direct-regression`、`typecheck`、`schema`' "$SCENARIO_FLOW" && grep -Fq '無関係なpackageのtestやproject全体のtestを追加しない' "$SCENARIO_FLOW" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$SCENARIO_FLOW" && grep -Fq 'Prisma `format`、`validate`、`generate`' "$SCENARIO_FLOW" && ok "共通フローは調査commandと最終検証の範囲を固定" || ng "共通フローの調査commandまたは最終検証が曖昧"
 grep -Fq "FIX_FLOW.md#診断のscope帰属" "$SCENARIO_FLOW" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq "ignored / untracked test" "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・errand・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
@@ -313,7 +313,7 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '依頼開始時、初期調査後の実装前' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
+if [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '現在モデルで調査・実装方針の決定まで行い' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
   ok "モデル選択・切り替え: Claude配置と参照条件"
 else
   ng "モデル選択・切り替え: Claude配置または参照条件が不正"
@@ -515,7 +515,7 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '依頼開始時、初期調査後の実装前' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
+if [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SWITCH.md' AGENTS.md && grep -Fq '現在モデルで調査・実装方針の決定まで行い' AGENTS.md && grep -Fq '現在値と異なる場合だけ' AGENTS.md; then
   ok "モデル選択・切り替え: Codex配置と参照条件"
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
