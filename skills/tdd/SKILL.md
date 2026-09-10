@@ -24,11 +24,11 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 ## Red
 
-選択済みシナリオのtestを書き、既存assertionを弱めない。既存の配置・方式に合わせ、結合testを優先する。外部APIはmockで呼出条件と異常系、複雑な分岐はunit testで境界と分岐、非公開処理は公開APIから検証する。React component・hook専用の隣接unit testは新設しない。
+選択済みシナリオのtestを書き、既存assertionを弱めない。既存の配置・方式に合わせて結合testを優先し、API・DB処理はPrisma mockでなくtest DBを使う。外部APIはmockで呼出条件と異常系、複雑な分岐はunit testで境界と分岐、非公開処理は公開APIから検証する。React component・hook専用の隣接unit testは新設しない。
 
 ユーザーがtest作成済みと明示した場合は候補提示・作成を省略できるが、対象testが要求を検出し、実装前に失敗することを確認する。
 
-既存test scriptで対象testの失敗を確認する。最初から成功するtestは要求を検出できるか確認する。未確認事実が必要なら調査へ、シナリオ変更が必要なら選択へ戻る。
+既存test scriptで、対象testが実装不足または期待値との差により失敗することを確認する。syntax・import・型の失敗はシナリオを変えず先に直す。最初から成功するtestは要求を検出できるか確認し、未確認事実が必要なら調査へ、シナリオ変更が必要なら選択へ戻る。
 
 追跡対象testをcommitし、cleanな状態で実装直前に[baseline](../polish/BASELINE.md)を記録する。ユーザー由来のdirty fileが残れば実装を止める。
 
