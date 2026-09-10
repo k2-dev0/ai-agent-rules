@@ -85,6 +85,8 @@ for agent in claude codex; do
   check test ! -e "$target/.$agent/rules/typescript/tdd-pattern.md"
   check grep -Fq '`prompt/`を読まない' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '文書・設定・書式だけの変更、挙動を変えない整理では起動しない' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq 'API・DB処理はPrisma mockでなくtest DBを使う' "$target/$skill_root/tdd/SKILL.md"
+  check grep -Fq 'syntax・import・型の失敗はシナリオを変えず先に直す' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '[設計書モード](FROM_DOC.md)' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '`tsc -p <tsconfig> --noEmit`' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq 'polish後に[独立レビュー]' "$target/$skill_root/tdd/FROM_DOC.md"
