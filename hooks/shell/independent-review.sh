@@ -85,7 +85,10 @@ case "$EVENT" in
         fi
         REQUEST_ID=$(printf '%s' "$BRIEF" | jq -cS . | shasum -a 256 | awk '{print $1}')
         [ "${#REQUEST_ID}" = 64 ] || hook_deny "独立レビュー入力のhashを計算できません。"
+        BRIEF=$(printf '%s' "$BRIEF" | jq -c --arg request_id "$REQUEST_ID" '. + {request_id:$request_id}')
         save "$(printf '%s' "$DATA" | jq --argjson brief "$BRIEF" --arg role "$ROLE" --arg request_id "$REQUEST_ID" '.pending = {brief:$brief,role:$role,request_id:$request_id,generation:(.generation // 0)} | del(.result)')"
+        UPDATED=$(printf '%s' "$HOOK_INPUT" | jq -c --argjson brief "$BRIEF" '.tool_input | if has("prompt") then .prompt = ($brief | tojson) else .message = ($brief | tojson) end')
+        hook_rewrite_input "$UPDATED"
         ;;
     esac
     ;;
@@ -96,7 +99,6 @@ case "$EVENT" in
     ID=$(hook_child_id)
     [ -n "$ID" ] || exit 0
     save "$(printf '%s' "$DATA" | jq --arg id "$ID" '.pending.id = $id')"
-    hook_review_context "最終JSONのrequest_idには $(printf '%s' "$DATA" | jq -r '.pending.request_id') を入れてください。要求本文の再掲は不要です。"
     ;;
   SubagentStop)
     ID=$(hook_child_id)
