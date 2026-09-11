@@ -3,9 +3,5 @@ description = "複雑な保存・再処理・並行制御の整合性を、実�
 model = "gpt-6-astra"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
-developer_instructions = """
-最初にrepositoryの`[skills_root]/CODE_REVIEW_CONTRACT.md`を読み、従う。読めなければincompleteを返す。
-"""
-
 [agents]
 enabled = false
