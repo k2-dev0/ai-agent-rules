@@ -23,7 +23,7 @@ INPUT=$(printf '%s' "$INPUT" | jq -cse '
   (.to.config.effort | type == "string" and test("\\S")))
 ' 2>/dev/null) || fail "PreModelSwitch: 入力形式が不正です。"
 
-# model・effort・追加設定が変わらない要求には文書を注入しない。
+# model・effortが同じで追加設定のない要求には文書を注入しない。
 if printf '%s' "$INPUT" | jq -e '
   .from.model == .to.model and .from.effort == .to.config.effort and
   (.to.config | keys == ["effort"])
