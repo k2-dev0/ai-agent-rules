@@ -90,6 +90,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/require-implementer.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/load-operation-context.sh"
           }
         ]
       },
@@ -129,6 +133,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/load-operation-context.sh",
+            "timeout": 5
+          }
+        ],
+        "matcher": "^(difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer)$"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/independent-review.sh",
             "timeout": 5
           }
@@ -146,17 +160,6 @@
           }
         ],
         "matcher": "^(code-reviewer|deep-reviewer)$"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/independent-review.sh",
-            "timeout": 5
-          }
-        ]
       }
     ]
   },
