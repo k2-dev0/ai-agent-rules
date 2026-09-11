@@ -6,15 +6,17 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 # TDD
 
-通常起動はユーザー依頼と確認済み事実を根拠とし、`prompt/`を読まない。scope名はASCII kebab-caseで決める。`$tdd --from-doc`では最初に[設計書モード](FROM_DOC.md)を読む。
+通常起動はユーザー依頼と確認済み事実を根拠とし、`prompt/`を読まない。scope名はASCII kebab-caseで決める。`$tdd --from-doc`はユーザーが明示した場合だけ使い、通常起動から切り替えない。明示された場合は最初に[設計書モード](FROM_DOC.md)を読む。
 
 調査・実装・修正・検証はメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
 
 ## 調査
 
-[共通基準](../IMPLEMENTATION_RULES.md)と該当規約を読み、要求の識別子・path・番号・固有名詞から対象、最寄りの同型実装、schema・test・route、検証commandを確認する。`path:line`、想定変更先、関連test・command、未確認事項を保持し、必須事実が足りなければ追加調査する。
+要求の識別子・path・番号・固有名詞から対象、最寄りの同型実装、schema・test・route、検証commandを確認する。`path:line`、想定変更先、関連test・command、未確認事項を保持し、必須事実が足りなければ追加調査する。
 
 ## シナリオ選択
+
+調査後、シナリオと実装方針を決める前に[共通基準](../IMPLEMENTATION_RULES.md)と該当規約を読む。
 
 正常・境界値・異常・副作用・回帰の候補を「前提・操作・期待結果」でまとめ、採用・不採用・修正をユーザーへ確認する。選択確定まで編集せず、全件採用を既定にしない。シナリオの不採用を実装要件の削減理由にしない。
 
@@ -42,4 +44,4 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 ## 完了
 
-通常起動は検証とcommit後に[独立レビュー](../INDEPENDENT_REVIEW.md)を実行し、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
+通常起動は検証とcommit後に専用reviewerで独立レビューし、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
