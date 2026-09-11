@@ -24,7 +24,7 @@ copyFileSync(path.join(source, "skills/MODEL_SWITCH.md"), path.join(project, ".a
 writeFileSync(path.join(project, ".codex/hooks.json"), JSON.stringify({ hooks: {
   PreModelSwitch: [{ hooks: [{ type: "command", command: JSON.stringify(hook), timeout: 5 }] }],
 } }));
-writeFileSync(path.join(project, "AGENTS.md"), "Use only switch_model. When PRE_MODEL_SWITCH_CONTEXT is returned, retry the identical request once.\n");
+writeFileSync(path.join(project, "AGENTS.md"), "Use only switch_model and follow its result.\n");
 writeFileSync(configPath, JSON.stringify({ schemaVersion: 2, enabledRepositories: [project],
   innerCodexPath: codex, desktopAppPath: "/Applications/ChatGPT.app", maxBufferedBytes: 32 * 1024 * 1024 }));
 for (const args of [["init", "-q"], ["config", "user.name", "Test"], ["config", "user.email", "test@example.invalid"],
@@ -81,7 +81,7 @@ try {
   await send("initialize", { clientInfo: { name: "pre_model_switch_probe", version: "1" }, capabilities: { experimentalApi: true } });
   child.stdin.write(`${JSON.stringify({ method: "initialized", params: {} })}\n`);
   const started = await send("thread/start", { model: "gpt-5.6-sol", cwd: project, ephemeral: false,
-    experimentalRawEvents: true, developerInstructions: "Call only switch_model. If its result contains PRE_MODEL_SWITCH_CONTEXT, retry the identical call once. After the applied continuation, answer exactly PRE_MODEL_SWITCH_LIVE_OK." });
+    experimentalRawEvents: true, developerInstructions: "Call only switch_model and follow its result. After the applied continuation, answer exactly PRE_MODEL_SWITCH_LIVE_OK." });
   testThread = started.thread;
   await send("turn/start", { threadId: testThread.id, effort: "high", input: [{ type: "text",
     text: 'Call switch_model({"model":"gpt-6-astra","config":{"effort":"high"}}) alone. Follow its result. After the applied continuation answer exactly PRE_MODEL_SWITCH_LIVE_OK.' }] });
@@ -97,8 +97,17 @@ try {
     event.params.item.text.trim() === "PRE_MODEL_SWITCH_LIVE_OK"));
   const rollout = readFileSync(testThread.path, "utf8");
   writeFileSync(path.join(output, "rollout.jsonl"), rollout, { mode: 0o600 });
-  assert.ok(rollout.includes("PRE_MODEL_SWITCH_CONTEXT"), "the model runtime history must contain the injected result");
-  const metrics = { old_model: "gpt-5.6-sol", target_model: "gpt-6-astra", context_bytes: Buffer.byteLength(delivered),
+  const records = rollout.trim().split("\n").map(JSON.parse);
+  const runtimeCalls = records.filter(record => record.type === "event_msg" && record.payload?.type === "item_completed" &&
+    record.payload.item?.type === "DynamicToolCall" && record.payload.item.tool === "switch_model");
+  assert.equal(runtimeCalls.length, 2, "runtime history must contain the failed call and one retry");
+  const document = readFileSync(path.join(project, ".agents/skills/MODEL_SWITCH.md"), "utf8");
+  const expected = "PRE_MODEL_SWITCH_CONTEXT: 切替手順を注入しました。モデル・設定は変更していません。同じswitch_model要求を一度だけ再試行してください。\n\n" + document.trimEnd();
+  const runtimeDelivered = runtimeCalls[0].payload.item.content_items?.find(item => item.type === "inputText")?.text;
+  assert.equal(runtimeDelivered, expected, "the failed tool result must equal the distributed document");
+  assert.equal(runtimeCalls[0].payload.item.success, false);
+  assert.equal(runtimeCalls[1].payload.item.success, true);
+  const metrics = { old_model: "gpt-5.6-sol", target_model: "gpt-6-astra", context_bytes: Buffer.byteLength(runtimeDelivered),
     context_injections: 1, unnecessary_injections: 0, retry_calls: 1, final_status: "completed" };
   writeFileSync(path.join(output, "report.json"), JSON.stringify(metrics, null, 2), { mode: 0o600 });
   writeFileSync(path.join(output, "events.json"), JSON.stringify(events, null, 2), { mode: 0o600 });
