@@ -56,3 +56,5 @@ Claude Code 2.1.220はUserPromptSubmitの発火まで確認できたが、OAuth�
 - 入力不正・文書欠落・記録不能は切替を許可しない
 
 Batonの`PreModelSwitch`は標準出力を使用しないため、配布hookは手順を標準エラーへ出し`exit 2`で返す。通常のCodex hook JSONとは共用しない。
+
+Baton経由かどうかを通常のCodex `PreToolUse`から正確に識別できないため、`MODEL_SWITCH.md`の直接読込はそこで拒否しない。Baton対応時は`MODEL_SELECTION.md`の条件に従って事前読込を省略し、Baton非対応時は従来どおり切替前に読む。
