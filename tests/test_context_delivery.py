@@ -48,8 +48,8 @@ class ContextDelivery(unittest.TestCase):
                     value = payload.get("tool_name", "") if event == "PreToolUse" else payload.get("agent_type", "")
                     return re.search(matcher, value) is not None
 
-                def configured(event, session, **kwargs):
-                    payload = dict(hook_event_name=event, session_id=session, cwd=str(root), **kwargs)
+                def configured(event, session, event_cwd=None, **kwargs):
+                    payload = dict(hook_event_name=event, session_id=session, cwd=str(event_cwd or root), **kwargs)
                     outputs = []
                     for group in settings["hooks"].get(event, []):
                         if not matches(event, group, payload):
@@ -86,8 +86,9 @@ class ContextDelivery(unittest.TestCase):
                 edit_name = "apply_patch" if agent == "codex" else "Edit"
                 edit_input = {"command": "*** Update File: src/example.ts\n"} if agent == "codex" else {"file_path": "src/example.ts"}
                 doc_input = {"command": "*** Update File: docs/notes.md\n"} if agent == "codex" else {"file_path": "docs/notes.md"}
+                flow_cwd = root / "src"
                 self.assertEqual(metric("normal_implementation", configured(
-                    "PreToolUse", "FLOW", tool_name=edit_name, tool_input=edit_input,
+                    "PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=edit_name, tool_input=edit_input,
                 )), [])
                 self.assertEqual(metric("document_change", configured(
                     "PreToolUse", "DOC", tool_name=edit_name, tool_input=doc_input,
@@ -104,14 +105,14 @@ class ContextDelivery(unittest.TestCase):
                     role_key: "difficulty-evaluator", "fork_turns": "none",
                     "prompt": json.dumps({"repository": str(root), "implementation_policy": "Implement value conversion."}),
                 }
-                parent = configured("PreToolUse", "FLOW", tool_name="Agent", tool_input=difficulty_input)
+                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)
                 parent_text = metric("difficulty_parent", parent)
                 self.assertEqual(len(parent_text), 1)
                 self.assertIn("サブエージェント", parent_text[0])
                 self.assertNotIn("実装難度の独立評価", parent_text[0])
-                self.assertEqual(visible(configured("PreToolUse", "FLOW", tool_name="Agent", tool_input=difficulty_input)), [])
+                self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)), [])
                 child_text = metric("difficulty_child", configured(
-                    "SubagentStart", "FLOW", agent_id="difficulty", agent_type="difficulty-evaluator",
+                    "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="difficulty", agent_type="difficulty-evaluator",
                 ))
                 self.assertEqual(len(child_text), 1)
                 self.assertIn("実装難度の独立評価", child_text[0])
@@ -122,12 +123,12 @@ class ContextDelivery(unittest.TestCase):
                     "requirements": "Review the requested value.",
                 }
                 review_input = {role_key: "code-reviewer", "fork_turns": "none", "prompt": json.dumps(review_brief)}
-                parent = configured("PreToolUse", "FLOW", tool_name="Agent", tool_input=review_input)
+                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=review_input)
                 parent_text = metric("review_repair_parent", parent)
                 self.assertEqual(len(parent_text), 1)
                 self.assertIn("独立レビューの起動・結果処理", parent_text[0])
                 self.assertNotIn("サブエージェント", parent_text[0])
-                retry = configured("PreToolUse", "FLOW", tool_name="Agent", tool_input=review_input)
+                retry = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=review_input)
                 self.assertEqual(visible(retry), [])
                 rewrites = [
                     output["hookSpecificOutput"]["updatedInput"]
@@ -138,7 +139,7 @@ class ContextDelivery(unittest.TestCase):
                 rewritten_brief = json.loads(rewrites[0]["prompt"])
                 self.assertRegex(rewritten_brief["request_id"], r"^[0-9a-f]{64}$")
                 child_text = metric("review_repair_child", configured(
-                    "SubagentStart", "FLOW", agent_id="review", agent_type="code-reviewer",
+                    "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="review", agent_type="code-reviewer",
                 ))
                 self.assertEqual(len(child_text), 1)
                 self.assertIn("読み取り専用の独立コードレビュー", child_text[0])
