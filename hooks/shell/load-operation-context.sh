@@ -16,19 +16,25 @@ skill_file() {
 }
 
 inject_parent_once() {
-  local key=$1 session file_list=$2 stamp= content= file receipt state_dir
+  local session file_list=$1 stamp content= file receipt state_dir pending=
   session=$(hook_session_id)
   case "$session" in ''|*[!A-Za-z0-9._-]*) hook_deny "操作手順を注入するsession_idを確認できません。" ;; esac
   case "$HOOK_AGENT" in claude) state_dir="$ROOT/.claude/tmp" ;; codex) state_dir="$ROOT/.codex/tmp" ;; esac
+  mkdir -p "$state_dir" || hook_deny "操作手順の注入記録を保存できません。"
   while IFS= read -r file; do
     [ -n "$file" ] || continue
-    stamp="$stamp$(cksum "$file")"
+    stamp=$(cksum "$file" | awk '{print $1 ":" $2}')
+    receipt="$state_dir/operation-context.$(basename "$file").$session"
+    [ ! -f "$receipt" ] || [ "$(cat "$receipt")" != "$stamp" ] || continue
     content="$content$(cat "$file")"$'\n'
+    pending="$pending$receipt	$stamp
+"
   done <<< "$file_list"
-  receipt="$state_dir/operation-context.$key.$session"
-  [ ! -f "$receipt" ] || [ "$(cat "$receipt")" != "$stamp" ] || return 0
-  mkdir -p "$state_dir" || hook_deny "操作手順の注入記録を保存できません。"
-  printf '%s' "$stamp" > "$receipt" || hook_deny "操作手順の注入記録を保存できません。"
+  [ -n "$content" ] || return 0
+  while IFS=$'\t' read -r receipt stamp; do
+    [ -n "$receipt" ] || continue
+    printf '%s' "$stamp" > "$receipt" || hook_deny "操作手順の注入記録を保存できません。"
+  done <<< "$pending"
   hook_deny "次の手順をこの操作の直前に注入しました。操作は未実行です。内容を反映して再試行してください。
 
 $content"
@@ -49,7 +55,7 @@ case "$(hook_event_name)" in
 $FILE"
             ;;
         esac
-        inject_parent_once "launch-$ROLE" "$FILES"
+        inject_parent_once "$FILES"
         ;;
     esac
     ;;
