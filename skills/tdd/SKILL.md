@@ -12,7 +12,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 ## 調査
 
-要求の識別子・path・番号・固有名詞から対象、最寄りの同型実装、schema・test・route、検証commandを確認する。`path:line`、想定変更先、関連test・command、未確認事項を保持し、必須事実が足りなければ追加調査する。
+要求の識別子・path・番号・固有名詞から対象、最寄りの同型実装、schema・test・route、検証commandを確認する。対象実装と既存testの本文の確認が終わるまで共通基準は読まない。`path:line`、想定変更先、関連test・command、未確認事項を保持し、必須事実が足りなければ追加調査する。
 
 ## シナリオ選択
 
