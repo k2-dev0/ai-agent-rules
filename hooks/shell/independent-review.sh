@@ -114,7 +114,13 @@ case "$EVENT" in
          $r.review_head == .pending.brief.review_head and
          $r.request_id == .pending.request_id and
          $r.unchecked == [] and ($r.findings | type == "array") and
-         all($r.findings[]; type == "object" and (.severity == "critical" or .severity == "high" or .severity == "medium" or .severity == "low"))' >/dev/null; then
+         all($r.findings[];
+           type == "object" and
+           (.severity == "critical" or .severity == "high" or .severity == "medium" or .severity == "low") and
+           (.path | type == "string" and test("\\S")) and
+           (.line | type == "number" and floor == . and . > 0) and
+           all(.condition,.impact,.evidence; type == "string" and test("\\S"))
+         )' >/dev/null; then
       save "$(printf '%s' "$DATA" | jq --argjson result "$RESULT" '.result = $result | del(.pending)')"
     fi
     ;;
