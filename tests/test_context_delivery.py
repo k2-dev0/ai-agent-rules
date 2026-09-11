@@ -189,7 +189,7 @@ class ContextDelivery(unittest.TestCase):
                     and "先読み" in output["hookSpecificOutput"].get("permissionDecisionReason", "")
                     for output in model_switch
                 )
-                self.assertEqual(model_switch_denied, agent == "codex")
+                self.assertFalse(model_switch_denied)
 
         print("CONTEXT_METRICS=" + json.dumps(metrics, ensure_ascii=False, sort_keys=True))
 
