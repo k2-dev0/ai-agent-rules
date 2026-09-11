@@ -42,6 +42,12 @@ try {
   assert.match(first.reason, /PRE_MODEL_SWITCH_CONTEXT/);
   assert.match(first.reason, /BATON_SWITCH_GUIDANCE_V1/);
 
+  const otherRequest = await runPreModelSwitchHooks(handlers, {
+    ...event, turnId: "turn-2", to: { model: "gpt-5.6-luna", config: { effort: "max" } },
+  });
+  assert.equal(otherRequest.allowed, false);
+  assert.match(otherRequest.reason, /BATON_SWITCH_GUIDANCE_V1/);
+
   const retry = await runPreModelSwitchHooks(handlers, { ...event, turnId: "turn-2" });
   assert.deepEqual(retry, { allowed: true, reasonCode: "allowed", hookCount: 1 });
 
