@@ -35,6 +35,7 @@ for agent in claude codex; do
   check grep -Fq '背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない' "$target/$skill_root/SUBAGENT_RULES.md"
   check grep -Fq '同じ方針の修正・再開では再利用' "$model_selection"
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
+  check grep -Fq '対応する`PreModelSwitch`がない環境だけ' "$model_selection"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -53,6 +54,7 @@ for agent in claude codex; do
   check grep -Fq '変更file・直接依存先以外の未変更文書' "$target/$skill_root/CODE_REVIEW_CONTRACT.md"
   check grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$target/$skill_root/INDEPENDENT_REVIEW.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
+  check grep -Fq '`PRE_MODEL_SWITCH_CONTEXT`を含む失敗応答' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '`baton`による中断' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '切替要求の記録、受付結果`pending`、空のツール返答、要求内容の再掲だけでは適用成功とみなさない' "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq 'status: "applied"' "$target/$skill_root/MODEL_SWITCH.md"
@@ -70,6 +72,12 @@ for agent in claude codex; do
     check test -s "$target/.$agent/rules/$rule"
   done <<< "$rule_paths"
   check test ! -e "$target/.$agent/hooks/shell/require-test.sh"
+  if [ "$agent" = codex ]; then
+    check jq -e '.hooks.PreModelSwitch | length == 1' "$REPO/codex/hooks.json"
+    check test -x "$target/.codex/hooks/shell/pre-model-switch.sh"
+  else
+    check jq -e '.hooks.PreModelSwitch == null' "$REPO/claude/settings.json"
+  fi
   for explicit_skill in bootstrap meeting polish rebase e2e; do
     # bootstrapは初期化成功後に自己削除されるため、配布元で確認する。
     if [ "$explicit_skill" = bootstrap ]; then policy_root="$REPO/skills"; else policy_root="$target/$skill_root"; fi
