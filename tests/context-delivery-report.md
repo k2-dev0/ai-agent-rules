@@ -49,7 +49,8 @@ Claude Code 2.1.220はUserPromptSubmitの発火まで確認できたが、OAuth�
 配布hook単体と`/Users/kaikojima/Desktop/develop/baton`の実`loadPreModelSwitchHooks`・`runPreModelSwitchHooks`を接続して確認した。Baton本体の対象テストは12件成功。さらに実モデルprobeで、旧Solの失敗したtool結果とruntime履歴に4,160 bytesの本文が1回だけ入り、同じSolが同一要求を1回だけ再試行し、Astraで完了したことを確認した。不要注入は0回。
 
 - 初回の有効な切替要求は、旧ターンを中断せず`MODEL_SWITCH.md`を拒否理由として元モデルへ返す
-- 同じthread・同じ文書の再試行は許可し、turnIdには依存しない
+- 同じthread・同じ文書・同じ切替要求の再試行は許可し、turnIdには依存しない
+- 同じthread・文書でも切替要求が変われば再注入する
 - 別threadと文書変更は再注入する
 - model・effortが同じで追加設定のない要求は注入しない
 - 同一model・effortでも追加設定が変わる場合は注入する
