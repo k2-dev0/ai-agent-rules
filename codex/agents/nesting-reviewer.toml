@@ -3,9 +3,5 @@ description = "指定された本体コードの深いネスト候補だけを�
 model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 sandbox_mode = "read-only"
-developer_instructions = """
-最初にrepositoryの`[skills_root]/unwind/NESTING_CONTRACT.md`を読み、従う。読めなければ失敗を親へ返す。
-"""
-
 [agents]
 enabled = false
