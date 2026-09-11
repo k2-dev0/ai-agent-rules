@@ -6,6 +6,7 @@ exec 2>/dev/null
 case "$(hook_event_name)" in ""|PreToolUse) ;; *) exit 0 ;; esac
 TOOL=$(hook_tool_name)
 READ_MSG="skillのスクリプト内容の読み取り・検索・トレース実行は禁止です。内容を読まず、SKILL.md記載のコマンドを実行してください。実行できない、または実行に問題がある場合は、読み取りや別経路で回避せず報告して停止してください。"
+CONTEXT_MSG="操作時にhookが注入する文書は先読みできません。対象操作を実行し、注入された内容を使って再試行してください。"
 READ_CWD=$(echo "$HOOK_INPUT" | jq -r '.tool_input.workdir // .cwd // "."')
 
 # 内容は読まず、相対path・親directory・symlinkだけを解決する。
@@ -23,6 +24,16 @@ source_path() {
     count=$((count + 1))
   done
   printf '%s\n' "$path"
+}
+
+is_injected_context() {
+  local path
+  path=$(source_path "$1")
+  [ -f "$path" ] || return 1
+  case "$path" in
+    */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md) return 0 ;;
+  esac
+  return 1
 }
 
 is_skill_source() {
@@ -63,6 +74,7 @@ case "$TOOL" in
     while IFS= read -r path; do
       [ -n "$path" ] || continue
       FOUND=true
+      is_injected_context "$path" && hook_deny "$CONTEXT_MSG"
       is_skill_source "$path" && hook_deny "$READ_MSG"
       case "$DOC_GLOB" in *.md|*.txt) continue ;; esac
       is_skill_scope "$path" && hook_deny "$READ_MSG"
@@ -80,6 +92,9 @@ CMD=$(echo "$HOOK_INPUT" | jq -r '.tool_input.command // .tool_input.cmd // empt
 TOKENS=$(printf '%s\n' "$CMD" | xargs -n 1 printf '%s\n') || exit 0
 ARGS=()
 while IFS= read -r token; do ARGS+=("$token"); done <<< "$TOKENS"
+for token in "${ARGS[@]}"; do
+  is_injected_context "$token" && hook_deny "$CONTEXT_MSG"
+done
 INDEX=0
 while [ "${ARGS[$INDEX]:-}" = command ] || [ "${ARGS[$INDEX]:-}" = builtin ]; do INDEX=$((INDEX + 1)); done
 TRACE_ENV=false
