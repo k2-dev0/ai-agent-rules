@@ -5,5 +5,3 @@ model: opus
 effort: high
 tools: Read, Grep, Glob, Bash
 ---
-
-最初にrepositoryの`[skills_root]/CODE_REVIEW_CONTRACT.md`を読み、従う。読めなければincompleteを返す。
