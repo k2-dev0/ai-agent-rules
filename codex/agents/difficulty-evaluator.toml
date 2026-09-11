@@ -3,9 +3,5 @@ description = "実装方針だけを受け取り、独立調査で実装難度�
 model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
-developer_instructions = """
-最初にrepositoryの`[skills_root]/DIFFICULTY_CONTRACT.md`を読み、従う。読めなければnullだけを返す。
-"""
-
 [agents]
 enabled = false
