@@ -116,7 +116,11 @@ class ReviewEvidence(unittest.TestCase):
                 ):
                     end(result(brief, findings=[finding]))
                     self.assertFalse(accepted())
-                end(result(brief))
+                end(result(brief, findings=[{
+                    "severity": "high", "path": "sample.py", "line": 1,
+                    "condition": "A confirmed input", "impact": "Incorrect value",
+                    "evidence": "The implementation returns a different value",
+                }]))
                 self.assertTrue(accepted())
 
                 call("UserPromptSubmit", prompt="Next change")
