@@ -1,5 +1,5 @@
 #!/bin/bash
-# 最初のコード編集前のHEADと、専用子の固定入力・最終結果をsession別に保持する。
+# 最初のコード編集前のHEADと、起動された専用子の固定入力・最終結果をsession別に保持する。
 # 文書への注入receiptやモデルが書いた「完了」印はレビュー証跡にしない。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
@@ -10,17 +10,13 @@ SESSION=$(hook_session_id)
 case "$SESSION" in
   ''|*[!A-Za-z0-9._-]*)
     [ "$EVENT" != PreToolUse ] || hook_deny "独立レビューのsession_idを確定できません。"
-    [ "$EVENT" != Stop ] || hook_stop_block "独立レビュー未完了: session_idを確定できません。"
     exit 0 ;;
 esac
 STATE_DIR="$ROOT/.$HOOK_AGENT/tmp"
 STATE="$STATE_DIR/independent-review.$SESSION.json"
-CONTRACT="$ROOT/.agents/skills/INDEPENDENT_REVIEW.md"
-[ "$HOOK_AGENT" != claude ] || CONTRACT="$ROOT/.claude/skills/INDEPENDENT_REVIEW.md"
-
 fail() {
   if [ "$EVENT" = PreToolUse ]; then hook_deny "$1"; fi
-  hook_stop_block "$1"
+  exit 0
 }
 save() {
   local DATA=$1 TEMP
@@ -36,6 +32,13 @@ code_path() {
   esac
   return 1
 }
+tracked_paths() {
+  local file
+  while IFS= read -r file; do
+    case "$file" in "$ROOT"/*) file=${file#"$ROOT"/} ;; esac
+    [ ! -e "$ROOT/$file" ] || git -C "$ROOT" ls-files --error-unmatch -- "$file" >/dev/null || return 1
+  done < <(printf '%s' "$DATA" | jq -r '.paths[]?')
+}
 [ ! -L "$STATE" ] || fail "独立レビュー状態がsymlinkです。"
 DATA='{}'
 if [ -f "$STATE" ]; then
@@ -45,8 +48,8 @@ fi
 case "$EVENT" in
   UserPromptSubmit)
     [ -f "$STATE" ] || exit 0
-    # 新しい依頼・訂正は同一HEADでも旧結果を失効させる。未完了の比較元は保持する。
-    if printf '%s' "$DATA" | jq -e '.finished == true' >/dev/null && clean && [ "$(head)" = "$(printf '%s' "$DATA" | jq -r '.finished_head')" ]; then
+    # 完了したレビューは次の依頼へ持ち越さず、未完了の比較元だけ保持する。
+    if printf '%s' "$DATA" | jq -e '.result.status == "reviewed"' >/dev/null && clean && [ "$(head)" = "$(printf '%s' "$DATA" | jq -r '.result.review_head')" ]; then
       rm -f "$STATE"
     else
       save "$(printf '%s' "$DATA" | jq 'del(.result, .pending) | .generation = ((.generation // 0) + 1)')"
@@ -57,23 +60,18 @@ case "$EVENT" in
       Edit|Write|MultiEdit|NotebookEdit|apply_patch)
         PATHS=$(hook_file_paths)
         REQUIRED=false
-        while IFS= read -r FILE; do
-          code_path "$FILE" && REQUIRED=true
-        done <<< "$PATHS"
+        while IFS= read -r FILE; do code_path "$FILE" && REQUIRED=true; done <<< "$PATHS"
         [ "$REQUIRED" = true ] || exit 0
-        FIRST=false
         if [ ! -f "$STATE" ]; then
-          FIRST=true
           BASE=$(head) || hook_deny "変更前HEADがありません。初期commitを作成してから編集してください。"
           DATA=$(jq -cn --arg base "$BASE" '{base:$base,generation:0,paths:[]}')
         fi
-        save "$(printf '%s' "$DATA" | jq --arg paths "$PATHS" '.paths = (((.paths // []) + ($paths | split("\n"))) | unique) | .required = true | .finished = false | del(.result, .pending)')"
-        [ "$FIRST" = false ] || hook_deny "変更前HEADを $STATE に保存しました（review_base=$BASE）。編集はまだ実行していません。同じ編集を再試行し、検証・整形・commit後、完了報告前に $CONTRACT を読んでください。"
+        save "$(printf '%s' "$DATA" | jq --arg paths "$PATHS" '.paths = (((.paths // []) + ($paths | split("\n"))) | unique) | del(.result, .pending)')"
         ;;
       Agent|*spawn_agent)
         ROLE=$(hook_agent_type)
         case "$ROLE" in code-reviewer|deep-reviewer) ;; *) exit 0 ;; esac
-        BRIEF=$(hook_review_brief) || hook_deny "コードレビューのpromptはrepository・review_base・review_head・requirementsを持つJSONにしてください。起動直前に $CONTRACT を読んでください。"
+        BRIEF=$(hook_review_brief) || hook_deny "コードレビューはrepository・review_base・review_head・requirementsを持つJSONで起動してください。"
         printf '%s' "$BRIEF" | jq -e 'all(.repository,.review_base,.review_head,.requirements; type == "string" and length > 0)' >/dev/null || hook_deny "独立レビューの入力が不足しています。"
         BASE=$(printf '%s' "$BRIEF" | jq -r '.review_base')
         HEAD=$(printf '%s' "$BRIEF" | jq -r '.review_head')
@@ -106,7 +104,7 @@ case "$EVENT" in
     [ "$(hook_child_role)" = "$(printf '%s' "$DATA" | jq -r '.pending.role')" ] || exit 0
     RESULT=$(hook_last_message)
     # JSON以外・incomplete・未確認範囲ありは受理しない。指摘の採否はメインが判断する。
-    if clean && [ "$(head)" = "$(printf '%s' "$DATA" | jq -r '.pending.brief.review_head')" ] &&
+    if clean && tracked_paths && [ "$(head)" = "$(printf '%s' "$DATA" | jq -r '.pending.brief.review_head')" ] &&
        printf '%s' "$DATA" | jq -e --arg raw "$RESULT" '
          ($raw | fromjson) as $r |
          .pending.generation == .generation and
@@ -117,30 +115,6 @@ case "$EVENT" in
          all($r.findings[]; type == "object" and (.severity == "critical" or .severity == "high" or .severity == "medium" or .severity == "low"))' >/dev/null; then
       save "$(printf '%s' "$DATA" | jq --argjson result "$RESULT" '.result = $result | del(.pending)')"
     fi
-    ;;
-  Stop)
-    [ -f "$STATE" ] || exit 0
-    printf '%s' "$DATA" | jq -e '.required == true' >/dev/null || exit 0
-    # 相談・失敗の報告は完了にしない。未完了stateを残して次の依頼へ持ち越す。
-    DATA=$(printf '%s' "$DATA" | jq '.finished = false')
-    save "$DATA"
-    MESSAGE=$(hook_last_message)
-    if printf '%s\n' "$MESSAGE" | grep -Eq '^(独立レビュー未完了|作業保留): .+'; then exit 0; fi
-    HEAD=$(head) || fail "独立レビュー未完了: HEADを確認できません。"
-    UNTRACKED=false
-    while IFS= read -r FILE; do
-      case "$FILE" in "$ROOT"/*) FILE=${FILE#"$ROOT"/} ;; esac
-      if [ -e "$ROOT/$FILE" ] && ! git -C "$ROOT" ls-files --error-unmatch -- "$FILE" >/dev/null; then UNTRACKED=true; fi
-    done < <(printf '%s' "$DATA" | jq -r '.paths[]')
-    if [ "$UNTRACKED" = false ] && clean && git -C "$ROOT" diff --quiet "$(printf '%s' "$DATA" | jq -r '.base')"; then
-      save "$(printf '%s' "$DATA" | jq --arg head "$HEAD" '.finished = true | .finished_head = $head')"
-      exit 0
-    fi
-    if [ "$UNTRACKED" = false ] && clean && printf '%s' "$DATA" | jq -e --arg head "$HEAD" '.result.status == "reviewed" and .result.review_head == $head' >/dev/null; then
-      save "$(printf '%s' "$DATA" | jq --arg head "$HEAD" '.finished = true | .finished_head = $head')"
-      exit 0
-    fi
-    fail "独立レビューが未完了です。起動直前に $CONTRACT を読み、review_base=$(printf '%s' "$DATA" | jq -r '.base') と現在HEADで実行してください。相談・実行不能なら『作業保留: 理由』または『独立レビュー未完了: 理由』を独立した行で報告し、完了扱いにしないでください。"
     ;;
 esac
 exit 0
