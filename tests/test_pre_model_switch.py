@@ -43,7 +43,10 @@ class PreModelSwitch(unittest.TestCase):
             self.assertIn("PRE_MODEL_SWITCH_CONTEXT", first.stderr)
             self.assertIn("SWITCH_GUIDANCE_V1", first.stderr)
             expected_hash = hashlib.sha256(b"SWITCH_GUIDANCE_V1").hexdigest()
-            self.assertEqual(len(list((root / ".codex/tmp").glob(f"pre-model-switch.*.{expected_hash}"))), 1)
+            self.assertEqual(len(list((root / ".codex/tmp").glob(f"pre-model-switch.*.{expected_hash}.*"))), 1)
+            changed_request = call(event(turn="turn-2", model="other-model"))
+            self.assertEqual(changed_request.returncode, 2)
+            self.assertIn("SWITCH_GUIDANCE_V1", changed_request.stderr)
             self.assertEqual(call(event(turn="turn-2")).returncode, 0)
 
             self.assertEqual(call(event(thread="thread-2")).returncode, 2)
