@@ -14,12 +14,13 @@ ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || {
 }
 
 skill_file() {
-  local relative=$1 candidate
-  for base in "$ROOT/.agents/skills" "$ROOT/.claude/skills" "$ROOT/skills"; do
-    candidate="$base/$relative"
-    [ ! -f "$candidate" ] || { printf '%s\n' "$candidate"; return 0; }
-  done
-  return 1
+  local relative=$1 base
+  case "$HOOK_AGENT" in
+    codex) base="$ROOT/.agents/skills" ;;
+    claude) base="$ROOT/.claude/skills" ;;
+  esac
+  [ -f "$base/$relative" ] && [ -r "$base/$relative" ] || return 1
+  printf '%s\n' "$base/$relative"
 }
 
 inject_parent_once() {
@@ -79,7 +80,9 @@ $FILE"
       hook_review_context "専用契約 $RELATIVE が見つかりません。成功扱いせず失敗を返してください。"
       exit 0
     }
-    hook_review_context "$(cat "$FILE")"
+    hook_review_context "契約の相対参照は $(dirname "$FILE") を基準に解決してください。
+
+$(cat "$FILE")"
     ;;
 esac
 
