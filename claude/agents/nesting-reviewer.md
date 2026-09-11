@@ -5,5 +5,3 @@ model: claude-sonnet-5
 effort: max
 tools: Read, Grep, Glob
 ---
-
-最初にrepositoryの`[skills_root]/unwind/NESTING_CONTRACT.md`を読み、従う。読めなければ失敗を親へ返す。
