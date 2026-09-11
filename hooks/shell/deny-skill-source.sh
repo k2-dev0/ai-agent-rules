@@ -42,9 +42,6 @@ is_injected_context() {
   case "$path" in
     */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
   esac
-  if [ "$HOOK_AGENT" = codex ]; then
-    case "$path" in */skills/MODEL_SWITCH.md) return 0 ;; esac
-  fi
   return 1
 }
 
