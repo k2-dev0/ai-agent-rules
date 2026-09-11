@@ -66,7 +66,8 @@ tools: Read, Grep, Glob, Bash"
       ACTUAL=$(printf '%s\n' "$SETTINGS" | grep -E "^$KEY[[:space:]]*[:=]")
       [ "$ACTUAL" = "$EXPECTED" ] || hook_deny "reviewer定義の $KEY が配布設定と一致しません。"
     done <<< "$EXPECTED_SETTINGS"
-    [ -s "$REPOSITORY/$CONTRACT" ] && grep -Fq "$CONTRACT" "$AGENT_FILE" || hook_deny "reviewerの契約が無い、または参照されていません。"
+    [ -s "$REPOSITORY/$CONTRACT" ] || hook_deny "reviewerの契約がありません。"
+    [ -x "$REPOSITORY/.$HOOK_AGENT/hooks/shell/load-operation-context.sh" ] || hook_deny "reviewerの契約注入hookがありません。"
     exit 0
     ;;
 esac
@@ -100,7 +101,8 @@ tools: Read, Grep, Glob'
     [ "$ACTUAL" = "$EXPECTED" ] || hook_deny "nesting-reviewer定義の $KEY が配布設定と一致しません。"
   done <<< "$EXPECTED_SETTINGS"
   CONTRACT="$SKILLS_ROOT/unwind/NESTING_CONTRACT.md"
-  [ -s "$REPOSITORY/$CONTRACT" ] && [ -r "$REPOSITORY/$CONTRACT" ] && grep -Fq "$CONTRACT" "$AGENT_FILE" || hook_deny "nesting-reviewerの検出契約が無い、または参照されていません。"
+  [ -s "$REPOSITORY/$CONTRACT" ] && [ -r "$REPOSITORY/$CONTRACT" ] || hook_deny "nesting-reviewerの検出契約がありません。"
+  [ -x "$REPOSITORY/.$HOOK_AGENT/hooks/shell/load-operation-context.sh" ] || hook_deny "nesting-reviewerの契約注入hookがありません。"
   exit 0
 fi
 
