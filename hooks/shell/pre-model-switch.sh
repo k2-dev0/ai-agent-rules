@@ -44,13 +44,14 @@ DOCUMENT_BYTES=$(printf '%s' "$CONTENT" | wc -c | tr -d ' ')
 
 THREAD_HASH=$(printf '%s' "$INPUT" | jq -r '.threadId' | shasum -a 256 | awk '{print $1}')
 DOCUMENT_HASH=$(printf '%s' "$CONTENT" | shasum -a 256 | awk '{print $1}')
-[ "${#THREAD_HASH}" = 64 ] && [ "${#DOCUMENT_HASH}" = 64 ] ||
+REQUEST_HASH=$(printf '%s' "$INPUT" | jq -cS '.to' | shasum -a 256 | awk '{print $1}')
+[ "${#THREAD_HASH}" = 64 ] && [ "${#DOCUMENT_HASH}" = 64 ] && [ "${#REQUEST_HASH}" = 64 ] ||
   fail "PreModelSwitch: 注入記録のhashを計算できません。"
 
 STATE_DIR="$ROOT/.codex/tmp"
 [ ! -L "$STATE_DIR" ] || fail "PreModelSwitch: state directoryがsymlinkです。"
 mkdir -p "$STATE_DIR" || fail "PreModelSwitch: state directoryを作成できません。"
-RECEIPT="$STATE_DIR/pre-model-switch.$THREAD_HASH.$DOCUMENT_HASH"
+RECEIPT="$STATE_DIR/pre-model-switch.$THREAD_HASH.$DOCUMENT_HASH.$REQUEST_HASH"
 [ ! -L "$RECEIPT" ] || fail "PreModelSwitch: receiptがsymlinkです。"
 [ ! -f "$RECEIPT" ] || exit 0
 
