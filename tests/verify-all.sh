@@ -187,7 +187,7 @@ else
   cat "$S/context-delivery.out"
 fi
 if python3 "$SUITE/test_pre_model_switch.py" > "$S/pre-model-switch.out" 2>&1; then
-  ok "Baton用PreModelSwitchの注入・再試行・no-opを検証"
+  ok "Baton用PreModelSwitchの注入・再試行・model/effort同値要求を検証"
 else
   ng "Baton用PreModelSwitchが不正"
   cat "$S/pre-model-switch.out"
