@@ -4,8 +4,6 @@
 
 ## 起動・待機
 
-子の起動直前に[子・待機の規則](../SUBAGENT_RULES.md)を読む。
-
 1. repository絶対path、参照コードのHEAD、対象index・全設計書のpathとSHA-256を保持する
    - 対象設計書以外の参照コードに未commit変更があれば`blocked`
    - 設計書のcommitは要求しない
