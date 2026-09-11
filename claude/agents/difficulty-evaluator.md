@@ -5,3 +5,5 @@ model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
 ---
+
+起動hookが注入した専用契約に従う。契約未注入ならnullを返し、作業しない。
