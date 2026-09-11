@@ -77,7 +77,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。モデル切替は両環境で同じ注入時点を保証できないため、選定値が変わる場合だけ手順を読む。
+変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。Codexのモデル切替手順はBatonの`PreModelSwitch`で元モデルへ一度だけ返し、Baton非対応環境だけ事前に読む。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
@@ -85,7 +85,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 |---|---|
 | [AGENTS.md](AGENTS.md) | 全変更に共通するモデル選択の目標と入口 |
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 評価の適用条件、モデル対応、再利用・再評価条件 |
-| [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
+| [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | Batonでは切替前に元モデルへ注入し、非対応環境では切替前だけ読む手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | reviewer起動直前に親へ注入する起動・待機・指摘対応 |
@@ -154,6 +154,8 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 `test_context_delivery.py`は両配布の全matcherを再現し、hook出力のUTF-8 bytesと回数を測る。実モデルの受信証明とは区別する。`python3 tests/probe_context_runtime.py <codex|claude> <investigation|document_change|normal_implementation|from_doc|review_repair>`は認証済みCLIでの任意検証で、隔離fixture・hook出力・モデル応答を一時directoryへ保存する。project hookの発火なしは失敗とし、Codexの`--inline-hooks`診断をproject配置の成功扱いにしない。
 
+`test_pre_model_switch.py`はBaton eventの入力・no-op・thread別receipt・文書変更・nested cwd・失敗を検証する。`BATON_ROOT=/path/to/baton bash tests/verify-all.sh`はBatonの実loader・runnerへ配布hookを接続する。
+
 ### 独立レビューと文書の読込
 
 `independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、起動された専用子の入力と`SubagentStop`のJSON結果を照合する。独立レビューが必要かはskillが判断し、`Stop`で完了を推測・阻止しない。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。
@@ -162,7 +164,7 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。tddの`FROM_DOC.md`は`$tdd --from-doc`だけが読む。
 
-共通基準は調査後、設計・実装方針を決める前にskillから読む。子の起動と独立レビューの手順は`load-operation-context.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
+共通基準は調査後、設計・実装方針を決める前にskillから読む。子の起動と独立レビューの手順は`load-operation-context.sh`、Codexのモデル切替手順はBaton用`pre-model-switch.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
 
 | 禁止・制約の種類 | 実施箇所・境界 |
 |---|---|
