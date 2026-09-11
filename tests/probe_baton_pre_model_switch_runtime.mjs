@@ -101,13 +101,24 @@ try {
   const runtimeCalls = records.filter(record => record.type === "event_msg" && record.payload?.type === "item_completed" &&
     record.payload.item?.type === "DynamicToolCall" && record.payload.item.tool === "switch_model");
   assert.equal(runtimeCalls.length, 2, "runtime history must contain the failed call and one retry");
+  const requested = { model: "gpt-6-astra", config: { effort: "high" } };
+  assert.deepEqual(runtimeCalls.map(record => record.payload.item.arguments), [requested, requested], "the retry must be identical");
+  assert.equal(runtimeCalls[0].payload.turn_id, runtimeCalls[1].payload.turn_id, "the retry must run in the original turn");
+  const contexts = records.filter(record => record.type === "turn_context");
+  const oldContext = contexts.find(record => record.payload.turn_id === runtimeCalls[0].payload.turn_id);
+  assert.equal(oldContext?.payload.model, "gpt-5.6-sol", "both calls must run on the old model");
   const document = readFileSync(path.join(project, ".agents/skills/MODEL_SWITCH.md"), "utf8");
   const expected = "PRE_MODEL_SWITCH_CONTEXT: 切替手順を注入しました。モデル・設定は変更していません。同じswitch_model要求を一度だけ再試行してください。\n\n" + document.trimEnd();
   const runtimeDelivered = runtimeCalls[0].payload.item.content_items?.find(item => item.type === "inputText")?.text;
   assert.equal(runtimeDelivered, expected, "the failed tool result must equal the distributed document");
   assert.equal(runtimeCalls[0].payload.item.success, false);
   assert.equal(runtimeCalls[1].payload.item.success, true);
-  const metrics = { old_model: "gpt-5.6-sol", target_model: "gpt-6-astra", context_bytes: Buffer.byteLength(runtimeDelivered),
+  const finalMessage = records.find(record => record.type === "event_msg" && record.payload?.type === "item_completed" &&
+    record.payload.item?.type === "AgentMessage" && record.payload.item.content?.some(item =>
+      item.type === "Text" && item.text.trim() === "PRE_MODEL_SWITCH_LIVE_OK"));
+  const targetContext = contexts.find(record => record.payload.turn_id === finalMessage?.payload.turn_id);
+  assert.equal(targetContext?.payload.model, "gpt-6-astra", "completion must run on the target model");
+  const metrics = { old_model: oldContext.payload.model, target_model: targetContext.payload.model, context_bytes: Buffer.byteLength(runtimeDelivered),
     context_injections: 1, unnecessary_injections: 0, retry_calls: 1, final_status: "completed" };
   writeFileSync(path.join(output, "report.json"), JSON.stringify(metrics, null, 2), { mode: 0o600 });
   writeFileSync(path.join(output, "events.json"), JSON.stringify(events, null, 2), { mode: 0o600 });
