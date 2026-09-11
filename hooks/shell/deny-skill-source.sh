@@ -27,13 +27,33 @@ source_path() {
 }
 
 is_injected_context() {
-  local raw=$1 path
+  local raw=$1 path candidate
   case "$raw" in *:*/skills/*) raw=${raw#*:} ;; esac
   path=$(source_path "$raw")
-  [ -f "$path" ] || return 1
+  # shellを評価せずpath globだけ展開する。入力のcommand substitution等は実行しない。
+  case "$path" in
+    *\**|*\?*|*\[*)
+      while IFS= read -r candidate; do
+        if [ "$candidate" != "$path" ] && is_injected_context "$candidate"; then return 0; fi
+      done < <(compgen -G "$path")
+      return 1
+      ;;
+  esac
   case "$path" in
     */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
   esac
+  return 1
+}
+
+# 明示した検索directoryの下に注入専用文書があれば、Markdown一括検索も拒否する。
+is_context_scope() {
+  local directory candidate
+  directory=$(source_path "$1")
+  [ -d "$directory" ] || return 1
+  for candidate in "$directory"/SUBAGENT_RULES.md "$directory"/REVIEW_CONTRACT.md "$directory"/NESTING_CONTRACT.md \
+      "$directory"/skills/SUBAGENT_RULES.md; do
+    [ -f "$candidate" ] && is_injected_context "$candidate" && return 0
+  done
   return 1
 }
 
@@ -76,6 +96,7 @@ case "$TOOL" in
       [ -n "$path" ] || continue
       FOUND=true
       is_injected_context "$path" && hook_deny "$CONTEXT_MSG"
+      is_context_scope "$path" && hook_deny "$CONTEXT_MSG"
       is_skill_source "$path" && hook_deny "$READ_MSG"
       case "$DOC_GLOB" in *.md|*.txt) continue ;; esac
       is_skill_scope "$path" && hook_deny "$READ_MSG"
@@ -187,6 +208,7 @@ case "$BIN" in
       esac
       case "$token" in -*) continue ;; esac
       if [ "$PATTERN_SEEN" = false ]; then PATTERN_SEEN=true; continue; fi
+      is_context_scope "$token" && hook_deny "$CONTEXT_MSG"
       is_skill_scope "$token" && hook_deny "$READ_MSG"
       [ -f "$(source_path "$token")" ] && EXPLICIT_FILE=true
     done
