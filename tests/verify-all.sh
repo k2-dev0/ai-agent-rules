@@ -186,6 +186,20 @@ else
   ng "代表ケースのcontext deliveryが不正"
   cat "$S/context-delivery.out"
 fi
+if python3 "$SUITE/test_pre_model_switch.py" > "$S/pre-model-switch.out" 2>&1; then
+  ok "Baton用PreModelSwitchの注入・再試行・no-opを検証"
+else
+  ng "Baton用PreModelSwitchが不正"
+  cat "$S/pre-model-switch.out"
+fi
+if [ -n "${BATON_ROOT:-}" ]; then
+  if node "$SUITE/verify-baton-pre-model-switch.mjs" "$BATON_ROOT" > "$S/baton-pre-model-switch.out" 2>&1; then
+    ok "Batonの実loader・runnerと配布hookを接続"
+  else
+    ng "Batonと配布hookの統合が不正"
+    cat "$S/baton-pre-model-switch.out"
+  fi
+fi
 E2E_SKILL="$REPO/skills/e2e/SKILL.md"
 E2E_ARTIFACT_IGNORE="$REPO/e2e/artifacts/.gitignore"
 if grep -Fq '`screencast_start`' "$E2E_SKILL" &&
@@ -320,7 +334,7 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '現在値と異なる場合だけ' .claude/skills/MODEL_SELECTION.md; then
+if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Claude配置と参照条件"
 else
   ng "モデル選択・切り替え: Claude配置または参照条件が不正"
@@ -522,7 +536,7 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '現在値と異なる場合だけ' .agents/skills/MODEL_SELECTION.md; then
+if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Codex配置と参照条件"
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
@@ -664,6 +678,7 @@ done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && [ -f .codex/e2e/artifacts/.gitignore ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
+[ "$(jq '[.hooks.PreModelSwitch[] | .hooks[].command | select(contains("pre-model-switch.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "Baton PreModelSwitchをCodex配置へ配線" || ng "Baton PreModelSwitchの配線が不正"
 GROUP_FAILURES=
 for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
   BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
