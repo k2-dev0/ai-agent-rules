@@ -46,15 +46,17 @@ Claude Code 2.1.220はUserPromptSubmitの発火まで確認できたが、OAuth�
 
 ## Baton PreModelSwitch
 
-配布hook単体と`/Users/kaikojima/Desktop/develop/baton`の実`loadPreModelSwitchHooks`・`runPreModelSwitchHooks`を接続して確認した。Baton本体の対象テストは12件成功。
+配布hook単体と`/Users/kaikojima/Desktop/develop/baton`の実`loadPreModelSwitchHooks`・`runPreModelSwitchHooks`を接続して確認した。Baton本体の対象テストは12件成功。さらに実モデルprobeで、旧Solの失敗したtool結果とruntime履歴に4,160 bytesの本文が1回だけ入り、同じSolが同一要求を1回だけ再試行し、Astraで完了したことを確認した。不要注入は0回。
 
 - 初回の有効な切替要求は、旧ターンを中断せず`MODEL_SWITCH.md`を拒否理由として元モデルへ返す
 - 同じthread・同じ文書の再試行は許可し、turnIdには依存しない
 - 別threadと文書変更は再注入する
-- model・effort・追加設定が変わらない要求は注入しない
+- model・effortが同じで追加設定のない要求は注入しない
 - 同一model・effortでも追加設定が変わる場合は注入する
 - 入力不正・文書欠落・記録不能は切替を許可しない
 
 Batonの`PreModelSwitch`は標準出力を使用しないため、配布hookは手順を標準エラーへ出し`exit 2`で返す。通常のCodex hook JSONとは共用しない。
 
 Baton経由かどうかを通常のCodex `PreToolUse`から正確に識別できないため、`MODEL_SWITCH.md`の直接読込はそこで拒否しない。Baton対応時は`MODEL_SELECTION.md`の条件に従って事前読込を省略し、Baton非対応時は従来どおり切替前に読む。
+
+実モデルprobeは`node tests/probe_baton_pre_model_switch_runtime.mjs /Users/kaikojima/Desktop/develop/baton`で再実行する。外部モデルを呼ぶため通常suiteには含めず、events・rollout・集計を新しい一時directoryへ保存する。
