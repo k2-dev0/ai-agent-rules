@@ -85,12 +85,10 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 |---|---|
 | [AGENTS.md](AGENTS.md) | 全変更に共通するモデル選択の目標と入口 |
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 評価の適用条件、モデル対応、再利用・再評価条件 |
-| [DIFFICULTY_CONTRACT.md](skills/DIFFICULTY_CONTRACT.md) | 評価役だけが読む入力・独立調査・10段階採点。返却は点数と200文字目安の理由 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | reviewer起動直前に親へ注入する起動・待機・指摘対応 |
-| [CODE_REVIEW_CONTRACT.md](skills/CODE_REVIEW_CONTRACT.md) | 読み取り専用レビュー役の入力・確認・返却 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
 
 
