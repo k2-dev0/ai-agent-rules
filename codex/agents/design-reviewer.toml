@@ -3,5 +3,6 @@ description = "設計会話を継承せず、元の要件と設計書一式を�
 model = "gpt-6-astra"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
+developer_instructions = "起動hookが注入した専用契約に従う。契約未注入ならblockedを返し、作業しない。"
 [agents]
 enabled = false
