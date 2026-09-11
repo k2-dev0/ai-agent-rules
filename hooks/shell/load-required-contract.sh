@@ -55,18 +55,6 @@ load_contract_once() {
   exit 0
 }
 
-case "$TOOL" in
-  Edit|Write|MultiEdit|apply_patch)
-    while IFS= read -r FILE; do
-      case "$FILE" in
-        *.ts|*.tsx|*.js|*.jsx|*.mts|*.cts|*.mjs|*.cjs|*.prisma)
-          load_contract_once "implementation-rules" "IMPLEMENTATION_RULES.md"
-          ;;
-      esac
-    done < <(hook_file_paths)
-    ;;
-esac
-
 # 設計書への編集は、内部手順の直接参照でも設計形式を適用する。
 
 case "$TOOL" in
