@@ -3,7 +3,7 @@
 変更を伴う依頼だけに使う。説明・調査だけなら現在モデルで行い、ユーザー指定があれば評価せず指定を使う。
 
 1. 現在モデルで調査し、変更範囲・整合性条件・検証方法を含む実装方針を確定する
-2. テストを含む最初の編集前に[子の規則](SUBAGENT_RULES.md)を読み、`difficulty-evaluator`へ`{"repository":"<絶対path>","implementation_policy":"<実装方針>"}`だけを渡し、方針には背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない
+2. テストを含む最初の編集前に[子の規則](SUBAGENT_RULES.md)に従い、`difficulty-evaluator`へ実装方針の独立評価を依頼する
 3. `score`と`reason`だけのJSONを受け取り、1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / highを選ぶ
 4. 選定値が現在値と異なる場合だけ[切り替え手順](MODEL_SWITCH.md)を読む
 
