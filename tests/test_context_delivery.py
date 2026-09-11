@@ -21,6 +21,12 @@ class ContextDelivery(unittest.TestCase):
                 skilldir = root / (".agents/skills" if agent == "codex" else ".claude/skills")
                 shutil.copytree(REPO / "hooks/shell", hookdir)
                 shutil.copytree(REPO / "skills", skilldir)
+                other_skilldir = root / (".claude/skills" if agent == "codex" else ".agents/skills")
+                shutil.copytree(REPO / "skills", other_skilldir)
+                for file in other_skilldir.rglob("*.md"):
+                    file.write_text("WRONG_PRODUCT_CONTEXT")
+                for file in skilldir.rglob("*.md"):
+                    file.write_text(file.read_text().replace("[agent_name]", agent).replace("[skills_root]", str(skilldir)))
                 shutil.copytree(REPO / agent / "agents", product / "agents")
                 adapter = hookdir / "hook-io.sh"
                 adapter.write_text(adapter.read_text().replace("[agent_name]", agent))
@@ -109,6 +115,7 @@ class ContextDelivery(unittest.TestCase):
                 parent_text = metric("difficulty_parent", parent)
                 self.assertEqual(len(parent_text), 1)
                 self.assertIn("サブエージェント", parent_text[0])
+                self.assertNotIn("WRONG_PRODUCT_CONTEXT", parent_text[0])
                 self.assertNotIn("実装難度の独立評価", parent_text[0])
                 self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)), [])
                 child_text = metric("difficulty_child", configured(
@@ -116,6 +123,7 @@ class ContextDelivery(unittest.TestCase):
                 ))
                 self.assertEqual(len(child_text), 1)
                 self.assertIn("実装難度の独立評価", child_text[0])
+                self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
                 self.assertNotIn("サブエージェント", child_text[0])
 
                 review_brief = {
@@ -127,6 +135,7 @@ class ContextDelivery(unittest.TestCase):
                 parent_text = metric("review_repair_parent", parent)
                 self.assertEqual(len(parent_text), 1)
                 self.assertIn("独立レビューの起動・結果処理", parent_text[0])
+                self.assertIn(f".{agent}/tmp", parent_text[0])
                 self.assertNotIn("サブエージェント", parent_text[0])
                 retry = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=review_input)
                 self.assertEqual(visible(retry), [])
@@ -160,6 +169,9 @@ class ContextDelivery(unittest.TestCase):
                     f"cat {relative}",
                     f"git show HEAD:{relative}",
                     f"git cat-file -p HEAD:{relative}",
+                    f"cat {str(relative)[:-2]}[m]d",
+                    f"cat {relative.parent}/INDEPENDENT_REVIEW.*",
+                    f"rg role {relative.parent.parent}",
                 ):
                     outputs = configured("PreToolUse", "PREREAD", tool_name="Bash", tool_input={"command": command})
                     self.assertTrue(any(
