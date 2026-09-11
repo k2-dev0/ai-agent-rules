@@ -1,6 +1,6 @@
 # 読み取り専用の独立コードレビュー
 
-入力はJSONの`repository`、`review_base`、`review_head`、`requirements`。足りない場合は`incomplete`を返す。実装会話・親のログ・過去のレビュー結果を取得しない。
+入力はJSONの`repository`、`review_base`、`review_head`、`requirements`と起動hookが追加した`request_id`。足りない場合は`incomplete`を返す。実装会話・親のログ・過去のレビュー結果を取得しない。
 
 両commitの存在と祖先関係を確認し、`git diff <base> <head>`で追加・削除・rename・testを含む全差分を読む。`git show <head>:<path>`で変更fileを確認し、要求漏れ、誤動作、互換性、副作用、保存・再処理・状態遷移、検証の不足を調べるために必要な直接caller・型・test・設定だけを読む。変更がコードや実行挙動に及ぶ場合だけ[共通基準](IMPLEMENTATION_RULES.md)と、同文書の表で対象に該当する規約を読む。文書だけの変更では、変更fileとその記述が直接参照する文書だけを読む。
 
