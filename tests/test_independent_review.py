@@ -108,6 +108,14 @@ class ReviewEvidence(unittest.TestCase):
                 self.assertFalse(accepted())
                 end(result(brief, findings=[{"severity": "urgent"}]))
                 self.assertFalse(accepted())
+                for finding in (
+                    {"severity": "high"},
+                    {"severity": "high", "path": "", "line": 1, "condition": "c", "impact": "i", "evidence": "e"},
+                    {"severity": "high", "path": "sample.py", "line": 0, "condition": "c", "impact": "i", "evidence": "e"},
+                    {"severity": "high", "path": "sample.py", "line": 1, "condition": "", "impact": "i", "evidence": "e"},
+                ):
+                    end(result(brief, findings=[finding]))
+                    self.assertFalse(accepted())
                 end(result(brief))
                 self.assertTrue(accepted())
 
