@@ -106,8 +106,9 @@ class ReviewEvidence(unittest.TestCase):
                 self.assertFalse(accepted())
                 end(result(brief, status="incomplete"))
                 self.assertFalse(accepted())
-                end(result(brief, findings=[{"severity": "urgent"}]))
-                self.assertFalse(accepted())
+                for invalid_severity in ("urgent", "P0", "P1", "P2", "P3"):
+                    end(result(brief, findings=[{"severity": invalid_severity}]))
+                    self.assertFalse(accepted())
                 for finding in (
                     {"severity": "high"},
                     {"severity": "high", "path": "", "line": 1, "condition": "c", "impact": "i", "evidence": "e"},
