@@ -23,6 +23,7 @@ case "$(hook_event_name)" in
   SessionEnd)
     rm -f "$(hook_cwd)/.codex/tmp/session."*".$(hook_session_id)"
     rm -f "$(hook_cwd)/.codex/tmp/required-reading."*".$(hook_session_id)"
+    rm -f "$(hook_cwd)/.codex/tmp/operation-context."*".$(hook_session_id)"
     ;;
 esac
 exit 0
