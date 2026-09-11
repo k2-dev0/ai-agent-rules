@@ -12,4 +12,4 @@
 
 `findings`の各要素は`severity`、`path`、1以上の整数`line`、空でない`condition`・`impact`・`evidence`を持つ。
 
-返却はコードフェンスなしのJSON一つとし、`status`（`reviewed` / `incomplete`）、入力と同じ`review_base`・`review_head`、起動hookが渡した`request_id`、`unchecked`配列、`findings`配列を持たせる。各指摘は`severity`、pathと行、成立条件、影響、根拠を簡潔に書く。`severity`はdata loss・security侵害・不可逆な破損を`critical`、明示要件違反・通常経路の誤動作・公開互換性破壊を`high`、明示要件外の限定条件だけで起きる回復可能かつ局所的な誤動作を`medium`、runtime挙動に影響しない保守性問題を`low`とし、該当する最高の値を一つ付ける。全差分を確認できた場合だけ`reviewed`とし、問題がなければ`findings: []`。好みだけの変更、実装の称賛、コード全文、調査ログは返さない。
+返却はコードフェンスなしのJSON一つとし、`status`（`reviewed` / `incomplete`）、入力と同じ`review_base`・`review_head`、起動hookが渡した`request_id`、`unchecked`配列、`findings`配列を持たせる。各指摘は`severity`、pathと行、成立条件、影響、根拠を簡潔に書く。`severity`はdata loss・security侵害・不可逆な破損を`critical`、明示要件違反・通常経路の誤動作・公開互換性破壊を`high`、明示要件外の限定条件だけで起きる回復可能かつ局所的な誤動作を`medium`、runtime挙動に影響しない保守性問題を`low`とし、該当する最高の値を一つ付ける。P0〜P3表記は使わない。全差分を確認できた場合だけ`reviewed`とし、問題がなければ`findings: []`。好みだけの変更、実装の称賛、コード全文、調査ログは返さない。
