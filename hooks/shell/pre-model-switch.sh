@@ -10,8 +10,9 @@ fail() {
 command -v jq >/dev/null 2>&1 || fail "PreModelSwitch: jqが見つかりません。"
 MAX_CONTEXT_BYTES=49152
 INPUT=$(cat)
-printf '%s' "$INPUT" | jq -e '
-  type == "object" and .event == "PreModelSwitch" and
+INPUT=$(printf '%s' "$INPUT" | jq -cse '
+  if length == 1 then .[0] else error("one JSON value required") end |
+  select(type == "object" and .event == "PreModelSwitch" and
   (.threadId | type == "string" and test("\\S")) and
   (.turnId | type == "string" and test("\\S")) and
   (.cwd | type == "string" and test("\\S")) and
@@ -19,8 +20,8 @@ printf '%s' "$INPUT" | jq -e '
   (.from.effort | type == "string" and test("\\S")) and
   (.to | type == "object") and (.to.model | type == "string" and test("\\S")) and
   (.to.config | type == "object") and
-  (.to.config.effort | type == "string" and test("\\S"))
-' >/dev/null || fail "PreModelSwitch: 入力形式が不正です。"
+  (.to.config.effort | type == "string" and test("\\S")))
+' 2>/dev/null) || fail "PreModelSwitch: 入力形式が不正です。"
 
 # model・effort・追加設定が変わらない要求には文書を注入しない。
 if printf '%s' "$INPUT" | jq -e '
@@ -36,13 +37,13 @@ ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) ||
 DOCUMENT="$ROOT/.agents/skills/MODEL_SWITCH.md"
 [ -f "$DOCUMENT" ] && [ -r "$DOCUMENT" ] ||
   fail "PreModelSwitch: MODEL_SWITCH.mdが見つかりません。"
-DOCUMENT_BYTES=$(wc -c < "$DOCUMENT" | tr -d ' ')
+CONTENT=$(cat "$DOCUMENT") || fail "PreModelSwitch: MODEL_SWITCH.mdを読み込めません。"
+DOCUMENT_BYTES=$(printf '%s' "$CONTENT" | wc -c | tr -d ' ')
 [ "$DOCUMENT_BYTES" -le "$MAX_CONTEXT_BYTES" ] ||
   fail "PreModelSwitch: MODEL_SWITCH.mdが注入上限を超えています。"
-CONTENT=$(cat "$DOCUMENT") || fail "PreModelSwitch: MODEL_SWITCH.mdを読み込めません。"
 
 THREAD_HASH=$(printf '%s' "$INPUT" | jq -r '.threadId' | shasum -a 256 | awk '{print $1}')
-DOCUMENT_HASH=$(shasum -a 256 "$DOCUMENT" | awk '{print $1}')
+DOCUMENT_HASH=$(printf '%s' "$CONTENT" | shasum -a 256 | awk '{print $1}')
 [ "${#THREAD_HASH}" = 64 ] && [ "${#DOCUMENT_HASH}" = 64 ] ||
   fail "PreModelSwitch: 注入記録のhashを計算できません。"
 
