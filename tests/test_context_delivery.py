@@ -180,6 +180,17 @@ class ContextDelivery(unittest.TestCase):
                         for output in outputs
                     ), command)
 
+                model_switch = configured(
+                    "PreToolUse", "MODEL_SWITCH_READ", tool_name="Read",
+                    tool_input={"file_path": str(skilldir / "MODEL_SWITCH.md")},
+                )
+                model_switch_denied = any(
+                    output.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+                    and "先読み" in output["hookSpecificOutput"].get("permissionDecisionReason", "")
+                    for output in model_switch
+                )
+                self.assertEqual(model_switch_denied, agent == "codex")
+
         print("CONTEXT_METRICS=" + json.dumps(metrics, ensure_ascii=False, sort_keys=True))
 
 
