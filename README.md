@@ -77,7 +77,7 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。実際の交代は[モデル切り替え](skills/MODEL_SWITCH.md)、子の起動・待機は[子の規則](skills/SUBAGENT_RULES.md)、コードレビューは[独立レビュー](skills/INDEPENDENT_REVIEW.md)を正本とする。
+変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。モデル切替は両環境で同じ注入時点を保証できないため、選定値が変わる場合だけ手順を読む。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
@@ -89,7 +89,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | 選定値が現在値と異なる場合だけ読む切り替え手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
-| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | 固定差分の独立レビュー起動・待機・指摘対応 |
+| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | reviewer起動直前に親へ注入する起動・待機・指摘対応 |
 | [CODE_REVIEW_CONTRACT.md](skills/CODE_REVIEW_CONTRACT.md) | 読み取り専用レビュー役の入力・確認・返却 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
 
@@ -156,13 +156,13 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 ### 独立レビューと文書の読込
 
-`independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、専用子の起動入力と`SubagentStop`のJSON結果を照合する。`Stop`では現在HEAD・追跡fileのclean状態・未追跡の編集対象・未確認範囲を検査する。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。相談・実行不能の報告は未完了状態を保持する。指摘の採否やレビューの品質は機械的な完了判定の対象外。
+`independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、起動された専用子の入力と`SubagentStop`のJSON結果を照合する。独立レビューが必要かはskillが判断し、`Stop`で完了を推測・阻止しない。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。
 
-配布先は`SubagentStart`・`SubagentStop`・`Stop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
+配布先は`PreToolUse`・`SubagentStart`・`SubagentStop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
 
 cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。tddの`FROM_DOC.md`は`$tdd --from-doc`だけが読む。
 
-読込条件は各skillの参照元と、必要な操作で案内するhookに置く。AGENTS.mdへ文書の案内表は置かない。共通基準はコード変更時の設計・実装・reviewerが共有し、文書変更のreviewerは変更fileと直接依存先だけを読む。起動・結果処理はメイン、子専用契約はreviewerだけが読む。補助手順から上位フローへの再読参照は置かない。skillを使わない通常作業では、共通基準のhook注入は最初の対象コード編集時であり、調査開始時の読込は保証しない。
+共通基準は調査後、設計・実装方針を決める前にskillから読む。子の起動と独立レビューの手順は`load-operation-context.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
 
 | 禁止・制約の種類 | 実施箇所・境界 |
 |---|---|
@@ -170,7 +170,7 @@ cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入�
 | registry取得・Prisma反映 | `deny-registry.sh`・`deny-migration.sh`。コマンド検査。任意script内部の通信・副作用は保証しない |
 | 一般調査・実装の委任、起動設定の上書き | `require-implementer.sh`。専用roleだけ許可 |
 | reviewerの編集・再委任 | Codexのread-only sandboxとagents無効化。Claudeはtool制限。Bashの意味的な読み取り専用性は文書だけでは保証しない |
-| 開始HEAD保持・独立レビュー未実行での通常完了 | `independent-review.sh`。状態・対象SHA・専用子の最終結果を検査 |
+| 開始HEAD保持・起動済み独立レビューの証跡 | `independent-review.sh`。対象SHA・clean状態・専用子の最終結果を検査。レビューの必要性は判定しない |
 | 設定・秘密・lockfile・migration fileの編集 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
 | polishの対象path・tracked・clean | `polish/capture-scope.sh`・`polish/quality-gate.sh`。検査scriptの実行自体の省略は防がない |
 | assertionの弱体化・不要な抽象化・要件の推測・検証結果の誤認 | 共通基準・各工程・独立レビュー。操作名だけでは判定できないため文書に残す |
