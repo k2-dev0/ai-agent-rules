@@ -61,3 +61,5 @@ Batonの`PreModelSwitch`は標準出力を使用しないため、配布hookは�
 Baton経由かどうかを通常のCodex `PreToolUse`から正確に識別できないため、`MODEL_SWITCH.md`の直接読込はそこで拒否しない。Baton対応時は`MODEL_SELECTION.md`の条件に従って事前読込を省略し、Baton非対応時は従来どおり切替前に読む。
 
 実モデルprobeは`node tests/probe_baton_pre_model_switch_runtime.mjs /Users/kaikojima/Desktop/develop/baton`で再実行する。外部モデルを呼ぶため通常suiteには含めず、events・rollout・集計を新しい一時directoryへ保存する。
+
+任意probeのRPC無応答時に内部timeout後も待機が残る`medium`指摘は、本番hook・通常suite・モデル実行へ影響せず外側から停止できるため、修正対象外とした。
