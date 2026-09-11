@@ -1,5 +1,6 @@
 """Verify Baton's PreModelSwitch contract for the distributed hook."""
 import json
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -32,7 +33,8 @@ class PreModelSwitch(unittest.TestCase):
 
             def call(payload):
                 return subprocess.run(
-                    [str(script)], input=json.dumps(payload), text=True, capture_output=True,
+                    [str(script)], input=payload if isinstance(payload, str) else json.dumps(payload),
+                    text=True, capture_output=True,
                 )
 
             first = call(event())
@@ -40,6 +42,8 @@ class PreModelSwitch(unittest.TestCase):
             self.assertEqual(first.stdout, "")
             self.assertIn("PRE_MODEL_SWITCH_CONTEXT", first.stderr)
             self.assertIn("SWITCH_GUIDANCE_V1", first.stderr)
+            expected_hash = hashlib.sha256(b"SWITCH_GUIDANCE_V1").hexdigest()
+            self.assertEqual(len(list((root / ".codex/tmp").glob(f"pre-model-switch.*.{expected_hash}"))), 1)
             self.assertEqual(call(event(turn="turn-2")).returncode, 0)
 
             self.assertEqual(call(event(thread="thread-2")).returncode, 2)
@@ -62,6 +66,7 @@ class PreModelSwitch(unittest.TestCase):
 
             for invalid in (
                 {},
+                "{}\\n" + json.dumps(event(thread="multiple")),
                 {**event(thread="bad-event"), "event": "Other"},
                 {**event(thread="bad-thread"), "threadId": ""},
                 {**event(thread="bad-config"), "to": {"model": "new-model", "config": {}}},
