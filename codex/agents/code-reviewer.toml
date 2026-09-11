@@ -3,5 +3,6 @@ description = "実装会話を継承せず、固定commitの差分を要求と�
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
+developer_instructions = "起動hookが注入した専用契約に従う。契約未注入ならincompleteを返し、作業しない。"
 [agents]
 enabled = false
