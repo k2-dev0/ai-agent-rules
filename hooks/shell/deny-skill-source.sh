@@ -27,11 +27,12 @@ source_path() {
 }
 
 is_injected_context() {
-  local path
-  path=$(source_path "$1")
+  local raw=$1 path
+  case "$raw" in *:*/skills/*) raw=${raw#*:} ;; esac
+  path=$(source_path "$raw")
   [ -f "$path" ] || return 1
   case "$path" in
-    */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md) return 0 ;;
+    */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
   esac
   return 1
 }
