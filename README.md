@@ -152,6 +152,8 @@ bash tests/verify-all.sh
 
 Codex CLIがあればversion・strict config・execpolicyも検証し、なければ省略する。skill形式検査は配布形式に対応した`python3 tests/validate-skills.py skills/<skill名>`を使い、全体テストでは全skillと検査器の異常系を検証する。`tests/run-tests.sh`は全体テストから呼び、単体では使わない。
 
+`test_context_delivery.py`は両配布の全matcherを再現し、hook出力のUTF-8 bytesと回数を測る。実モデルの受信証明とは区別する。`python3 tests/probe_context_runtime.py <codex|claude> <investigation|document_change|normal_implementation|from_doc|review_repair>`は認証済みCLIでの任意検証で、隔離fixture・hook出力・モデル応答を一時directoryへ保存する。project hookの発火なしは失敗とし、Codexの`--inline-hooks`診断をproject配置の成功扱いにしない。
+
 ### 独立レビューと文書の読込
 
 `independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、起動された専用子の入力と`SubagentStop`のJSON結果を照合する。独立レビューが必要かはskillが判断し、`Stop`で完了を推測・阻止しない。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。
