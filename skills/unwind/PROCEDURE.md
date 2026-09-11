@@ -10,8 +10,6 @@ test・設定・文書・Prisma schema・生成物・vendor・依存物・未変
 
 独立レビューとして検出候補の抽出だけを`nesting-reviewer`へ渡す。機能の目的、要件、設計、変更範囲の調査は依頼しない。候補の採否、修正・却下判断、検証はメインが行い、[メインモデル選択](../MODEL_SELECTION.md)に従う。
 
-子の起動直前に[子・待機の規則](../SUBAGENT_RULES.md)を読む。
-
 1. 入力された本体コードのpathだけを、専用`nesting-reviewer`へ渡す
    - briefは機能名・repository絶対path・HEAD・対象path
    - Codexは`agent_type: "nesting-reviewer"`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type: "nesting-reviewer"`
