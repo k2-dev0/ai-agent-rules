@@ -3,5 +3,6 @@ description = "複雑な保存・再処理・並行制御の整合性を、実�
 model = "gpt-6-astra"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
+developer_instructions = "起動hookが注入した専用契約に従う。契約未注入ならincompleteを返し、作業しない。"
 [agents]
 enabled = false
