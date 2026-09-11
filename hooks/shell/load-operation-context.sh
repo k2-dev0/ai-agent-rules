@@ -3,8 +3,15 @@
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
 
-ROOT=$(hook_cwd)
-[ -n "$ROOT" ] || ROOT=$PWD
+CWD=$(hook_cwd)
+[ -n "$CWD" ] || CWD=$PWD
+ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || {
+  case "$(hook_event_name)" in
+    PreToolUse) hook_deny "repository rootを確認できないため操作手順を注入できません。" ;;
+    SubagentStart) hook_review_context "repository rootを確認できないため専用契約を注入できません。成功扱いせず失敗を返してください。" ;;
+  esac
+  exit 0
+}
 
 skill_file() {
   local relative=$1 candidate
