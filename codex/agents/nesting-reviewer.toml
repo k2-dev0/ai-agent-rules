@@ -3,5 +3,6 @@ description = "指定された本体コードの深いネスト候補だけを�
 model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 sandbox_mode = "read-only"
+developer_instructions = "起動hookが注入した専用契約に従う。契約未注入なら失敗を返し、作業しない。"
 [agents]
 enabled = false
