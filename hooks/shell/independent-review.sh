@@ -71,7 +71,12 @@ case "$EVENT" in
       Agent|*spawn_agent)
         ROLE=$(hook_agent_type)
         case "$ROLE" in code-reviewer|deep-reviewer) ;; *) exit 0 ;; esac
-        BRIEF=$(hook_review_brief) || hook_deny "コードレビューはrepository・review_base・review_head・requirementsを持つJSONで起動してください。"
+        case "$HOOK_AGENT:$TOOL" in
+          codex:*spawn_agent)
+            hook_agent_message_valid || hook_deny "native reviewerはmessageだけを使ってください。別fieldで入力照合を迂回できません。"
+            ;;
+        esac
+        BRIEF=$(hook_review_brief) || hook_deny "レビュー入力をJSONとして検査できません。この起動経路では証跡照合が利用不能です。別fieldの併用や別toolで迂回せず、独立レビュー未完了と報告してください。"
         printf '%s' "$BRIEF" | jq -e 'all(.repository,.review_base,.review_head,.requirements; type == "string" and length > 0)' >/dev/null || hook_deny "独立レビューの入力が不足しています。"
         BASE=$(printf '%s' "$BRIEF" | jq -r '.review_base')
         HEAD=$(printf '%s' "$BRIEF" | jq -r '.review_head')
@@ -83,6 +88,7 @@ case "$EVENT" in
         else
           DATA=$(jq -cn --arg base "$BASE" '{base:$base,generation:0,paths:[]}')
         fi
+        BRIEF=$(printf '%s' "$BRIEF" | jq -c 'del(.request_id)')
         REQUEST_ID=$(printf '%s' "$BRIEF" | jq -cS . | shasum -a 256 | awk '{print $1}')
         [ "${#REQUEST_ID}" = 64 ] || hook_deny "独立レビュー入力のhashを計算できません。"
         BRIEF=$(printf '%s' "$BRIEF" | jq -c --arg request_id "$REQUEST_ID" '. + {request_id:$request_id}')
