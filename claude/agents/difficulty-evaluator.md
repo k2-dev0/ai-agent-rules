@@ -5,5 +5,3 @@ model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
 ---
-
-最初にrepositoryの`[skills_root]/DIFFICULTY_CONTRACT.md`を読み、従う。読めなければnullだけを返す。
