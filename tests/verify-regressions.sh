@@ -89,7 +89,7 @@ for agent in claude codex; do
   check grep -Fq 'syntax・import・型の失敗はシナリオを変えず先に直す' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '[設計書モード](FROM_DOC.md)' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '`tsc -p <tsconfig> --noEmit`' "$target/$skill_root/tdd/SKILL.md"
-  check grep -Fq 'polish後に[独立レビュー]' "$target/$skill_root/tdd/FROM_DOC.md"
+  check grep -Fq 'polish後に専用reviewerで独立レビュー' "$target/$skill_root/tdd/FROM_DOC.md"
   check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/FROM_DOC.md"
 done
 
@@ -160,12 +160,11 @@ output=$(printf '%s' "$input" | bash .claude/hooks/shell/load-required-contract.
 check test -z "$output"
 check jq -e '.permissions.deny | index("Edit(.claude/**)") | not' "$REPO/claude/settings.local.json"
 
-# 必要時だけskillの判断基準を注入し、同じsessionでは繰り返さない。
+# 実装基準は設計前に読み、編集時には重複注入しない。
 input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"RULE1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:"src/example.ts"}}')
 command=$(jq -r '.hooks.PreToolUse[] | select(.matcher == "Edit|Write|NotebookEdit") | .hooks[].command | select(contains("load-required-contract.sh"))' "$REPO/claude/settings.json")
 output=$(printf '%s' "$input" | bash -c "$command")
-check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
-check test -z "$(printf '%s' "$input" | bash -c "$command")"
+check test -z "$output"
 
 # 専用roleの設定は検査し、通常のagent選択・直接編集へは介入しない。
 implementer_denied() {
@@ -256,7 +255,7 @@ for agent in claude codex; do
   fi
   command="bash .$agent/hooks/shell/require-implementer.sh workflow"
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{cwd:$cwd,tool_input:{($role):"nesting-reviewer",fork_turns:"none"}}')
-  check grep -Fq "$contract" "$definition"
+  check grep -Fq "${contract#*/skills/}" ".$agent/hooks/shell/load-operation-context.sh"
   check grep -Fxq "$boundary" "$definition"
   check test -s "$contract"
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
@@ -277,7 +276,7 @@ for agent in claude codex; do
   check implementer_denied "$input" '配布設定と一致しません'
   mv "$definition.original" "$definition"
   mv "$contract" "$contract.missing"
-  check implementer_denied "$input" '検出契約が無い'
+  check implementer_denied "$input" '検出契約がありません'
   mv "$contract.missing" "$contract"
   mv "$definition" "$definition.missing"
   check implementer_denied "$input" '定義が無い'
@@ -340,7 +339,7 @@ for agent in claude codex; do
     check implementer_denied "$input" '配布設定と一致しません'
     mv "$definition.original" "$definition"
     mv "$contract" "$contract.missing"
-    check implementer_denied "$input" '契約が無い'
+    check implementer_denied "$input" '契約がありません'
     mv "$contract.missing" "$contract"
     mv "$definition" "$definition.missing"
     check implementer_denied "$input" '定義が無い'
