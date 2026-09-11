@@ -65,8 +65,8 @@ class ReviewEvidence(unittest.TestCase):
                         "requirements": "Implement the requested value.",
                     }
                     response = call("PreToolUse", tool_name="Agent", tool_input={role_key: "code-reviewer", "prompt": json.dumps(brief)})
-                    if response is None:
-                        brief["request_id"] = json.loads(state.read_text())["pending"]["request_id"]
+                    if response and response.get("hookSpecificOutput", {}).get("updatedInput"):
+                        brief = json.loads(response["hookSpecificOutput"]["updatedInput"]["prompt"])
                     return brief, response
 
                 def start():
@@ -98,7 +98,7 @@ class ReviewEvidence(unittest.TestCase):
                 _, denied = launch(head=base)
                 self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
                 brief, response = launch()
-                self.assertIsNone(response)
+                self.assertEqual(response["hookSpecificOutput"]["permissionDecision"], "allow")
                 start()
                 end(result(brief), child="other")
                 self.assertFalse(accepted())
