@@ -154,7 +154,7 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 `test_context_delivery.py`は両配布の全matcherを再現し、hook出力のUTF-8 bytesと回数を測る。実モデルの受信証明とは区別する。`python3 tests/probe_context_runtime.py <codex|claude> <investigation|document_change|normal_implementation|from_doc|review_repair>`は認証済みCLIでの任意検証で、隔離fixture・hook出力・モデル応答を一時directoryへ保存する。project hookの発火なしは失敗とし、Codexの`--inline-hooks`診断をproject配置の成功扱いにしない。
 
-`test_pre_model_switch.py`はBaton eventの入力・no-op・thread別receipt・文書変更・nested cwd・失敗を検証する。`BATON_ROOT=/path/to/baton bash tests/verify-all.sh`はBatonの実loader・runnerへ配布hookを接続する。
+`test_pre_model_switch.py`はBaton eventの入力・model/effortだけの同値要求・thread別receipt・文書変更・nested cwd・失敗を検証する。`BATON_ROOT=/path/to/baton bash tests/verify-all.sh`はBatonの実loader・runnerへ配布hookを接続する。`node tests/probe_baton_pre_model_switch_runtime.mjs /path/to/baton`は認証済みCodexで、旧モデルへの本文配信・1回の再試行・切替後の完了を実測する。
 
 ### 独立レビューと文書の読込
 
