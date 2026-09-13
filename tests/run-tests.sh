@@ -83,7 +83,7 @@ DIFFICULTY_AGENT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse
 DIFFICULTY_FIRST=$(echo "$DIFFICULTY_AGENT" | bash "$H/load-operation-context.sh")
 if matches_expected deny "$DIFFICULTY_FIRST" &&
    echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'MODEL_SELECTION.md' &&
-   echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'SUBAGENT_RULES.md'; then
+   echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'サブエージェント'; then
   PASS=$((PASS+1)); echo "ok   required-reading: difficulty起動前にモデル選択と親契約を注入"
 else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: difficulty起動前の親contextが不足 -> [$DIFFICULTY_FIRST]"
