@@ -107,6 +107,7 @@ check "protect-git: git status は棄権"    empty protect-git.sh '{"tool_name":
 check "config: Edit .claude は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
 check "config: E2E artifactsのWriteは許可" empty protect-config.sh '{"tool_name":"Write","tool_input":{"file_path":".codex/e2e/artifacts/run-001.png"}}'
 check "config: E2E artifactsのmkdirは許可" empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"mkdir -p .codex/e2e/artifacts"}}'
+check "config: E2E artifactsを含む複合mkdirはdeny" deny protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"mkdir -p .codex/e2e/artifacts\nmkdir -p .codex/settings"}}'
 check "config: Edit .claude/prompt は許可" empty protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/prompt/branch-sample-prompt.md"}}'
 check "config: promptから設定へ戻るpathは拒否" deny protect-config.sh '{"tool_name":"Write","tool_input":{"file_path":".claude/prompt/../settings.json"}}'
 check "config: Edit .agents は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".agents/skills/foo/SKILL.md"}}'
