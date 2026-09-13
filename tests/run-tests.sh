@@ -79,7 +79,7 @@ else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
 fi
 
-DIFFICULTY_AGENT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"DIFF1",cwd:$cwd,tool_name:"Agent",tool_input:{agent_type:"difficulty-evaluator",fork_turns:"none",prompt:"{}"}}')
+DIFFICULTY_AGENT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"DIFF1",cwd:$cwd,tool_name:"Agent",tool_input:{subagent_type:"difficulty-evaluator",fork_turns:"none",prompt:"{}"}}')
 DIFFICULTY_FIRST=$(echo "$DIFFICULTY_AGENT" | bash "$H/load-operation-context.sh")
 if matches_expected deny "$DIFFICULTY_FIRST" &&
    echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'MODEL_SELECTION.md' &&
