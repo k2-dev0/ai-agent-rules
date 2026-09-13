@@ -77,14 +77,14 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 | [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-変更時は[AGENTS.md](AGENTS.md)から短い[モデル選択](skills/MODEL_SELECTION.md)を読み、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。Codexのモデル切替手順はBatonの`PreModelSwitch`で元モデルへ一度だけ返し、Baton非対応環境だけ事前に読む。
+変更時は[AGENTS.md](AGENTS.md)の時刻目標に従い、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。`MODEL_SELECTION.md`はdifficulty起動直前にhookで親へ注入し、調査中は読ませない。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。Codexのモデル切替手順はBatonの`PreModelSwitch`で元モデルへ一度だけ返し、Baton非対応環境だけ事前に読む。
 
 hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
 
 | 正本 | 内容 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 全変更に共通するモデル選択の目標と入口 |
-| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 評価の適用条件、モデル対応、再利用・再評価条件 |
+| [AGENTS.md](AGENTS.md) | 方針確定後・最初の編集前にdifficultyを起動する目標 |
+| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | difficulty起動直前に親へ注入する評価条件、モデル対応、再利用・再評価条件 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | Batonでは切替前に元モデルへ注入し、非対応環境では切替前だけ読む手順 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
@@ -108,11 +108,11 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 | 設定・秘密情報・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh`（hooks/shell配下） |
 | migration／履歴制限 | `hooks/shell/deny-migration.sh`・`hooks/shell/deny-history.sh` |
 | 全面Write確認・commit契約 | `hooks/shell/overwrite.sh`・`hooks/shell/commit-gate.sh` |
-| 必須資料・専用の子の起動検査 | `hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
+| 必須資料・専用の子の起動検査 | `hooks/shell/load-operation-context.sh`・`hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
 
 Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用role以外の起動・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
 
-難易度評価の起動hookは専用設定を検査する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
+難易度評価の起動hookは専用設定を検査し、difficulty起動直前に`MODEL_SELECTION.md`を親へ注入する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
 
 評価役へモデル情報・選択基準は渡さず、返却は1〜10の点数と200文字を目安にした理由だけとする。主担当が点数をモデルへ対応させる。判定不能時は`null`を返し、主担当は編集を止める。
 
@@ -164,7 +164,7 @@ Codex CLIがあればversion・strict config・execpolicyも検証し、なけ�
 
 cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。tddの`FROM_DOC.md`は`$tdd --from-doc`だけが読む。
 
-共通基準は調査後、設計・実装方針を決める前にskillから読む。子の起動と独立レビューの手順は`load-operation-context.sh`、Codexのモデル切替手順はBaton用`pre-model-switch.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
+共通基準は調査後、設計・実装方針を決める前にskillから読む。モデル選択は方針確定後・最初の編集前のdifficulty起動時にだけ親へ注入する。子の起動と独立レビューの手順は`load-operation-context.sh`、Codexのモデル切替手順はBaton用`pre-model-switch.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
 
 | 禁止・制約の種類 | 実施箇所・境界 |
 |---|---|
