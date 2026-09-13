@@ -18,7 +18,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "chrome-devtools-mcp@1.6.0",
+        "chrome-devtools-mcp@1.9.0",
+        "--workspace=.",
         "--experimentalScreencast=true",
         "--allowed-url-pattern=*://localhost:*/*",
         "--allowed-url-pattern=*://127.0.0.1:*/*",
