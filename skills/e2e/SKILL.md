@@ -35,6 +35,8 @@ chrome-devtools-mcpで次の順に実行する。
 - 認証が前提ならログイン後、最初のシナリオ前に`screencast_start`を`filePath=.[agent_name]/e2e/artifacts/<run-id>.webm`で呼ぶ
   - ログイン自体が検証対象の場合だけ認証操作を録画する
   - toolがない、または録画を開始できなければシナリオを実行せず報告する
+- `screencast_start`の前に対象pageへ`press_key`の`Meta+0`を送り、保存済みChrome page zoomを100%へ戻す
+- 直後に`evaluate_script`で`devicePixelRatio`、`visualViewport.scale`、`innerWidth`、`innerHeight`を確認し、scaleが1からずれる、または寸法が整数でなければ録画せず報告する
 - 各操作後に表示の安定を待ち、`take_screenshot`を`filePath=.[agent_name]/e2e/artifacts/<run-id>-001.png`から連番で呼ぶ
   - 成功・失敗の両方を残す
 - error・表示崩れは状態と再現手順を記録する
