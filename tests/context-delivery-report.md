@@ -10,8 +10,8 @@
 |---|---|
 | 通常コード編集・文書修正・調査 | 0 |
 | 明示 `tdd --from-doc` のprompt受信 | 0（skillで扱う） |
-| difficulty起動前 | 共通手順を親へ1回、操作をdeny |
-| difficulty開始 | 評価契約を子へ1回 |
+| difficulty起動前 | MODEL_SELECTION.mdと共通手順を親へ1回、操作をdeny |
+| difficulty開始 | 評価契約だけを子へ1回 |
 | 同じsessionで後続review起動前 | review手順だけを親へ1回、操作をdeny |
 | review開始 | review契約を子へ1回 |
 | 同じ内容での起動再試行 | 文書注入0 |
