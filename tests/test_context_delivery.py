@@ -114,6 +114,8 @@ class ContextDelivery(unittest.TestCase):
                 parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)
                 parent_text = metric("difficulty_parent", parent)
                 self.assertEqual(len(parent_text), 1)
+                self.assertIn("メインモデルの選択", parent_text[0])
+                self.assertIn("1〜3はLuna / max", parent_text[0])
                 self.assertIn("サブエージェント", parent_text[0])
                 self.assertNotIn("WRONG_PRODUCT_CONTEXT", parent_text[0])
                 self.assertNotIn("実装難度の独立評価", parent_text[0])
@@ -125,6 +127,7 @@ class ContextDelivery(unittest.TestCase):
                 self.assertIn("実装難度の独立評価", child_text[0])
                 self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
                 self.assertNotIn("サブエージェント", child_text[0])
+                self.assertNotIn("メインモデルの選択", child_text[0])
 
                 review_brief = {
                     "repository": str(root), "review_base": head, "review_head": head,
