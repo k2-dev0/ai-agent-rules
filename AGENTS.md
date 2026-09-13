@@ -1,3 +1,3 @@
 ## メインモデル
 
-- 変更はユーザー指定を優先し、`[skills_root]/MODEL_SELECTION.md`で実装難度に適したモデル・effortを選んで行う
+- ユーザー指定がなければ、変更の実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する
