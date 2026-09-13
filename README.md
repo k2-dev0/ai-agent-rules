@@ -134,7 +134,7 @@ Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用
 | Prisma migrate/db push/db execute、Git push/cherry-pick、依存install/add | 拒否 |
 | 複数stage・対象名不一致・日本語なし・AI署名・amendのcommit | 拒否 |
 
-Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。両環境のchrome-devtoolsは`chrome-devtools-mcp@1.9.0`を`--workspace=.`付きで起動し、Chrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、PATH上の`ffmpeg`を使う実験screencastを有効化する。E2E成果物の`.[agent_name]/e2e/artifacts/`だけは保護hookが保存先作成を許可する。Codexでは`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
+Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。両環境のchrome-devtoolsは`chrome-devtools-mcp@1.9.0`を`--workspace=.`付きで起動し、Chrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、PATH上の`ffmpeg`を使う実験screencastを有効化する。E2E録画前は`Meta+0`でpage zoomを100%へ戻し、`visualViewport.scale`と整数viewport寸法を確認する。E2E成果物の`.[agent_name]/e2e/artifacts/`だけは保護hookが保存先作成を許可する。Codexでは`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
 
 ## 文書の編集
 
