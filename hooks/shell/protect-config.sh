@@ -42,7 +42,8 @@ CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
 
 # E2E成果物directoryだけは、MCP起動前の保存先作成を許可する。
-if echo "$CMD" | grep -qE '^[[:space:]]*mkdir[[:space:]]+-p[[:space:]]+\.(claude|codex)/e2e/artifacts(/[A-Za-z0-9-]+)*[[:space:]]*$'; then
+if [[ "$CMD" != *$'\n'* && "$CMD" != *$'\r'* ]] &&
+   echo "$CMD" | grep -qE '^[[:space:]]*mkdir[[:space:]]+-p[[:space:]]+\.(claude|codex)/e2e/artifacts(/[A-Za-z0-9-]+)*[[:space:]]*$'; then
   exit 0
 fi
 
