@@ -334,7 +334,7 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
+if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' AGENTS.md && ! grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Claude配置と参照条件"
 else
   ng "モデル選択・切り替え: Claude配置または参照条件が不正"
@@ -536,7 +536,7 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
+if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' AGENTS.md && ! grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Codex配置と参照条件"
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
