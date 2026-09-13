@@ -635,13 +635,14 @@ fi
 if jq -e '
   .mcpServers["chrome-devtools"].type == "stdio" and
   .mcpServers["chrome-devtools"].command == "npx" and
-  (.mcpServers["chrome-devtools"].args | index("chrome-devtools-mcp@1.6.0")) and
+  (.mcpServers["chrome-devtools"].args | index("chrome-devtools-mcp@1.9.0")) and
+  (.mcpServers["chrome-devtools"].args | index("--workspace=.")) and
   (.mcpServers["chrome-devtools"].args | index("--experimentalScreencast=true")) and
   (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://localhost:*/*")) and
   (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://127.0.0.1:*/*")) and
   (.mcpServers["chrome-devtools"].args | index("--allowed-url-pattern=*://[\\:\\:1]:*/*"))
 ' "$CM" >/dev/null 2>&1; then
-  ok "chrome-devtools: Claudeで固定版・localhost限定・screencast有効"
+  ok "chrome-devtools: Claudeで固定版・workspace root・localhost限定・screencast有効"
 else
   ng "chrome-devtools: Claude MCP起動設定が不正"
 fi
@@ -669,11 +670,13 @@ for MCP_SERVER in serena chrome-devtools; do
   ' .codex/config.toml || append_group_failure "upload_fileの承認がない"
   CONFIGURED_COUNT=$(grep -c '^\[mcp_servers.chrome-devtools.tools.' .codex/config.toml)
   [ "$CONFIGURED_COUNT" = "1" ] || append_group_failure "不要なtool個別設定が残存"
+  grep -Fq -- 'chrome-devtools-mcp@1.9.0' .codex/config.toml || append_group_failure "chrome-devtoolsの版が不正"
+  grep -Fq -- '--workspace=.' .codex/config.toml || append_group_failure "filesystem workspace rootが未指定"
   grep -Fq -- '--experimentalScreencast=true' .codex/config.toml || append_group_failure "screencastが無効"
   for LOCAL_PATTERN in '--allowed-url-pattern=*://localhost:*/*' '--allowed-url-pattern=*://127.0.0.1:*/*' '--allowed-url-pattern=*://[\\:\\:1]:*/*'; do
     grep -Fq -- "$LOCAL_PATTERN" .codex/config.toml || append_group_failure "localhost制限なし: $LOCAL_PATTERN"
   done
-  report_group "$MCP_SERVER: localhost限定・screencast有効・uploadだけ承認" "$GROUP_FAILURES"
+  report_group "$MCP_SERVER: 固定版・workspace root・localhost限定・screencast有効・uploadだけ承認" "$GROUP_FAILURES"
 done
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && [ -f .codex/e2e/artifacts/.gitignore ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
