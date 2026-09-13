@@ -12,12 +12,19 @@ TOOL=$(hook_tool_name)
 CONFIG_MSG=".claude / .codex / .agents 配下の設定・skill をエージェント自身が変更することは禁止です。prompt/ の設計書だけは直接更新できます。"
 CONFIG_PATH_RE='(^|/)(\.claude|\.codex|\.agents)(/|$)'
 PROMPT_PATH_RE='(^|/)(\.claude|\.codex)/prompt(/|$)'
+E2E_ARTIFACT_PATH_RE='(^|/)(\.claude|\.codex)/e2e/artifacts(/|$)'
 
 case "$TOOL" in
   Edit|Write|NotebookEdit|apply_patch)
     while IFS= read -r FILE; do
       [ -z "$FILE" ] && continue
       if echo "$FILE" | grep -qE "$PROMPT_PATH_RE"; then
+        case "/$FILE/" in
+          */../*) hook_deny "$CONFIG_MSG" ;;
+        esac
+        continue
+      fi
+      if echo "$FILE" | grep -qE "$E2E_ARTIFACT_PATH_RE"; then
         case "/$FILE/" in
           */../*) hook_deny "$CONFIG_MSG" ;;
         esac
@@ -33,6 +40,11 @@ esac
 
 CMD=$(hook_command)
 [ -z "$CMD" ] && exit 0
+
+# E2E成果物directoryだけは、MCP起動前の保存先作成を許可する。
+if echo "$CMD" | grep -qE '^[[:space:]]*mkdir[[:space:]]+-p[[:space:]]+\.(claude|codex)/e2e/artifacts(/[A-Za-z0-9-]+)*[[:space:]]*$'; then
+  exit 0
+fi
 
 # 読み取りや設定内スクリプトの実行は許可し、設定パスへの書き込み形だけを止める。
 CONTROL_RE='(\.claude|\.codex|\.agents)'
