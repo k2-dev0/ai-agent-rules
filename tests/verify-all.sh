@@ -204,6 +204,8 @@ E2E_SKILL="$REPO/skills/e2e/SKILL.md"
 E2E_ARTIFACT_IGNORE="$REPO/e2e/artifacts/.gitignore"
 if grep -Fq '`screencast_start`' "$E2E_SKILL" &&
    grep -Fq '`screencast_stop`' "$E2E_SKILL" &&
+   grep -Fq '`press_key`の`Meta+0`' "$E2E_SKILL" &&
+   grep -Fq '`visualViewport.scale`' "$E2E_SKILL" &&
    grep -Fq '成功・失敗の両方を残す' "$E2E_SKILL" &&
    grep -Fq '成果物は削除しない' "$E2E_SKILL" &&
    [ -f "$E2E_ARTIFACT_IGNORE" ] && grep -Fxq '*' "$E2E_ARTIFACT_IGNORE" && grep -Fxq '!.gitignore' "$E2E_ARTIFACT_IGNORE"; then
