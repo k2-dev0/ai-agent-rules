@@ -54,8 +54,14 @@ case "$(hook_event_name)" in
       Agent|*spawn_agent)
         ROLE=$(hook_agent_type)
         case "$ROLE" in difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;; *) exit 0 ;; esac
+        FILES=
+        if [ "$ROLE" = difficulty-evaluator ]; then
+          FILE=$(skill_file MODEL_SELECTION.md) || hook_deny "MODEL_SELECTION.mdが見つかりません。"
+          FILES=$FILE
+        fi
         FILE=$(skill_file SUBAGENT_RULES.md) || hook_deny "SUBAGENT_RULES.mdが見つかりません。"
-        FILES=$FILE
+        [ -n "$FILES" ] && FILES="$FILES
+$FILE" || FILES=$FILE
         case "$ROLE" in
           code-reviewer|deep-reviewer)
             FILE=$(skill_file INDEPENDENT_REVIEW.md) || hook_deny "INDEPENDENT_REVIEW.mdが見つかりません。"
