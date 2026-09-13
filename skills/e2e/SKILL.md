@@ -27,6 +27,8 @@ bash [skills_root]/e2e/apply-e2e-plan.sh <ドラフトのパス>
 
 ## 実行・判定
 
+開始前にchrome-devtools MCPが`chrome-devtools-mcp@1.9.0`かつ`--workspace=.`で起動され、`.[agent_name]/e2e/artifacts/`が保存対象になっていることを確認する。未設定ならブラウザを操作せず報告する。
+
 chrome-devtools-mcpで次の順に実行する。
 
 - 実行ごとに英数字とhyphenだけの一意な`run-id`を決め、成果物を`.[agent_name]/e2e/artifacts/`へ保存する
