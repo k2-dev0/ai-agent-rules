@@ -11,7 +11,7 @@ check() {
   if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*" >&2; exit 1; fi
 }
 
-# 短いAGENTSからモデル選択・切り替え手順を両配置で解決する。
+# 短いAGENTSはモデル選択の起動時刻だけを示し、詳細はdifficulty起動hookへ遅延する。
 for agent in claude codex; do
   target="$TMP/$agent project"
   mkdir -p "$target/.$agent"
@@ -25,7 +25,9 @@ for agent in claude codex; do
   (cd "$target" && bash "$skill_root/bootstrap/bootstrap.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
   model_selection="$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
+  check grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' "$target/AGENTS.md"
+  check test "$(grep -Fxc "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md")" = 0
+  check grep -Fq 'MODEL_SELECTION.md' "$target/.$agent/hooks/shell/load-operation-context.sh"
   check test -s "$model_selection"
   check test -s "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '変更を伴う依頼だけに使う' "$model_selection"
