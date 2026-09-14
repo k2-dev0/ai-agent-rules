@@ -84,7 +84,7 @@ try {
     experimentalRawEvents: true, developerInstructions: "Call only switch_model and follow its result. After the applied continuation, answer exactly PRE_MODEL_SWITCH_LIVE_OK." });
   testThread = started.thread;
   await send("turn/start", { threadId: testThread.id, effort: "high", input: [{ type: "text",
-    text: 'Call switch_model({"model":"gpt-6-astra","config":{"effort":"high"}}) alone. Follow its result. After the applied continuation answer exactly PRE_MODEL_SWITCH_LIVE_OK.' }] });
+    text: 'Call switch_model({"model":"gpt-6-astra","config":{"effort":"xhigh"}}) alone. Follow its result. After the applied continuation answer exactly PRE_MODEL_SWITCH_LIVE_OK.' }] });
   await completed;
   const dynamicCalls = events.filter(event => event.method === "item/completed" &&
     event.params?.item?.type === "dynamicToolCall" && event.params.item.tool === "switch_model");
@@ -101,7 +101,7 @@ try {
   const runtimeCalls = records.filter(record => record.type === "event_msg" && record.payload?.type === "item_completed" &&
     record.payload.item?.type === "DynamicToolCall" && record.payload.item.tool === "switch_model");
   assert.equal(runtimeCalls.length, 2, "runtime history must contain the failed call and one retry");
-  const requested = { model: "gpt-6-astra", config: { effort: "high" } };
+  const requested = { model: "gpt-6-astra", config: { effort: "xhigh" } };
   assert.deepEqual(runtimeCalls.map(record => record.payload.item.arguments), [requested, requested], "the retry must be identical");
   assert.equal(runtimeCalls[0].payload.turn_id, runtimeCalls[1].payload.turn_id, "the retry must run in the original turn");
   const contexts = records.filter(record => record.type === "turn_context");
