@@ -1,8 +1,12 @@
 #!/bin/bash
-# 最初のコード編集前のHEADと、起動された専用子の固定入力・最終結果をsession別に保持する。
+# shellを含む変更前HEADと、起動された専用子の固定入力・最終結果をsession別に保持する。
 # 文書への注入receiptやモデルが書いた「完了」印はレビュー証跡にしない。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
+. "$(dirname "$0")/git-safe-env.sh" || {
+  [ "$(hook_event_name)" != PreToolUse ] || hook_deny "独立レビューのGit実行環境を保護できません。"
+  exit 0
+}
 EVENT=$(hook_event_name)
 TOOL=$(hook_tool_name)
 ROOT=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || exit 0
@@ -19,10 +23,8 @@ fail() {
   exit 0
 }
 save() {
-  local DATA=$1 TEMP
-  mkdir -p "$STATE_DIR" || fail "独立レビュー状態を保存できません。"
-  TEMP=$(mktemp "$STATE_DIR/review-write.XXXXXX") || fail "独立レビュー状態を保存できません。"
-  printf '%s\n' "$DATA" > "$TEMP" && mv "$TEMP" "$STATE" || fail "独立レビュー状態を保存できません。"
+  local DATA=$1
+  printf '%s\n' "$DATA" | (cd "$ROOT" && python3 "$(dirname "$STATE_DIR")/hooks/shell/safe-files.py" "$HOOK_AGENT" review-state "$SESSION") || fail "独立レビュー状態を保存できません。"
 }
 clean() { git -C "$ROOT" diff --quiet && git -C "$ROOT" diff --cached --quiet; }
 head() { git -C "$ROOT" rev-parse --verify HEAD; }
@@ -39,11 +41,20 @@ tracked_paths() {
     [ ! -e "$ROOT/$file" ] || git -C "$ROOT" ls-files --error-unmatch -- "$file" >/dev/null || return 1
   done < <(printf '%s' "$DATA" | jq -r '.paths[]?')
 }
+(cd "$ROOT" && python3 "$(dirname "$STATE_DIR")/hooks/shell/safe-files.py" "$HOOK_AGENT" check "$STATE_DIR" "$STATE") || fail "独立レビュー状態の保存先が安全ではありません。"
 [ ! -L "$STATE" ] || fail "独立レビュー状態がsymlinkです。"
 DATA='{}'
 if [ -f "$STATE" ]; then
   DATA=$(cat "$STATE")
   printf '%s' "$DATA" | jq -e 'type == "object" and (.base | type == "string")' >/dev/null || fail "独立レビュー状態が壊れています。"
+fi
+# Shell writes do not emit Edit. Never leave a recorded result usable after the
+# tracked tree or commit changes, including on the next ordinary read command.
+if printf '%s' "$DATA" | jq -e '.result.status == "reviewed"' >/dev/null; then
+  if ! clean || [ "$(head)" != "$(printf '%s' "$DATA" | jq -r '.result.review_head')" ]; then
+    DATA=$(printf '%s' "$DATA" | jq 'del(.result, .pending)')
+    save "$DATA"
+  fi
 fi
 case "$EVENT" in
   UserPromptSubmit)
@@ -57,6 +68,15 @@ case "$EVENT" in
     ;;
   PreToolUse)
     case "$TOOL" in
+      Bash)
+        # A shell script may edit without using Edit/apply_patch. Capture before
+        # any shell execution; recording a base is not a review requirement or
+        # evidence that the command changed a file.
+        if [ ! -f "$STATE" ]; then
+          BASE=$(head) || exit 0
+          save "$(jq -cn --arg base "$BASE" '{base:$base,generation:0,paths:[]}')"
+        fi
+        ;;
       Edit|Write|MultiEdit|NotebookEdit|apply_patch)
         PATHS=$(hook_file_paths)
         REQUIRED=false
@@ -76,8 +96,8 @@ case "$EVENT" in
             hook_agent_message_valid || hook_deny "native reviewerはmessageだけを使ってください。別fieldで入力照合を迂回できません。"
             ;;
         esac
-        BRIEF=$(hook_review_brief) || hook_deny "レビュー入力をJSONとして検査できません。この起動経路では証跡照合が利用不能です。別fieldの併用や別toolで迂回せず、独立レビュー未完了と報告してください。"
-        printf '%s' "$BRIEF" | jq -e 'all(.repository,.review_base,.review_head,.requirements; type == "string" and length > 0)' >/dev/null || hook_deny "独立レビューの入力が不足しています。"
+        BRIEF=$(hook_review_brief) || hook_deny "レビュー入力がJSON objectではありません。prompt/message全体をrepository・review_base・review_head・requirementsのJSON文字列へ訂正し、同じtool・専用roleで新規起動してください。正しい本文でも確認できなければ未完了と報告してください。"
+        printf '%s' "$BRIEF" | jq -e '((keys - ["repository","review_base","review_head","requirements","request_id"]) | length == 0) and all(.repository,.review_base,.review_head,.requirements; type == "string" and test("\\S"))' >/dev/null || hook_deny "独立レビューはrepository・review_base・review_head・requirementsの4項目を空でない文字列で渡してください。"
         BASE=$(printf '%s' "$BRIEF" | jq -r '.review_base')
         HEAD=$(printf '%s' "$BRIEF" | jq -r '.review_head')
         printf '%s\n%s\n' "$BASE" "$HEAD" | grep -Ev '^([0-9a-f]{40}|[0-9a-f]{64})$' >/dev/null && hook_deny "review_base・review_headは完全なcommit SHAにしてください。"
