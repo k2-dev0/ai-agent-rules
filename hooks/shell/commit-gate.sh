@@ -6,7 +6,7 @@
 # 本 hook は deny 専任。適合するコミットの自動化は settings の allow(Bash(git commit:*)) が担う。
 # 例外(squash): 未 push 範囲のコミット整理は rebase スキルの決定的スクリプトのみが行い、
 #       squash 実行器も同じ契約実装を source して subject を検証する。
-#       生の履歴書き換えコマンドの deny は deny-history.sh が担う。
+#       生の履歴書き換えコマンドの deny は git-policy.py が担う。
 # 出力汚染の根絶: 決定 hook は stdout の決定JSON 以外を外へ出さない契約。stderr を捨てる。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
