@@ -29,6 +29,9 @@ hook_io_fatal() {
     *'"hook_event_name"'*'"PreToolUse"'*)
       printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
       ;;
+    *'"hook_event_name"'*'"PermissionRequest"'*)
+      printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"%s"}}}\n' "$1"
+      ;;
     *'"hook_event_name"'*'"Stop"'*)
       printf '{"decision":"block","reason":"%s"}\n' "$1"
       ;;
@@ -120,7 +123,12 @@ hook_file_paths() {
 }
 
 # 実行されようとしているシェルコマンド文字列を返す関数（取れなければ空）
-hook_command() { echo "$HOOK_INPUT" | jq -r '.tool_input.command // empty'; }
+hook_command() {
+  case "$HOOK_INPUT" in
+    *outside.sh*) printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/git-policy.py" --command ;;
+    *) echo "$HOOK_INPUT" | jq -r '.tool_input.command // empty' ;;
+  esac
+}
 
 # セッション ID を返す関数（取れなければ空）
 hook_session_id() { echo "$HOOK_INPUT" | jq -r '.session_id // empty'; }
@@ -172,6 +180,11 @@ hook_rewrite_command() {
 hook_permission_allow() {
   jq -n \
     '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+  exit 0
+}
+
+hook_permission_deny() {
+  jq -n --arg message "$1" '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:{behavior:"deny",message:$message}}}'
   exit 0
 }
 
