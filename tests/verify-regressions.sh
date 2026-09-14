@@ -128,20 +128,22 @@ for agent in claude codex; do
   git init -q
   export CLAUDE_PROJECT_DIR=$PWD
   if [ "$agent" = codex ]; then settings="$REPO/codex/hooks.json"; else settings="$REPO/claude/settings.json"; fi
-  check test "$(jq '[.hooks.PreToolUse[] | .matcher as $matcher | select("Bash" | test($matcher)) | .hooks[].command | select(contains("shell-file-write.sh"))] | length' "$settings")" = 1
+  check test "$(jq '[.hooks.PreToolUse[] | .matcher as $matcher | select("Bash" | test($matcher)) | .hooks[].command | select(contains("protect-git.sh"))] | length' "$settings")" = 1
   printf 'source\n' > source.txt
   printf 'original\n' > existing.txt
   ln -s existing.txt linked.txt
   for candidate in 'touch new.txt' 'touch existing.txt' 'chmod +x existing.txt' 'chown 1000 existing.txt' 'chgrp 1000 existing.txt' 'cp -n -- source.txt copied.txt' 'cp -n -- source.txt existing.txt' 'cp -n -- source.txt linked.txt' 'ln -s -- source.txt new-link.txt' "sed -n '1,20p' source.txt" "rg 'a > b' source.txt" 'cat source.txt >/dev/null'; do
     check shell_decision pass "$candidate"
   done
-  for candidate in 'cp source.txt existing.txt' 'cp -n -f source.txt existing.txt' 'mv source.txt existing.txt' 'ln -sf source.txt existing.txt' 'install source.txt existing.txt' 'rsync source.txt existing.txt' 'sed -i s/a/b/ existing.txt' 'sed -ni s/a/b/ existing.txt' "sed 'w existing.txt' source.txt" 'tee existing.txt' 'dd of=existing.txt' 'truncate -s 0 existing.txt' 'patch existing.txt change.diff' 'printf changed > existing.txt' 'printf changed >> existing.txt' 'printf changed >| existing.txt' 'chmod +x source.txt > existing.txt' 'touch source.txt > existing.txt' 'printf changed > new.txt' 'command /bin/cp source.txt existing.txt' "'/bin/cp' 'source.txt' 'existing.txt'" 'env MODE=test cp source.txt existing.txt' 'MODE=test cp source.txt existing.txt' 'cp -n -- source.txt .codex/config.toml'; do
-    check shell_decision deny "$candidate"
+  for candidate in 'cp source.txt existing.txt' 'cp -n -f source.txt existing.txt' 'mv source.txt existing.txt' 'ln -sf source.txt existing.txt' 'install source.txt existing.txt' 'rsync source.txt existing.txt' 'sed -i s/a/b/ existing.txt' 'sed -ni s/a/b/ existing.txt' "sed 'w existing.txt' source.txt" 'tee existing.txt' 'dd of=existing.txt' 'truncate -s 0 existing.txt' 'patch existing.txt change.diff' 'printf changed > existing.txt' 'printf changed >> existing.txt' 'printf changed >| existing.txt' 'chmod +x source.txt > existing.txt' 'touch source.txt > existing.txt' 'printf changed > new.txt' 'command /bin/cp source.txt existing.txt' "'/bin/cp' 'source.txt' 'existing.txt'" 'env MODE=test cp source.txt existing.txt' 'MODE=test cp source.txt existing.txt'; do
+    check shell_decision pass "$candidate"
   done
-  # 許可されたcommandを実行して、既存fileとリンク先が変わらないことを確認する。
-  for candidate in 'env MODE=test command -- /bin/cp source.txt existing.txt' "bash -c 'cp source.txt existing.txt'" "eval 'cp source.txt existing.txt'" 'gsed -i s/a/b/ existing.txt' "awk 'BEGIN { print 1 > \"existing.txt\" }'" "sed -n '1,20p' -e 'w existing.txt' source.txt"; do
-    check shell_decision deny "$candidate"
+  # 単一のinterpreter・wrapperも通常commandとして扱う。
+  for candidate in 'env MODE=test command -- /bin/cp source.txt existing.txt' "bash -c 'cp source.txt existing.txt'" 'gsed -i s/a/b/ existing.txt' "awk 'BEGIN { print 1 > \"existing.txt\" }'" "sed -n '1,20p' -e 'w existing.txt' source.txt"; do
+    check shell_decision pass "$candidate"
   done
+  check shell_decision deny 'cp -n -- source.txt .codex/config.toml'
+  check shell_decision deny "eval 'cp source.txt existing.txt'"
   check shell_decision pass 'env MODE=test command -- cp -n -- source.txt copied.txt'
   touch new.txt existing.txt
   chmod +x existing.txt
