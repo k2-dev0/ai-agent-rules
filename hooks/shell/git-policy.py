@@ -119,7 +119,7 @@ def git_command(argv, cwd, protected):
             canonical = shlex.join(["git", "commit", "-m", args[1]])
             execution = [*safe, "-c", "commit.gpgSign=false", "commit", "-m", args[1]]
         return {"command": shlex.join(execution), "commit_check": canonical}
-    if command in ("branch", "tag") and "--list" not in args:
+    if command in ("branch", "tag") and args[:1] != ["--list"]:
         raise Denied("branch・tagは--listだけ許可します。")
     if command == "remote" and args not in (["-v"], ["--verbose"]):
         raise Denied("remoteは-vだけ許可します。")
@@ -131,6 +131,8 @@ def git_command(argv, cwd, protected):
     need_value = False
     for arg in args:
         if need_value:
+            if arg.startswith("-"):
+                raise Denied("Git optionの値に別のoptionは指定できません。")
             need_value = False
             continue
         if arg == "--":
