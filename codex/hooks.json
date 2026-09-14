@@ -148,16 +148,11 @@
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-locks.sh\"",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/commit-gate.sh\"",
-            "timeout": 5
           }
         ]
       },
       {
-        "matcher": "(^Agent$|(^|[._])(spawn_agent|spawn_agents_on_csv|resume_agent)$|^collaboration(spawn_agent|spawn_agents_on_csv|resume_agent)$)",
+        "matcher": "(^Agent$|(^|[._])(spawn_agent|spawn_agents_on_csv|resume_agent|followup_task)$|^collaboration(spawn_agent|spawn_agents_on_csv|resume_agent|followup_task)$)",
         "hooks": [
           {
             "type": "command",
