@@ -25,6 +25,9 @@ class GitSandbox(unittest.TestCase):
             (root / ".git/HEAD").write_text("ref: refs/heads/main\n")
             (root / ".codex").mkdir()
             shutil.copyfile(REPO / "codex/config.toml", root / ".codex/config.toml")
+            (root / ".claude/hooks/shell").mkdir(parents=True)
+            controller = root / ".claude/hooks/shell/guard.sh"
+            controller.write_text("unchanged")
             (root / "alias").symlink_to(root / ".git", target_is_directory=True)
             (temp / "source").write_text("overwrite")
             program = temp / "attack.py"
@@ -43,6 +46,7 @@ try:
     elif op == "hardlink":
         os.link(target, root / "hardlink")
         (root / "hardlink").write_text("changed")
+    elif op == "controller": (root / ".claude/hooks/shell/guard.sh").write_text("disabled")
     elif op == "ordinary": (root / "ordinary").write_text("allowed")
     else: raise ValueError(op)
 except PermissionError:
@@ -74,12 +78,13 @@ else:
                     return "{" + ",".join(json.dumps(k) + "=" + inline(v) for k, v in value.items()) + "}"
                 return json.dumps(value)
             base = [cli, "sandbox", "-C", str(root), "-P", "distributed", "-c", "permissions=" + inline(policy)]
-            for operation in ("ordinary", "write", "copy", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink"):
+            for operation in ("ordinary", "write", "copy", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink", "controller"):
                 with self.subTest(operation=operation):
                     result = subprocess.run([*base, "--", sys.executable, str(program), str(root), operation], capture_output=True, text=True, timeout=30)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertTrue(root.exists(), "repository parent was moved")
                     self.assertEqual(metadata.read_text(), "unchanged")
+                    self.assertEqual(controller.read_text(), "unchanged")
                     self.assertFalse((root / ".git/new").exists())
 
 
