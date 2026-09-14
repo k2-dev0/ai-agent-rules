@@ -4,8 +4,8 @@
 
 1. 現在モデルで調査し、変更範囲・整合性条件・検証方法を含む実装方針を確定する
 2. テストを含む最初の編集前に`difficulty-evaluator`へ`{"repository":"<絶対path>","implementation_policy":"<実装方針>"}`だけを渡す
-   - Codexは`spawn_agent`の`message`へこの2キーだけのobjectを1回serializeしたJSON文字列を入れ、`task_name:"difficulty_evaluator"`と`fork_turns:"none"`は外側のtool引数に置く
-   - `message`に前後の説明、code fence、wrapper object、追加keyを含めず、`task_name`と`fork_turns`も入れない
+   - Codexは`spawn_agent`の`agent_type:"difficulty-evaluator"`と`fork_turns:"none"`を外側のtool引数に置き、`message`にはこの2キーだけのobjectを1回serializeしたJSON文字列を入れる
+   - `message`に前後の説明、code fence、wrapper object、追加keyを含めず、`agent_type`と`fork_turns`も入れない
    - `implementation_policy`はJSONデコード後4000文字以内にまとめる
    - 方針に背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない
 3. 成功形式の`score`と`reason`だけのJSONを受け取り、1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / xhighを選ぶ
