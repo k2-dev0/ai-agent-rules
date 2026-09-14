@@ -20,8 +20,8 @@ def protected_paths(root, policy):
     if not result:
         raise ValueError("repository metadata could not be located")
     for relative in (
-        ".codex/hooks", ".codex/agents", ".codex/config.toml", ".codex/hooks.json", ".codex/rules",
-        ".claude/hooks", ".claude/agents", ".claude/skills", ".claude/settings.json", ".claude/settings.local.json",
+        ".codex/hooks", ".codex/agents", ".codex/config.toml", ".codex/hooks.json", ".codex/rules", ".codex/tmp",
+        ".claude/hooks", ".claude/agents", ".claude/skills", ".claude/settings.json", ".claude/settings.local.json", ".claude/tmp",
         ".agents/skills", ".mcp.json",
     ):
         path = root / relative
