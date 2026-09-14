@@ -62,6 +62,6 @@ echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|-
 
 # ignore 規則の迂回は、追跡対象に限るコミット契約を破る。強制ステージングは許可しない。
 echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+add([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+(-f|--force)([[:space:];&|]|$)' && \
-  hook_deny "git add -f / git add --force は禁止です。ignore されたファイルは stage せず、必要なら作業ツリー上で検証して次の工程へ進んでください。"
+  hook_deny "git add -f / git add --force は禁止です。必要なfileがignoreされている場合は追跡方針を確認してください。別名への置換や検証対象からの除外で回避してはいけません。"
 
 exit 0
