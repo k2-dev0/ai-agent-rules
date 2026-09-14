@@ -46,9 +46,7 @@ case "$HOOK_AGENT" in
   *)
     # placeholder 未解決 = 未初期化。ここで一律 deny すると placeholder を解決する
     # bootstrap 自身の起動まで止まって詰むため、その 1 コマンドだけ通す
-    case "$HOOK_INPUT" in
-      *bootstrap/bootstrap.sh*) exit 0 ;;
-    esac
+    if printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/git-policy.py" --bootstrap-entry; then exit 0; fi
     hook_io_fatal "エージェント種別が未確定です（hook-io.sh の HOOK_AGENT が placeholder のまま）。bootstrap スキルを実行して配置を初期化してください。"
     ;;
 esac
