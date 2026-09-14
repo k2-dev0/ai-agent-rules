@@ -5,9 +5,10 @@ default_permissions = "distributed"
 approval_policy = "on-request"
 
 [permissions.distributed]
-# workspace 全体を write にし、任意階層の保護対象は PreToolUse hook で書き込みだけ拒否する。
-# filesystem の read は任意階層 glob を受理しないため、配布設定には使用しない。
 extends = ":workspace"
+
+[permissions.distributed.filesystem.":workspace_roots"]
+".git" = "read"
 
 [permissions.distributed.network]
 # localhost を含む通信はsandbox内で許可せず、外部実行の承認へ送る。
