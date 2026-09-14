@@ -72,7 +72,7 @@ hook_agent_type() {
 # 子の直列起動と、専用reviewerの設定・文脈継承を検査する。
 hook_serial_agent_launch_valid() {
   echo "$HOOK_INPUT" | jq -e '
-    ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv)$") | not) and
+    ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv|followup_task)$") | not) and
     (.tool_input.run_in_background == null or .tool_input.run_in_background == false) and
     (.tool_input.background == null or .tool_input.background == false) and
     (.tool_input.resume == null or .tool_input.resume == "")
@@ -81,6 +81,9 @@ hook_serial_agent_launch_valid() {
 hook_review_launch_valid() {
   echo "$HOOK_INPUT" | jq -e --arg agent "$HOOK_AGENT" --arg role "$1" '
     .tool_input | select(type == "object") |
+    # 起動toolのrole field以外から設定・権限を持ち込ませない。
+    ((keys - ["agent_type", "subagent_type", "description", "task_name", "nickname", "agent_nickname",
+      "message", "prompt", "fork_context", "fork_turns", "run_in_background", "background", "resume"]) | length == 0) and
     ([.model, .reasoning_effort, .model_reasoning_effort, .reasoningEffort, .effort, .thinking,
       .config, .config_file, .model_provider, .sandbox_mode] | all(. == null)) and
     (.resume == null or .resume == "") and
