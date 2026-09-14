@@ -10,7 +10,7 @@
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-polish後に専用reviewerで独立レビューする。polish、index残件数、通常の完了報告を示し、完了markを付けるか確認する。ユーザーが付けると回答した場合だけ次を単独実行する。
+polish後に[独立レビューの起動・結果処理](../INDEPENDENT_REVIEW.md)を読み、専用reviewerで独立レビューする。polish、index残件数、通常の完了報告を示し、完了markを付けるか確認する。未確認・未解決事項は解消済みと扱わず提示する。ユーザーが付けると回答した場合だけ次を単独実行する。
 
 ```bash
 bash [skills_root]/tdd/mark-prompt-done.sh <機能名>
