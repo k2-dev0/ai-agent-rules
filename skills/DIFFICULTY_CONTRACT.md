@@ -9,19 +9,16 @@
   - JSONがobjectでない、またはキーが`repository`と`implementation_policy`だけでない場合は`{"error":"evaluation input must contain only repository and implementation_policy"}`を返す
   - `repository`が現在repositoryの絶対pathと一致しない場合は`{"error":"repository is incorrect"}`を返す
   - `implementation_policy`が文字列でない、または空白だけなら`{"error":"implementation_policy must be a non-empty string"}`を返す
-  - `implementation_policy`がJSONデコード後4000文字を超える場合は`{"error":"implementation_policy exceeds 4000 characters"}`を返す
-  - 4000文字以内でも対象と変更後の挙動を特定できない、または背景・会話・調査結果・難度予想・設計書参照・選択基準だけの場合は`{"error":"implementation_policy must describe a concrete implementation change"}`を返す
-  - errorの値は入力を再掲しない簡潔な英語にする。同じ入力に対して採点を続けず、入力を直して新しい評価を依頼する
+  - 対象と変更後の挙動を特定できない、または背景・会話・調査結果・難度予想・設計書参照・選択基準だけの場合は`{"error":"implementation_policy must describe a concrete implementation change"}`を返す
+  - errorの値は入力を再掲しない簡潔な英語にする
+  - 同じ入力に対して採点を続けず、入力を直して新しい評価を依頼する
 - 起動hookの通過を本文検査の代わりにしない
 - 方針から対象を探し、既存実装、影響caller、状態・副作用、不変条件、既存testと検証方法を独立に確認する
-  - 主担当の調査ログ・会話・設計書・実行担当の選択基準は読まない
+  - 設計書・実行担当の選択基準は読まない
   - 必要な対象・挙動を特定できない場合は推測せず`{"error":"implementation target or behavior is unclear"}`を返す
 - 評価対象はその方針を実装する仕事自体の難度
   - 方針をコードへ反映する際に残る判断・調整・整合性確認を評価する
   - 方針に確定済みの選択、変更量、対象file・caller・consumer・操作・testの数や存在だけでは加減点しない
-- 読み取りだけを行う
-  - 編集・Git変更・test実行・外部通信・追加委任は禁止
-  - 評価方針の再評価を起動しない
 
 ## 採点
 
