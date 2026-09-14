@@ -13,9 +13,9 @@ verifiedは次を実行し、この出力と完全一致する相対path全件�
 bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 ```
 
-`--auto`は基準commit〜HEADの差分から現存する追跡fileをGit順で返す。個別path receiptは実変更fileをreceipt順で返す。削除済みfileは除外し、空なら実行表・unwindを省略してpath検査へ進む。
+出力が空なら実行表・unwindを省略してpath検査へ進む。
 
-directは開始前に次でpath形式・重複・存在・symlink・ignoreを検査する。未追跡fileは最終gateまでに追跡・commitする。失敗時に対象を推測し直さない。
+directは開始前に次を実行し、失敗時は対象を推測し直さず原因を報告する。
 
 ```bash
 bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示path>...
