@@ -1,4 +1,7 @@
-"""Measure model-visible context from every configured hook in representative flows."""
+"""Exercise readable parent contracts, native launch validation and child delivery.
+
+This simulates event wiring; it does not prove a model followed the workflow.
+"""
 import json
 from pathlib import Path
 import re
@@ -107,19 +110,25 @@ class ContextDelivery(unittest.TestCase):
                 )), [])
 
                 role_key = "agent_type" if agent == "codex" else "subagent_type"
+                input_key = "message" if agent == "codex" else "prompt"
+                native_tool = "spawn_agent" if agent == "codex" else "Agent"
+                # Instructions are available BEFORE assembling a tool input.
+                for name in ("MODEL_SELECTION.md", "SUBAGENT_RULES.md", "INDEPENDENT_REVIEW.md"):
+                    outputs = configured("PreToolUse", "READ_PARENT", tool_name="Read", tool_input={"file_path": str(skilldir / name)})
+                    self.assertFalse(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs))
+                    self.assertTrue((skilldir / name).read_text().strip())
                 difficulty_input = {
                     role_key: "difficulty-evaluator", "fork_turns": "none",
-                    "prompt": json.dumps({"repository": str(root), "implementation_policy": "Implement value conversion."}),
+                    input_key: json.dumps({"repository": str(root), "implementation_policy": "Implement value conversion."}),
                 }
-                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)
+                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)
                 parent_text = metric("difficulty_parent", parent)
-                self.assertEqual(len(parent_text), 1)
-                self.assertIn("メインモデルの選択", parent_text[0])
-                self.assertIn("1〜3はLuna / max", parent_text[0])
-                self.assertIn("サブエージェント", parent_text[0])
-                self.assertNotIn("WRONG_PRODUCT_CONTEXT", parent_text[0])
-                self.assertNotIn("実装難度の独立評価", parent_text[0])
-                self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)), [])
+                self.assertEqual(parent_text, [])
+                self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)), [])
+                malformed = dict(difficulty_input, **{input_key: "please evaluate this task"})
+                rejected = configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=malformed)
+                self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in rejected))
+                self.assertEqual(visible(configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=difficulty_input)), [])
                 launch_tools = ("Agent", "spawn_agent", "collaboration.spawn_agent", "functions.spawn_agent", "collaborationspawn_agent") if agent == "codex" else ("Agent",)
                 for launch_tool in launch_tools:
                     for role_fields in ({}, {"agent_role": None}, {"agent_role": "difficulty-evaluator"}, {role_key: "default"}):
@@ -128,9 +137,10 @@ class ContextDelivery(unittest.TestCase):
                         self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), (agent, launch_tool, untyped))
                         self.assertFalse(any("実装難度の独立評価" in t for t in visible(outputs)))
                 if agent == "codex":
-                    for tool in ("collaboration.followup_task", "collaboration.resume_agent", "spawn_agents_on_csv"):
+                    for tool in ("collaboration.followup_task", "collaboration.resume_agent", "spawn_agents_on_csv", "send_input", "functions.send_input", "send_message", "collaboration.send_message", "collaborationsend_message", "send_message_to_agent"):
                         outputs = configured("PreToolUse", "REUSE", tool_name=tool, tool_input={"target": "old-child", "message": "try again"})
                         self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), tool)
+                    self.assertEqual(configured("PreToolUse", "UNRELATED_MESSAGE", tool_name="mcp__chat__send_message", tool_input={"message": "An explicitly requested app message"}), [])
                 child_text = metric("difficulty_child", configured(
                     "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="difficulty", agent_type="difficulty-evaluator",
                 ))
@@ -145,14 +155,21 @@ class ContextDelivery(unittest.TestCase):
                     "repository": str(root), "review_base": head, "review_head": head,
                     "requirements": "Review the requested value.",
                 }
-                review_input = {role_key: "code-reviewer", "fork_turns": "none", "prompt": json.dumps(review_brief)}
-                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=review_input)
+                review_input = {role_key: "code-reviewer", "fork_turns": "none", input_key: json.dumps(review_brief)}
+                malformed = dict(review_input, **{input_key: "固定コミットを独立レビューしてください。"})
+                rejected = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=malformed)
+                self.assertEqual(len(visible(rejected)), 1)
+                self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in rejected))
+                self.assertNotIn("この起動経路では証跡照合が利用不能", visible(rejected)[0])
+                for change in ({"requirements": "  "}, {"requirements": 7}, {"background": "implementation history"}, {"review_head": head[:7]}):
+                    bad_brief = dict(review_brief, **change)
+                    invalid = dict(review_input, **{input_key: json.dumps(bad_brief)})
+                    outputs = configured("PreToolUse", "FLOW", tool_name=native_tool, tool_input=invalid)
+                    self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs))
+                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=review_input)
                 parent_text = metric("review_repair_parent", parent)
-                self.assertEqual(len(parent_text), 1)
-                self.assertIn("独立レビューの起動・結果処理", parent_text[0])
-                self.assertIn(f".{agent}/tmp", parent_text[0])
-                self.assertNotIn("サブエージェント", parent_text[0])
-                retry = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=review_input)
+                self.assertEqual(parent_text, [])
+                retry = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=review_input)
                 self.assertEqual(visible(retry), [])
                 rewrites = [
                     output["hookSpecificOutput"]["updatedInput"]
@@ -160,7 +177,7 @@ class ContextDelivery(unittest.TestCase):
                     if output.get("hookSpecificOutput", {}).get("updatedInput")
                 ]
                 self.assertEqual(len(rewrites), 1)
-                rewritten_brief = json.loads(rewrites[0]["prompt"])
+                rewritten_brief = json.loads(rewrites[0][input_key])
                 self.assertRegex(rewritten_brief["request_id"], r"^[0-9a-f]{64}$")
                 child_text = metric("review_repair_child", configured(
                     "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="review", agent_type="code-reviewer",
@@ -180,6 +197,15 @@ class ContextDelivery(unittest.TestCase):
                 self.assertIn("成功扱いせず失敗", unavailable[0])
                 missing.rename(contract)
 
+                common = skilldir / "CHILD_RULES.md"
+                missing_common = common.with_suffix(".missing")
+                common.rename(missing_common)
+                unavailable = visible(configured("SubagentStart", "COMMON_MISSING", agent_id="missing", agent_type="code-reviewer"))
+                self.assertEqual(len(unavailable), 1)
+                self.assertNotIn("読み取り専用の独立コードレビュー", unavailable[0])
+                self.assertIn("失敗", unavailable[0])
+                missing_common.rename(common)
+
                 relative = skilldir.relative_to(root) / "INDEPENDENT_REVIEW.md"
                 for command in (
                     f"cat {relative}",
@@ -187,14 +213,17 @@ class ContextDelivery(unittest.TestCase):
                     f"git cat-file -p HEAD:{relative}",
                     f"cat {str(relative)[:-2]}[m]d",
                     f"cat {relative.parent}/INDEPENDENT_REVIEW.*",
-                    f"rg role {relative.parent.parent}",
                 ):
                     outputs = configured("PreToolUse", "PREREAD", tool_name="Bash", tool_input={"command": command})
-                    self.assertTrue(any(
+                    self.assertFalse(any(
                         output.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
-                        and "先読み" in output["hookSpecificOutput"].get("permissionDecisionReason", "")
                         for output in outputs
                     ), command)
+
+                # A changed child-contract document is also a legitimate review
+                # target; its pathname alone must not make it unreadable.
+                outputs = configured("PreToolUse", "CONTRACT_REVIEW", tool_name="Read", tool_input={"file_path": str(contract)})
+                self.assertFalse(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs))
 
                 model_switch = configured(
                     "PreToolUse", "MODEL_SWITCH_READ", tool_name="Read",
