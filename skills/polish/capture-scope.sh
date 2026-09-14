@@ -1,6 +1,8 @@
 #!/bin/bash
 # 実装前のHEADを記録し、後から実変更pathだけを列挙する。
 set -eu
+SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
+. "$SCRIPT_DIR/../../../.[agent_name]/hooks/shell/git-safe-env.sh" || exit 1
 
 FEATURE_RE='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
 
@@ -10,6 +12,9 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ�
 REPOSITORY=$(git rev-parse --show-toplevel)
 REPOSITORY_KEY=$(printf '%s' "$REPOSITORY" | cksum | awk '{ print $1 }')
 RECEIPT_DIR="${TMPDIR:-/tmp}/polish-quality-gate/$REPOSITORY_KEY"
+python3 "$REPOSITORY/.[agent_name]/hooks/shell/safe-files.py" "[agent_name]" check "$RECEIPT_DIR" || exit 1
+TEMP_SCOPE=
+trap '[ -z "$TEMP_SCOPE" ] || rm -f -- "$TEMP_SCOPE"' EXIT
 
 validate_path() {
   case "$1" in
@@ -60,7 +65,7 @@ if [ "${1:-}" = "list-changed" ]; then
         git ls-files --error-unmatch -- ":(literal)$path" >/dev/null 2>&1 || die "$path は未追跡またはignoredのまま"
         printf '%s\n' "$path"
       fi
-    done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$BASE" HEAD)
+    done < <(git diff --no-ext-diff --no-textconv --name-only -z --diff-filter=ACMRTUXB "$BASE" HEAD)
     exit 0
   fi
   HAS_SCOPE_PATH=false
@@ -68,7 +73,7 @@ if [ "${1:-}" = "list-changed" ]; then
     [ -n "$path" ] || continue
     HAS_SCOPE_PATH=true
     validate_path "$path"
-    if git diff --quiet --no-ext-diff "$BASE" HEAD -- ":(literal)$path"; then
+    if git diff --quiet --no-ext-diff --no-textconv "$BASE" HEAD -- ":(literal)$path"; then
       continue
     else
       STATUS=$?
@@ -91,7 +96,7 @@ if [ "${2:-}" = "--auto" ]; then
   SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
   BASE=$(git rev-parse HEAD)
   mkdir -p "$RECEIPT_DIR" || die "scope receipt用の一時ディレクトリを作れない"
-  TEMP_SCOPE="$SCOPE_RECEIPT.tmp.$$"
+  TEMP_SCOPE=$(mktemp "$SCOPE_RECEIPT.tmp.XXXXXX") || die "auto scope用の一時fileを作れない"
   printf '%s\n%s\n@auto\n' "$REPOSITORY" "$BASE" > "$TEMP_SCOPE" || die "auto scope receiptを作れない"
   mv "$TEMP_SCOPE" "$SCOPE_RECEIPT" || die "auto scope receiptを記録できない"
   echo "captured-auto: $FEATURE $BASE"
@@ -106,7 +111,7 @@ shift 2
 SCOPE_RECEIPT="$RECEIPT_DIR/$FEATURE.scope"
 BASE=$(git rev-parse HEAD)
 mkdir -p "$RECEIPT_DIR" || die "scope receipt用の一時ディレクトリを作れない"
-TEMP_SCOPE="$SCOPE_RECEIPT.tmp.$$"
+TEMP_SCOPE=$(mktemp "$SCOPE_RECEIPT.tmp.XXXXXX") || die "scope用の一時fileを作れない"
 printf '%s\n%s\n' "$REPOSITORY" "$BASE" > "$TEMP_SCOPE" || die "scope receiptを作れない"
 
 for path in "$@"; do
