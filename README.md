@@ -99,6 +99,7 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | Codexの権限・network・MCP／command規則 | `codex/config.toml`／`codex/rules/default.rules` |
 | hook配線・入出力 | `claude/settings.json`、`codex/hooks.json`、`hooks/shell/hook-io.sh` |
 | Git引数・.git path保護 | `protect-git.sh`・`git-policy.py`と両環境のsandbox設定 |
+| 固定scriptの保存先・一時領域・Git環境 | `safe-files.py`・`git-safe-env.sh` |
 | stage・commit契約 | `commit-gate.sh`・`commit-subject.sh` |
 | 読み取り・shell書き込み | `readonly-search.sh`・`shell-file-write.sh` |
 | 設定・秘密・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
@@ -110,7 +111,9 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 
 hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
 
-Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通るadd/commitを許可する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。
+Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通るadd/commitを許可する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。固定rebaseも外部hook・署名・filterを無効化し、一時worktreeでは保存済みblobを使う。
+
+Claudeのunit test runner・polishは許可を維持してsandbox内で実行する。bootstrap・設計書完了mark・E2E計画保存・rebaseだけに固定commandの除外を残す。通常shellの一律allowにはしない。
 
 ## 保証範囲
 
@@ -122,10 +125,12 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 | 子のsandbox／tool制限 | shellのtest実行・調査範囲・MCP等の外部通信はread-onlyだけでは制限されない。共通制約を子へ注入する |
 | reviewer入力・対象SHA・clean状態・SubagentStopの結果形式 | reviewの必要性、指摘の妥当性・採否。形式検査は内容の自動生成ではない |
 | polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
-| .gitの直接path・実path・symlink・親directory・worktree参照先の操作検査 | 任意script内部の書き込みはcommand文字列では検査できない |
+| .gitの実path・symlinkと`..`・hardlink・親directory・worktree参照先、Chromeの保存先・Serenaのmemory名を検査 | 未対応tool、MCPの別project／global保存先、任意script内部の書き込みは同じ検査で保証しない |
+| 固定scriptはリンクを拒否し、親directoryを開いてからfileを置換。一時領域も外部commandの起動前に検査 | 外部processによるdirectory移動など、同時のfilesystem変更すべてを制御するものではない |
+| 初期化前の例外はbootstrapの正規argvだけ | task名・文章・file pathへのbootstrap名の混入では解除しない |
 | sandbox内の.git書き込み制限 | 承認付きsandbox外実行、除外command、MCP・未対応tool、上位設定による保護解除はrepository設定だけでは保証できない |
 
-.gitの承認解除は禁止する。絶対保護には、sandbox外実行や全書き込みtoolにも及ぶruntime／OS側の強制が必要で、この配布物だけでは完成していない。通常shellの一律allowへは拡張しない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
+.gitの承認解除は禁止する。配布物では上記経路を保護し、適用外の実行を保護済みと扱わない。特に承認付きsandbox外実行や任意MCPまでの絶対保護は、このリポジトリ内の変更だけでは保証しない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
 
 ## 文書の編集
 
@@ -142,6 +147,8 @@ bash tests/verify-all.sh
 Claude／Codexへの一時配置・bootstrap・hookの決定と文書配信・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分ける。
 
 `python3 tests/test_git_policy.py`は両配布のGit guardへ入力し、許可された読み取りと外部helperの抑止をfixtureで実行する。`python3 tests/test_git_sandbox.py`はインストール済みCodexのOS sandboxで、隔離した.gitへの書き込み・コピー・リンク・親directory移動を試す。後者はsandboxを二重起動できない環境では外側の実行承認が必要。通常suiteの成功だけではOS境界の検証済みとはしない。
+
+`test_fixed_script_git_protection.py`は固定scriptを実行し、metadata alias・TMPDIR差し替え・外部Git helperを拒否／抑止しながら通常の保存・rebaseが成功することを検査する。
 
 skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
