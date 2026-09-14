@@ -6,4 +6,4 @@ effort: medium
 tools: Read, Grep, Glob, Bash
 ---
 
-起動hookが注入した専用契約に従う。契約未注入なら{"error":"difficulty contract unavailable"}を返し、作業しない。
+起動hookが注入した共通制約と専用契約に従う。どちらかが未注入なら{"error":"difficulty contract unavailable"}を返し、作業しない。
