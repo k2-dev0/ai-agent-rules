@@ -101,7 +101,7 @@ check "required-reading: 通常文書は設計形式の対象外" empty load-req
 check "protect-git: rm .git は deny"      deny  protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"rm -rf .git"}}'
 check "protect-git: Edit .git/config は deny" deny protect-git.sh '{"tool_name":"Edit","tool_input":{"file_path":".git/config"}}'
 check "protect-git: 通常 Edit は棄権"     empty protect-git.sh '{"tool_name":"Edit","tool_input":{"file_path":"src/a.ts"}}'
-check "protect-git: git status は棄権"    empty protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
+check "protect-git: git status は安全化して許可" allow protect-git.sh '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
 
 # --- protect-config ---
 check "config: Edit .claude は deny"    deny  protect-config.sh '{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}'
