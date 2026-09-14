@@ -178,7 +178,7 @@ report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
 echo "== skill context圧縮と参照整合性 =="
 if python3 "$SUITE/test_context_delivery.py" > "$S/context-delivery.out" 2>&1; then
-  ok "代表ケースの注入先・量・回数・先読み拒否を検証"
+  ok "親の事前参照・入力訂正・専用子への契約配信を検証"
   cat "$S/context-delivery.out"
 else
   ng "代表ケースのcontext deliveryが不正"
@@ -251,7 +251,7 @@ MODEL_SELECTION="$REPO/skills/MODEL_SELECTION.md"
 [ ! -e "$REPO/claude/agents/implementer.md" ] && [ ! -e "$REPO/codex/agents/implementer.toml" ] && [ ! -e "$REPO/skills/IMPLEMENTER_LAUNCH.md" ] && [ ! -e "$REPO/skills/IMPLEMENTER_CONTRACT.md" ] && ok "実装委任資産を配布しない" || ng "実装委任資産が残存"
 ! grep -R -Eq 'DIFFICULTY_CONTRACT|CODE_REVIEW_CONTRACT|REVIEW_CONTRACT|NESTING_CONTRACT' "$REPO/codex/agents" "$REPO/claude/agents" && ok "子の定義へ契約pathを常駐させない" || ng "子の定義に契約の先読み参照が残存"
 grep -Fxq 'max_threads = 1' "$REPO/codex/config.toml" && ok "Codexの子の同時実行を1体に制限" || ng "Codexの子の同時実行上限が不正"
-grep -Fq 'INDEPENDENT_REVIEW.md' "$REPO/hooks/shell/load-operation-context.sh" && grep -Fq '専用reviewerで独立レビュー' "$TDD_SKILL" && ok "tddの完了前に独立レビューを接続" || ng "独立レビューの入口が不足"
+grep -Fq '../INDEPENDENT_REVIEW.md' "$TDD_SKILL" && grep -Fq '専用reviewerで独立レビュー' "$TDD_SKILL" && ok "tddの完了前に独立レビューを接続" || ng "独立レビューの入口が不足"
 [ ! -e "$CLAUDE_SURVEYOR" ] && [ ! -e "$CODEX_SURVEYOR" ] && ok "native surveyor定義を削除" || ng "native surveyor定義が残存"
 grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep -Fq '`codex/agents/` | `<repo>/.codex/agents/`' "$REPO/README.md" && ok "README: 両agent定義の配布先を明記" || ng "README: agent定義の配布先が不足"
 [ -f "$TDD_SKILL" ] && ! grep -q '^disable-model-invocation: true$' "$TDD_SKILL" && grep -q 'allow_implicit_invocation: true' "$REPO/skills/tdd/agents/openai.yaml" && ok "tddは自動選択と明示起動を許可" || ng "tddの自動選択設定が不正"
@@ -305,10 +305,10 @@ grep -Fq '変更file・直接依存先以外の未変更文書' "$REPO/skills/CO
 grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$MODEL_SELECTION" && grep -Fq 'テストを含む最初の編集前' "$MODEL_SELECTION" && grep -Fq '同じ方針の修正・再開では再利用' "$MODEL_SELECTION" && grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$REPO/skills/DIFFICULTY_CONTRACT.md" && grep -Fq '`{"error":"..."}`（入力エラー）' "$MODEL_SELECTION" && ok "方針確定後・最初の編集前に独立難度評価" || ng "独立難度評価の順序または再利用条件が不正"
 grep -Fq '`schema.prisma`、`constants.ts` / `constants.js`、`constants/`だけの変更' "$TDD_SKILL" && grep -Fq '候補提示・test追加・Red / Greenを省略' "$TDD_SKILL" && grep -Fq '他のruntime挙動も変える場合はその挙動を通常どおり扱う' "$TDD_SKILL" && ok "tddフローはschema・定数のtest除外境界を固定" || ng "tddフローのschema・定数test除外境界が不正"
 grep -Fq '選択済みtest、直接の回帰test、変更packageのtypecheck' "$TDD_SKILL" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$TDD_SKILL" && grep -Fq '無関係なpackage・repository全体へ広げず' "$TDD_SKILL" && grep -Fq 'Prisma `format`・`validate`・`generate`' "$TDD_SKILL" && ok "tddフローは調査commandと最終検証の範囲を固定" || ng "tddフローの調査commandまたは最終検証が曖昧"
-grep -Fq '../FIX_FLOW.md' "$TDD_SKILL" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq "ignored / untracked test" "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
+grep -Fq '../FIX_FLOW.md' "$TDD_SKILL" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq 'だけで`unrelated`にしない' "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・polishは対象外失敗と完了判断を分離" || ng "診断の因果関係と完了判断の区別が不正"
 grep -Fq 'この出力と完全一致する相対path全件を一括入力' "$POLISH_SKILL" && grep -Fq 'directory、glob、`git diff`・`git status`から推測・拡張しない' "$POLISH_SKILL" && grep -Fq 'typecheck・build・Prisma検証には所属package/schemaだけ' "$POLISH_SKILL" && grep -Fq '確定済みの対象pathから本体コードだけを選び'  "$POLISH_SKILL" && grep -Fq '`unwind`自身では差分を再探索・再検証しない' "$UNWIND_SKILL" && grep -Fq '`list-changed`をもう一度実行しない' "$POLISH_SKILL" && ok "polishとunwindは実変更pathを再探索せず対象化" || ng "polishまたはunwindが実変更pathを再探索"
 grep -Fq 'packageに`build` scriptあり' "$POLISH_SKILL" && grep -Fq 'packageで`yarn build`' "$POLISH_SKILL" && grep -Fq 'commandなしは`not run`' "$POLISH_SKILL" && grep -Fq '入力の検証結果にある同じpackageのbuildを再実行する' "$UNWIND_SKILL" && grep -Fq '新しいbuild commandを発明しない' "$UNWIND_SKILL" && ok "polishは所属packageをbuildしunwind修正後に同じbuildを再検証" || ng "polishまたはunwindのbuild検証契約が不正"
-grep -Fq '../polish/PROCEDURE.md' "$TDD_FROM_DOC" && grep -Fq '実変更pathをまとめて[polish]' "$TDD_FROM_DOC" && grep -Fq 'polish後に専用reviewerで独立レビュー' "$TDD_FROM_DOC" && grep -Fq '通常起動は検証とcommit後に専用reviewerで独立レビュー' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_FROM_DOC" && ok "tdd はpolish後の最終差分をreviewしてindexを更新" || ng "tdd のpolish・review・index更新順が不正"
+grep -Fq '../polish/PROCEDURE.md' "$TDD_FROM_DOC" && grep -Fq '実変更pathをまとめて[polish]' "$TDD_FROM_DOC" && grep -Fq '../INDEPENDENT_REVIEW.md' "$TDD_FROM_DOC" && grep -Fq '通常起動は検証とcommit後に[独立レビューの起動・結果処理]' "$TDD_SKILL" && grep -Fq 'bash [skills_root]/tdd/mark-prompt-done.sh <機能名>' "$TDD_FROM_DOC" && ok "tdd はpolish後の最終差分をreviewしてindexを更新" || ng "tdd のpolish・review・index更新順が不正"
 grep -Fq 'capture-scope.sh <scope名> --auto' "$REPO/skills/polish/BASELINE.md" && grep -Fq '[baseline](../polish/BASELINE.md)' "$TDD_SKILL" && ok "tdd はRed後の基準commitから実変更pathを自動列挙" || ng "tdd の自動baselineが不正"
 grep -Fq 'fileごとに分割しない' "$TDD_FROM_DOC" && grep -Fq 'formatterがformat差分を自動修正' "$POLISH_SKILL" && grep -Fq '`FIX_FLOW.md`に従って修正' "$POLISH_SKILL" && grep -Fq '全品質ゲートを再実行' "$POLISH_SKILL" && ok "tdd はpolishを全path一括で原因別に反復" || ng "tdd のpolish実行単位または反復条件が不正"
 
@@ -347,7 +347,7 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' AGENTS.md && ! grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
+if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '切り替えと適用確認を済ませてから編集する' AGENTS.md && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Claude配置と参照条件"
 else
   ng "モデル選択・切り替え: Claude配置または参照条件が不正"
@@ -549,7 +549,7 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' AGENTS.md && ! grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
+if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '切り替えと適用確認を済ませてから編集する' AGENTS.md && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Codex配置と参照条件"
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
