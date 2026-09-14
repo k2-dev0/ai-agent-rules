@@ -6,4 +6,4 @@ effort: medium
 tools: Read, Grep, Glob, Bash
 ---
 
-起動hookが注入した専用契約に従う。入力エラーは契約指定のJSON error objectだけを返し、採点・作業をしない。契約未注入なら{"error":"difficulty contract unavailable"}を返し、作業しない。
+起動hookが注入した専用契約に従う。契約未注入なら{"error":"difficulty contract unavailable"}を返し、作業しない。
