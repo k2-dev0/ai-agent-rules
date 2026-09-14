@@ -1,5 +1,6 @@
 """Verify review evidence without inferring that every code edit requires review."""
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -90,7 +91,9 @@ class ReviewEvidence(unittest.TestCase):
                 self.assertIsNone(call("Stop"))
                 edit("README.md")
                 self.assertFalse(state.exists())
-                self.assertIsNone(edit())
+                self.assertIsNone(call("PreToolUse", tool_name="Bash", tool_input={"command": "python3 modify.py"}))
+                self.assertEqual(json.loads(state.read_text())["base"], base)
+                self.assertEqual(json.loads(state.read_text())["paths"], [])
                 self.assertEqual(json.loads(state.read_text())["base"], base)
                 head = commit(1)
                 self.assertIsNone(call("Stop", last_assistant_message="Completed"))
@@ -124,6 +127,17 @@ class ReviewEvidence(unittest.TestCase):
                 }]))
                 self.assertTrue(accepted())
 
+                # A normal shell edit bypasses Edit/apply_patch but must expire
+                # the prior proof before a subsequent ordinary command.
+                source.write_text("value = shell_dirty\n")
+                self.assertIsNone(call("PreToolUse", tool_name="Bash", tool_input={"command": "git status --short"}))
+                self.assertFalse(accepted())
+                source.write_text("value = 1\n")
+                brief, _ = launch()
+                start()
+                end(result(brief))
+                self.assertTrue(accepted())
+
                 call("UserPromptSubmit", prompt="Next change")
                 self.assertFalse(state.exists())
                 self.assertIsNone(edit())
@@ -151,6 +165,22 @@ class ReviewEvidence(unittest.TestCase):
                 for event in ("PreToolUse", "UserPromptSubmit", "SubagentStart", "SubagentStop"):
                     self.assertTrue(any("independent-review.sh" in hook["command"] for group in settings["hooks"][event] for hook in group["hooks"]))
                 self.assertNotIn("Stop", settings["hooks"])
+
+                # Aliasing the state destination cannot turn hook writes into
+                # direct/indirect metadata writes outside the command sandbox.
+                state.unlink()
+                metadata = root / ".git/review-sentinel"
+                metadata.write_text("untouched")
+                os.link(metadata, state)
+                denied = call("PreToolUse", tool_name="Bash", tool_input={"command": "pwd"})
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+                self.assertEqual(metadata.read_text(), "untouched")
+                state.unlink()
+                state.parent.rmdir()
+                state.parent.symlink_to(root / ".git", target_is_directory=True)
+                denied = call("PreToolUse", tool_name="Bash", tool_input={"command": "pwd"})
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+                self.assertFalse((root / ".git/independent-review.TEST.json").exists())
 
 
 if __name__ == "__main__":
