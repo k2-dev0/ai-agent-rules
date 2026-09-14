@@ -8,6 +8,7 @@
 set -u
 
 AGENT="${1:?usage: bootstrap.sh <claude|codex>}"
+[ "$#" -eq 1 ] || { echo "ERROR: expected one agent argument" >&2; exit 1; }
 
 # 配布元には削除対象の原本がある。配置先だけで実行する契約を機械的に守る。
 [ ! -e SOURCE_REPOSITORY.md ] || {
@@ -24,6 +25,12 @@ case "$AGENT" in
   *) echo "unknown agent: $AGENT (claude|codex)" >&2; exit 1 ;;
 esac
 [ -d "$DIR" ] || { echo "config dir not found: $DIR" >&2; exit 1; }
+SAFE_FILES="$DIR/hooks/shell/safe-files.py"
+for path in "$DIR" "$DIR/hooks" "$DIR/hooks/shell" "$SAFE_FILES"; do
+  [ ! -L "$path" ] || { echo "ERROR: bootstrap path is a symlink: $path" >&2; exit 1; }
+done
+. "$DIR/hooks/shell/git-safe-env.sh" || exit 1
+python3 "$SAFE_FILES" "$AGENT" bootstrap-check || exit 1
 
 # 置換対象: 設定ツリー + AGENTS.md（コミット契約タグ等の placeholder を含む）+
 # 設定ディレクトリの外に置かれる skills ツリー（codex の .agents）
@@ -48,12 +55,10 @@ fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in */bootstrap/*) continue ;; esac
-  if sed -i.bak "s|\[skills_root\]|$SKILLS_ROOT|g; s/\[agent_name\]/$NAME/g" "$f"; then
-    rm -f "$f.bak"
+  if python3 "$SAFE_FILES" "$AGENT" bootstrap-file "$f"; then
     echo "replaced placeholders -> $NAME : $f"
   else
-    rm -f "$f.bak"
-    echo "ERROR: replace failed (sed): $f" >&2
+    echo "ERROR: replace failed: $f" >&2
     FAILED=1
   fi
 done <<< "$PLACEHOLDER_FILES"
@@ -86,7 +91,7 @@ esac
   echo "ERROR: bootstrap directory not found: $BOOTSTRAP_DIR" >&2
   exit 1
 }
-[ ! -e "$BOOTSTRAP_TRASH" ] || {
+[ ! -e "$BOOTSTRAP_TRASH" ] && [ ! -L "$BOOTSTRAP_TRASH" ] || {
   echo "ERROR: bootstrap quarantine already exists: $BOOTSTRAP_TRASH" >&2
   exit 1
 }
