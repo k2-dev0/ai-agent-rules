@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/readonly-search.sh\"",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/command-approval.sh\"",
             "timeout": 5
           }
         ]
@@ -96,36 +96,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/readonly-search.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/shell-file-write.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-eval.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-registry.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-migration.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deny-history.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git.sh\"",
             "timeout": 5
           },
@@ -137,11 +107,6 @@
           {
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-env.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-review.sh\"",
             "timeout": 5
           },
           {
