@@ -6,11 +6,13 @@ test・typecheck・lint・Prisma・buildの診断を分類する。終了codeだ
 
 | 分類 | 条件と対応 |
 |---|---|
-| `scope-related` | 選択済み対象test、実変更path、変更した公開型・export・契約に起因するcallerの失敗。下記ループで修正・再検証し、解消できなければ`scope fail` |
-| `unrelated` | 無関係な既存失敗、今回未変更のignored / untracked test、checkout前の残留test。対象外fileを変更・削除せず、command・diagnostic・根拠を報告して続行 |
+| `scope-related` | 選択済み対象test、関連する既存test、実変更path、変更した公開型・export・契約に起因するcallerの失敗。追跡状態・今回の編集有無を問わず修正・再検証し、解消できなければ`scope fail` |
+| `unrelated` | 今回の要求・変更と無関係と確認した既存失敗。対象外fileを変更・削除せず、command・diagnostic・無関係と判断した根拠を報告して続行 |
 | `uncertain` | 因果関係を確定できない失敗。成功・失敗を推測せず報告 |
 
 どの分類が残っていても完了マークを自動判定せず、ユーザー判断に従う。
+
+ignored / untrackedやcheckout前からの存在だけで`unrelated`にしない。関連fileの所有・追跡方針が未決定なら[作業対象の扱い](IMPLEMENTATION_RULES.md#作業対象とgit状態)へ戻る。
 
 ## 修正ループ
 
