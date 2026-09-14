@@ -6,7 +6,6 @@ exec 2>/dev/null
 case "$(hook_event_name)" in ""|PreToolUse) ;; *) exit 0 ;; esac
 TOOL=$(hook_tool_name)
 READ_MSG="skillのスクリプト内容の読み取り・検索・トレース実行は禁止です。内容を読まず、SKILL.md記載のコマンドを実行してください。実行できない、または実行に問題がある場合は、読み取りや別経路で回避せず報告して停止してください。"
-CONTEXT_MSG="操作時にhookが注入する文書は先読みできません。対象操作を実行し、注入された内容を使って再試行してください。"
 READ_CWD=$(echo "$HOOK_INPUT" | jq -r '.tool_input.workdir // .cwd // "."')
 
 # 内容は読まず、相対path・親directory・symlinkだけを解決する。
@@ -26,37 +25,6 @@ source_path() {
   printf '%s\n' "$path"
 }
 
-is_injected_context() {
-  local raw=$1 path candidate
-  case "$raw" in *:*/skills/*) raw=${raw#*:} ;; esac
-  path=$(source_path "$raw")
-  # shellを評価せずpath globだけ展開する。入力のcommand substitution等は実行しない。
-  case "$path" in
-    *\**|*\?*|*\[*)
-      while IFS= read -r candidate; do
-        if [ "$candidate" != "$path" ] && is_injected_context "$candidate"; then return 0; fi
-      done < <(compgen -G "$path")
-      return 1
-      ;;
-  esac
-  case "$path" in
-    */skills/SUBAGENT_RULES.md|*/skills/CHILD_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
-  esac
-  return 1
-}
-
-# 明示した検索directoryの下に注入専用文書があれば、Markdown一括検索も拒否する。
-is_context_scope() {
-  local directory candidate
-  directory=$(source_path "$1")
-  [ -d "$directory" ] || return 1
-  for candidate in "$directory"/SUBAGENT_RULES.md "$directory"/REVIEW_CONTRACT.md "$directory"/NESTING_CONTRACT.md \
-      "$directory"/skills/SUBAGENT_RULES.md; do
-    [ -f "$candidate" ] && is_injected_context "$candidate" && return 0
-  done
-  return 1
-}
-
 is_skill_source() {
   local path logical
   path=$(source_path "$1")
@@ -72,7 +40,7 @@ is_skill_source() {
 }
 
 is_skill_scope() {
-  local path logical
+  local path logical candidate
   path=$(source_path "$1")
   case "$1" in /*) logical=$1 ;; *) logical="$READ_CWD/$1" ;; esac
   case "$logical" in
@@ -81,8 +49,14 @@ is_skill_scope() {
   esac
   case "$path" in */skills|*/skills/|*/skills/*)
     [ -d "$path" ] && return 0
-    # ファイルを指定しないglobでスクリプトをまとめて読む操作も対象。
-    case "$path" in *.md|*.txt) return 1 ;; *\**|*\?*) return 0 ;; esac
+    # Expand only path globs, never shell code. A glob that resolves solely to
+    # documentation must not inherit the ban on executable skill sources.
+    case "$path" in *\**|*\?*|*\[*)
+      while IFS= read -r candidate; do
+        if [ -d "$candidate" ] || is_skill_source "$candidate"; then return 0; fi
+      done < <(compgen -G "$path")
+      ;;
+    esac
   esac
   return 1
 }
@@ -95,8 +69,6 @@ case "$TOOL" in
     while IFS= read -r path; do
       [ -n "$path" ] || continue
       FOUND=true
-      is_injected_context "$path" && hook_deny "$CONTEXT_MSG"
-      is_context_scope "$path" && hook_deny "$CONTEXT_MSG"
       is_skill_source "$path" && hook_deny "$READ_MSG"
       case "$DOC_GLOB" in *.md|*.txt) continue ;; esac
       is_skill_scope "$path" && hook_deny "$READ_MSG"
@@ -114,9 +86,6 @@ CMD=$(echo "$HOOK_INPUT" | jq -r '.tool_input.command // .tool_input.cmd // empt
 TOKENS=$(printf '%s\n' "$CMD" | xargs -n 1 printf '%s\n') || exit 0
 ARGS=()
 while IFS= read -r token; do ARGS+=("$token"); done <<< "$TOKENS"
-for token in "${ARGS[@]}"; do
-  is_injected_context "$token" && hook_deny "$CONTEXT_MSG"
-done
 INDEX=0
 while [ "${ARGS[$INDEX]:-}" = command ] || [ "${ARGS[$INDEX]:-}" = builtin ]; do INDEX=$((INDEX + 1)); done
 TRACE_ENV=false
@@ -208,7 +177,6 @@ case "$BIN" in
       esac
       case "$token" in -*) continue ;; esac
       if [ "$PATTERN_SEEN" = false ]; then PATTERN_SEEN=true; continue; fi
-      is_context_scope "$token" && hook_deny "$CONTEXT_MSG"
       is_skill_scope "$token" && hook_deny "$READ_MSG"
       [ -f "$(source_path "$token")" ] && EXPLICIT_FILE=true
     done
