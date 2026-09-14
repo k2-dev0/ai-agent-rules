@@ -1,6 +1,8 @@
 # 独立レビューの起動・結果処理
 
-変更前HEADはhookが`.[agent_name]/tmp/independent-review.<session_id>.json`の`base`へ保存する。現在sessionの状態を読み、`review_base`に使う。状態がない既存差分のレビュー依頼だけ、指定された比較元を使い、不明なら確認する。状態ファイルは直接編集しない。
+起動入力を組み立てる前に[子の起動手順](SUBAGENT_RULES.md)の未読分を読む。
+
+変更前HEADはhookが`.[agent_name]/tmp/independent-review.<session_id>.json`の`base`へ保存する。現在sessionの状態を読み、`review_base`に使う。状態がなければ編集前に保持したHEADまたはユーザー指定の比較元を使い、不明なら確認する。現在HEADや直前の1commitを根拠なく比較元にしない。状態ファイルは直接編集しない。
 
 メインによる全差分の自己レビューは工程に含めない。ネスト検出だけで代用しない。
 
@@ -8,6 +10,7 @@
 
 1. `git rev-parse HEAD`を`review_head`として固定する
 2. 起動toolの`prompt`（`message`を使うtoolでは`message`）はJSON文字列とし、`repository`に絶対path、`review_base`・`review_head`に完全SHA、`requirements`に元の要求・制約の本文を入れる
+   - この4項目のobjectを1回serializeし、自然文の前置き・code fence・wrapper objectを加えず、role・fork指定は外側のtool引数に置く
    - 実装経緯・採用理由・自己評価・過去のレビュー結果・会話履歴を渡さない
    - 採点・モデル選択・切替手順はrequirementsへ含めない
    - 会話中の要件は意味を変えず必要部分だけ抜き出す
@@ -22,7 +25,7 @@
 | Codex・点数から主担当が選んだモデルまたはレビューによる昇格先がAstra | `deep-reviewer` |
 | Claude | `code-reviewer` |
 
-選んだroleで起動する。完了後は子を終了・解放する。対応role・起動toolが利用不能、起動拒否、中断、入力不足なら独立レビュー未完了と報告する。メインの自己確認で代用しない。
+選んだroleで起動する。入力拒否は共通の起動手順に従って訂正し、実際に開始した子の完了後に終了・解放する。対応role・起動toolが利用不能、中断、入力不足を解消できない場合は独立レビュー未完了と報告する。メインの自己確認で代用しない。
 
 ## 結果・修正
 
@@ -45,4 +48,4 @@
 
 同一session・HEAD・要求・制約で確認済みの結果は再利用し、同じ入力で繰り返し起動しない。却下した指摘は根拠を短く残す。要件・制約が変わった場合は再レビューする。
 
-指摘の採否・却下根拠の妥当性はメインが判断する。
+指摘の採否・却下根拠の妥当性はメインが判断する。レビュー未実施・未完了を、commit済み・tracked差分なしだけでタスク完了へ置き換えない。
