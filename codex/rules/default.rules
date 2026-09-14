@@ -1,61 +1,30 @@
-# <repo>/.codex/rules/default.rules として配置する。
-# Gitはprotect-git.shが読み取りargvを検査する。
+# sandbox内の単一通常commandはpermission profileに委ねる。複合構文・Git引数はhookで検査する。
+# allowはsandbox外でも適用されるため、契約付きGitと固定の特権scriptだけに限定する。
 
-# distributed permission profile は通常のworkspace書き込みを許可し、hookが設定・skillを保護する。
-# `.[agent_name]/prompt/` は設計書の正本として直接更新できる。汎用の shell / cp / sed には例外を与えない。
 prefix_rule(
     pattern = ["bash", ".agents/skills/bootstrap/bootstrap.sh", "codex"],
     decision = "allow",
     justification = "配置済みCodex設定のplaceholderを決定的スクリプトで解決します。",
 )
+
 prefix_rule(
     pattern = ["bash", ".agents/skills/tdd/mark-prompt-done.sh"],
     decision = "allow",
     justification = "実装済みの設計書を固定の.codex/prompt/.prompt.md上で[x]に倒します。",
 )
-prefix_rule(
-    pattern = ["bash", ".agents/skills/polish/quality-gate.sh"],
-    decision = "allow",
-    justification = "polish対象が実変更pathと一致し、追跡済み・cleanであることを確認します。",
-)
-prefix_rule(
-    pattern = ["bash", ".agents/skills/polish/capture-scope.sh"],
-    decision = "allow",
-    justification = "実装直前のHEADをbaselineとして記録し、polish対象の実変更pathを列挙します。",
-)
-# TDDで承認済みの対象テストを個別実行・再実行する固定runner。引数はtest pathだけを
-# 受け取るrunner側で処理し、任意のshellや他scriptへ許可を広げない。
-prefix_rule(
-    pattern = ["./base/scripts/run-unit.sh"],
-    decision = "allow",
-    justification = "承認済みTDDシナリオの対象unit testを既存runner経由で実行します。",
-)
 
-# repository内のlocal ESLintを対象pathへ繰り返し実行する検証command。
-# projectで管理されたlint入口として、対象pathが変わっても追加承認を不要にする。
-prefix_rule(
-    pattern = ["yarn", "eslint"],
-    decision = "allow",
-    justification = "repository内のlocal ESLintで対象ファイルを検証します。",
-)
-
-# 長時間実行processの完了確認。ps -p は指定PIDの状態を読むだけで
-# filesystemやprocessへ変更を加えないため、動的PIDでも追加承認を不要にする。
-prefix_rule(
-    pattern = ["ps", "-p"],
-    decision = "allow",
-    justification = "長時間実行processの完了状態を読み取り専用で確認します。",
-)
 prefix_rule(
     pattern = ["bash", ".agents/skills/e2e/apply-e2e-plan.sh"],
     decision = "allow",
     justification = "確認済み計画を固定の.codex/e2e/.e2e.mdへ反映します。",
 )
+
 prefix_rule(
     pattern = ["bash", ".agents/skills/rebase/rebase.sh"],
     decision = "allow",
     justification = "明示的なrebase呼び出しで、未push履歴だけを固定スクリプトで二重検証して整理します。",
 )
+
 prefix_rule(
     pattern = ["bash", ".codex/hooks/shell/protect-review.sh", "approve"],
     decision = "prompt",
@@ -68,7 +37,6 @@ prefix_rule(
     ],
 )
 
-# Git書き込みは契約準拠add/commitと固定rebase実行器に限定する。
 prefix_rule(
     pattern = ["git", ["reset", "clean", "restore", "checkout", "switch", "rebase", "merge", "fetch", "pull", "clone", "init", "config", "update-ref", "gc", "prune", "reflog", "stash", "apply", "am", "rm", "mv"]],
     decision = "forbidden",
@@ -81,98 +49,32 @@ prefix_rule(
     justification = "共有hookが単一file・commit契約を検査するadd/commitを許可します。",
 )
 
-# protect-gitが安全化した実コマンドも、同じ限定許可へ接続する。
 prefix_rule(
     pattern = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", "--literal-pathspecs", "add", "--"],
     decision = "allow",
     justification = "単一fileを検査したstageを実行します。",
 )
+
 prefix_rule(
     pattern = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", "-c", "commit.gpgSign=false", "commit", "-m"],
     decision = "allow",
     justification = "外部hookと署名programを無効にした契約準拠commitを実行します。",
 )
 
-# metadata変更と上書きしない作成は自動化する。shell-file-write hookがredirectと
-# 上書き可能なoptionを拒否する。固定スクリプトの内部処理は個々のscriptのレビュー対象。
-prefix_rule(
-    pattern = [["touch", "chmod", "chown", "chgrp"]],
-    decision = "allow",
-    justification = "新規作成とmetadata変更は内容の上書きを伴わないため自動実行します。",
-)
-prefix_rule(
-    pattern = ["cp", "-n", "--"],
-    decision = "allow",
-    justification = "既存ファイルを上書きしないコピーを許可します。",
-)
-prefix_rule(
-    pattern = ["ln", "--"],
-    decision = "allow",
-    justification = "既存の宛先を置換しないリンク作成を許可します。",
-)
-prefix_rule(
-    pattern = ["ln", "-s", "--"],
-    decision = "allow",
-    justification = "既存の宛先を置換しないsymlink作成を許可します。",
-)
-prefix_rule(
-    pattern = ["install", "-d"],
-    decision = "allow",
-    justification = "ディレクトリ作成とmetadata設定を許可します。",
-)
-prefix_rule(
-    pattern = [["dd", "truncate", "tee", "patch", "rsync"]],
-    decision = "forbidden",
-    justification = "shellによるファイル内容の上書きは禁止です。Edit / apply_patchを使ってください。",
-)
-
-prefix_rule(
-    pattern = ["rm"],
-    decision = "prompt",
-    justification = "削除対象と復元方法を確認してから実行します。",
-)
-prefix_rule(
-    pattern = ["rmdir"],
-    decision = "prompt",
-    justification = "ディレクトリ削除前に対象を確認します。",
-)
-prefix_rule(
-    pattern = ["unlink"],
-    decision = "prompt",
-    justification = "ファイルまたはリンクの削除前に対象を確認します。",
-)
-prefix_rule(
-    pattern = ["shred"],
-    decision = "prompt",
-    justification = "復元困難な削除前に対象を確認します。",
-)
-prefix_rule(
-    pattern = ["mv"],
-    decision = "prompt",
-    justification = "hookで上書きを拒否したうえで、移動による参照切れがないことを確認します。",
-)
-prefix_rule(
-    pattern = ["sed", "-i"],
-    decision = "forbidden",
-    justification = "shellでのin-place編集は禁止です。Edit / apply_patchを使ってください。",
-)
-
-# redirection・変数展開・wildcard・control flow を含むscriptはCodexが個別コマンドへ
-# 安全に分解できないため、shell wrapper全体を確認対象にする。
-prefix_rule(
-    pattern = [["bash", "zsh", "sh"], ["-lc", "-c"]],
-    decision = "prompt",
-    justification = "静的に分解できないshell scriptの副作用を確認します。",
-)
-
-# 共有履歴への不可逆操作は禁止。
 prefix_rule(
     pattern = ["git", "push"],
     decision = "forbidden",
     justification = "pushはユーザー自身が変更内容を確認して実行してください。",
 )
+
 prefix_rule(
     pattern = ["git", "cherry-pick"],
     decision = "forbidden",
     justification = "履歴の取り込みはユーザー自身が実行してください。",
+)
+
+prefix_rule(
+    pattern = ["bash", ".codex/hooks/shell/outside.sh"],
+    decision = "prompt",
+    justification = "Git保護を維持した境界外実行の承認を求めます。",
 )
