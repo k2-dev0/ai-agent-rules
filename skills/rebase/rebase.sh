@@ -2,7 +2,7 @@
 # rebase スキルの決定的実行スクリプト。
 # 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
 # 機能単位の squash 履歴へ組み替える。履歴書き換えの唯一の公認経路
-# （生の rebase / filter-branch / force push は deny-history.sh が deny する）。
+# （生の rebase / filter-branch / force push は git-policy.py が deny する）。
 #
 # 使い方:
 #   rebase.sh --check [--base <ref>]  # 前提検査と対象範囲の報告（履歴を変更しない）
