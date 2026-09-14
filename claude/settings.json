@@ -111,6 +111,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^mcp__(chrome[-_]devtools__(take_screenshot|take_snapshot|screencast_start)|serena__write_memory)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/protect-git.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -168,22 +178,27 @@
       "bash .claude/skills/bootstrap/bootstrap.sh *",
       "bash .claude/skills/tdd/mark-prompt-done.sh",
       "bash .claude/skills/tdd/mark-prompt-done.sh *",
-      "bash .claude/skills/polish/quality-gate.sh",
-      "bash .claude/skills/polish/quality-gate.sh *",
-      "bash .claude/skills/polish/capture-scope.sh",
-      "bash .claude/skills/polish/capture-scope.sh *",
       "bash .claude/skills/rebase/rebase.sh",
       "bash .claude/skills/rebase/rebase.sh *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
-      "bash .claude/skills/e2e/apply-e2e-plan.sh *",
-      "./base/scripts/run-unit.sh",
-      "./base/scripts/run-unit.sh *"
+      "bash .claude/skills/e2e/apply-e2e-plan.sh *"
     ],
     "filesystem": {
       "denyWrite": [
         ".git",
         ".env",
-        ".env.*"
+        ".env.*",
+        ".mcp.json",
+        ".claude/hooks",
+        ".claude/agents",
+        ".claude/skills",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".codex/hooks",
+        ".codex/agents",
+        ".codex/config.toml",
+        ".codex/hooks.json",
+        ".agents/skills"
       ]
     },
     "network": {
