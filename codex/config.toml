@@ -14,6 +14,7 @@ extends = ":workspace"
 ".codex/config.toml" = "read"
 ".codex/hooks.json" = "read"
 ".codex/rules" = "read"
+".codex/tmp" = "read"
 ".agents/skills" = "read"
 ".mcp.json" = "read"
 ".claude/hooks" = "read"
@@ -21,6 +22,7 @@ extends = ":workspace"
 ".claude/agents" = "read"
 ".claude/settings.json" = "read"
 ".claude/settings.local.json" = "read"
+".claude/tmp" = "read"
 
 [permissions.distributed.network]
 # localhost を含む通信はsandbox内で許可せず、外部実行の承認へ送る。
