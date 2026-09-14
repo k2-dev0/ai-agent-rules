@@ -1,15 +1,12 @@
 #!/bin/bash
-# 観測可能な操作の直前にだけ親用手順を注入し、専用子にはrole契約だけを渡す。
+# 専用子の開始時に共通制約とrole契約を渡す。親の手順は起動前に正本を読む。
 exec 2>/dev/null
 . "$(dirname "$0")/hook-io.sh"
-
+[ "$(hook_event_name)" = SubagentStart ] || exit 0
 CWD=$(hook_cwd)
 [ -n "$CWD" ] || CWD=$PWD
 ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || {
-  case "$(hook_event_name)" in
-    PreToolUse) hook_deny "repository rootを確認できないため操作手順を注入できません。" ;;
-    SubagentStart) hook_review_context "repository rootを確認できないため専用契約を注入できません。成功扱いせず失敗を返してください。" ;;
-  esac
+  hook_review_context "repository rootを確認できないため契約を注入できません。成功扱いせず失敗を返してください。"
   exit 0
 }
 
@@ -23,79 +20,26 @@ skill_file() {
   printf '%s\n' "$base/$relative"
 }
 
-inject_parent_once() {
-  local session file_list=$1 stamp content= file receipt state_dir pending=
-  session=$(hook_session_id)
-  case "$session" in ''|*[!A-Za-z0-9._-]*) hook_deny "操作手順を注入するsession_idを確認できません。" ;; esac
-  case "$HOOK_AGENT" in claude) state_dir="$ROOT/.claude/tmp" ;; codex) state_dir="$ROOT/.codex/tmp" ;; esac
-  mkdir -p "$state_dir" || hook_deny "操作手順の注入記録を保存できません。"
-  while IFS= read -r file; do
-    [ -n "$file" ] || continue
-    stamp=$(cksum "$file" | awk '{print $1 ":" $2}')
-    receipt="$state_dir/operation-context.$(basename "$file").$session"
-    [ ! -f "$receipt" ] || [ "$(cat "$receipt")" != "$stamp" ] || continue
-    content="$content$(cat "$file")"$'\n'
-    pending="$pending$receipt	$stamp
-"
-  done <<< "$file_list"
-  [ -n "$content" ] || return 0
-  while IFS=$'\t' read -r receipt stamp; do
-    [ -n "$receipt" ] || continue
-    printf '%s' "$stamp" > "$receipt" || hook_deny "操作手順の注入記録を保存できません。"
-  done <<< "$pending"
-  hook_deny "次の手順をこの操作の直前に注入しました。操作は未実行です。内容を反映して再試行してください。
-
-$content"
+ROLE=$(hook_child_role)
+case "$ROLE" in
+  difficulty-evaluator) RELATIVE=DIFFICULTY_CONTRACT.md ;;
+  code-reviewer|deep-reviewer) RELATIVE=CODE_REVIEW_CONTRACT.md ;;
+  design-reviewer) RELATIVE=ponytail/REVIEW_CONTRACT.md ;;
+  nesting-reviewer) RELATIVE=unwind/NESTING_CONTRACT.md ;;
+  *) exit 0 ;;
+esac
+FILE=$(skill_file "$RELATIVE") || {
+  hook_review_context "専用契約 $RELATIVE が見つかりません。成功扱いせず失敗を返してください。"
+  exit 0
 }
-
-case "$(hook_event_name)" in
-  PreToolUse)
-    case "$(hook_tool_name)" in
-      Agent|*spawn_agent)
-        ROLE=$(hook_agent_type)
-        case "$ROLE" in difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;; *) exit 0 ;; esac
-        FILES=
-        if [ "$ROLE" = difficulty-evaluator ]; then
-          FILE=$(skill_file MODEL_SELECTION.md) || hook_deny "MODEL_SELECTION.mdが見つかりません。"
-          FILES=$FILE
-        fi
-        FILE=$(skill_file SUBAGENT_RULES.md) || hook_deny "SUBAGENT_RULES.mdが見つかりません。"
-        [ -n "$FILES" ] && FILES="$FILES
-$FILE" || FILES=$FILE
-        case "$ROLE" in
-          code-reviewer|deep-reviewer)
-            FILE=$(skill_file INDEPENDENT_REVIEW.md) || hook_deny "INDEPENDENT_REVIEW.mdが見つかりません。"
-            FILES="$FILES
-$FILE"
-            ;;
-        esac
-        inject_parent_once "$FILES"
-        ;;
-    esac
-    ;;
-  SubagentStart)
-    ROLE=$(hook_child_role)
-    case "$ROLE" in
-      difficulty-evaluator) RELATIVE=DIFFICULTY_CONTRACT.md ;;
-      code-reviewer|deep-reviewer) RELATIVE=CODE_REVIEW_CONTRACT.md ;;
-      design-reviewer) RELATIVE=ponytail/REVIEW_CONTRACT.md ;;
-      nesting-reviewer) RELATIVE=unwind/NESTING_CONTRACT.md ;;
-      *) exit 0 ;;
-    esac
-    FILE=$(skill_file "$RELATIVE") || {
-      hook_review_context "専用契約 $RELATIVE が見つかりません。成功扱いせず失敗を返してください。"
-      exit 0
-    }
-    COMMON=$(skill_file CHILD_RULES.md) || {
-      hook_review_context "子の共通制約が見つかりません。成功扱いせず失敗を返してください。"
-      exit 0
-    }
-    hook_review_context "契約の相対参照は $(dirname "$FILE") を基準に解決してください。
+COMMON=$(skill_file CHILD_RULES.md) || {
+  hook_review_context "子の共通制約が見つかりません。成功扱いせず失敗を返してください。"
+  exit 0
+}
+hook_review_context "契約の相対参照は $(dirname "$FILE") を基準に解決してください。
+共通制約と専用契約は全文を確認してから作業してください。省略・退避された場合は示された保存先を読み、全文を確認できなければ契約未確認として失敗を返してください。
 
 $(cat "$COMMON")
 
 $(cat "$FILE")"
-    ;;
-esac
-
 exit 0
