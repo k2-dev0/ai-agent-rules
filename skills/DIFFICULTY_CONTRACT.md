@@ -9,6 +9,7 @@
   - JSONがobjectでない、またはキーが`repository`と`implementation_policy`だけでない場合は`{"error":"evaluation input must contain only repository and implementation_policy"}`を返す
   - `repository`が現在repositoryの絶対pathと一致しない場合は`{"error":"repository is incorrect"}`を返す
   - `implementation_policy`が文字列でない、または空白だけなら`{"error":"implementation_policy must be a non-empty string"}`を返す
+  - `implementation_policy`がJSONデコード後4000文字を超える場合は`{"error":"implementation_policy exceeds 4000 characters"}`を返す
   - 対象と変更後の挙動を特定できない、または背景・会話・調査結果・難度予想・設計書参照・選択基準だけの場合は`{"error":"implementation_policy must describe a concrete implementation change"}`を返す
   - errorの値は入力を再掲しない簡潔な英語にする
   - 同じ入力に対して採点を続けず、入力を直して新しい評価を依頼する
