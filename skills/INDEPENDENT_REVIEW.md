@@ -7,7 +7,6 @@
 ## 対象・入力
 
 1. `git rev-parse HEAD`を`review_head`として固定する
-   - 比較元・対象HEAD・追跡fileのclean状態は起動hookが検査する
 2. 起動toolの`prompt`（`message`を使うtoolでは`message`）はJSON文字列とし、`repository`に絶対path、`review_base`・`review_head`に完全SHA、`requirements`に元の要求・制約の本文を入れる
    - 実装経緯・採用理由・自己評価・過去のレビュー結果・会話履歴を渡さない
    - 採点・モデル選択・切替手順はrequirementsへ含めない
@@ -23,13 +22,11 @@
 | Codex・点数から主担当が選んだモデルまたはレビューによる昇格先がAstra | `deep-reviewer` |
 | Claude | `code-reviewer` |
 
-Codexは`agent_type`にroleを指定し、`fork_context: false`または`fork_turns: "none"`を明示する。Claudeは`subagent_type`にroleを指定する。model・effortは専用定義を使う。
-
 選んだroleで起動する。完了後は子を終了・解放する。対応role・起動toolが利用不能、起動拒否、中断、入力不足なら独立レビュー未完了と報告する。メインの自己確認で代用しない。
 
 ## 結果・修正
 
-終了時のHEADと追跡fileの状態が開始時と違えば結果を完了判定に使わず、変更内容を確認して対象を固定し直す。最終結果だけ取得し、中間ログは読まない。
+終了時のHEADと追跡fileの状態が開始時と違えば結果を完了判定に使わず、変更内容を確認して対象を固定し直す。
 
 - `reviewed`：両SHAと全差分の確認が一致した場合だけ受理する
   - 未確認範囲がなく、全指摘が修正済みまたは根拠付きで却下済みなら独立レビュー完了
