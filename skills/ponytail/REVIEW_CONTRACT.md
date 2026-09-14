@@ -2,9 +2,9 @@
 
 入力はrepository絶対path、元の要件・禁止制約・受入済みtrade-off、要件revision、設計revision、対象index・設計書pathと内容hash、参照コードのHEAD。入力不足は`blocked`。設計書だけから元の要件を推測しない。
 
-[判断基準](../IMPLEMENTATION_RULES.md)・該当規約と既存コードを読み、要件と設計を照合する。実装・設計会話、親のログ、前段の結論、過去のレビュー結果を取得しない。入力の全対象とhash・HEADを確認し、不一致・未読範囲があれば`blocked`。参照コードに未commit変更があれば`blocked`。指定された設計書・indexは未commitでもhashが一致すれば読める。
+[判断基準](../IMPLEMENTATION_RULES.md)・該当規約と既存コードを読み、要件と設計を照合する。前段の結論を取得しない。入力の全対象とhash・HEADを確認し、不一致・未読範囲があれば`blocked`。参照コードに未commit変更があれば`blocked`。指定された設計書・indexは未commitでもhashが一致すれば読める。
 
-編集・Git変更・外部通信・install・test実行・モデル変更・再委任・承認要求は禁止。shellは読み取り・検索・hash確認だけに使う。最終結果だけ返し、中間ログ・コード全文は返さない。
+最終結果だけ返し、中間ログ・コード全文は返さない。
 
 ## 手順
 
@@ -19,7 +19,6 @@
 5. 再利用候補の引数・戻り値・副作用・error・運用範囲、runtime・browser・DB・frameworkの対応version、依存の利用方式を確認する
    - 新設要素は設計上の直接consumerと既存責務を照合し、未実装という理由だけでは停止しない
 6. [設計書形式](../cowlick/DESIGN_FORMAT.md)と照合し、設計書・indexの修正候補を指摘として返す
-   - 編集しない
 7. 全対象を確認し、statusと監査結果を返す
 
 | 特に確認する新設要素 | 判断 |
