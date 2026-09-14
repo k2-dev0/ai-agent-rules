@@ -1,5 +1,5 @@
 # <repo>/.codex/rules/default.rules として配置する。
-# 可逆でも未コミット内容を失う操作は都度確認し、共有履歴を変える操作は拒否する。
+# Gitはprotect-git.shが読み取りargvを検査する。
 
 # distributed permission profile は通常のworkspace書き込みを許可し、hookが設定・skillを保護する。
 # `.[agent_name]/prompt/` は設計書の正本として直接更新できる。汎用の shell / cp / sed には例外を与えない。
@@ -68,16 +68,29 @@ prefix_rule(
     ],
 )
 
-# 自動コミットは共有 hook が index とメッセージを検証することを前提に許可する。
+# Git書き込みは契約準拠add/commitと固定rebase実行器に限定する。
 prefix_rule(
-    pattern = ["git", "add"],
+    pattern = ["git", ["reset", "clean", "restore", "checkout", "switch", "rebase", "merge", "fetch", "pull", "clone", "init", "config", "update-ref", "gc", "prune", "reflog", "stash", "apply", "am", "rm", "mv"]],
+    decision = "forbidden",
+    justification = "このGit操作は許可されていません。履歴整理は固定rebaseスクリプトを使ってください。",
+)
+
+prefix_rule(
+    pattern = ["git", ["add", "commit"]],
     decision = "allow",
-    justification = "共有hookが一括stageを拒否するため、対象ファイルの個別stageを許可します。",
+    justification = "共有hookが単一file・commit契約を検査するadd/commitを許可します。",
+)
+
+# protect-gitが安全化した実コマンドも、同じ限定許可へ接続する。
+prefix_rule(
+    pattern = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", "--literal-pathspecs", "add", "--"],
+    decision = "allow",
+    justification = "単一fileを検査したstageを実行します。",
 )
 prefix_rule(
-    pattern = ["git", "commit"],
+    pattern = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", "-c", "commit.gpgSign=false", "commit", "-m"],
     decision = "allow",
-    justification = "共有hookがstage件数・対象名・日本語メッセージを検証するため、契約準拠commitを許可します。",
+    justification = "外部hookと署名programを無効にした契約準拠commitを実行します。",
 )
 
 # metadata変更と上書きしない作成は自動化する。shell-file-write hookがredirectと
@@ -150,13 +163,6 @@ prefix_rule(
     pattern = [["bash", "zsh", "sh"], ["-lc", "-c"]],
     decision = "prompt",
     justification = "静的に分解できないshell scriptの副作用を確認します。",
-)
-
-# 未コミット内容やindexを失わせる可能性があるGit操作。
-prefix_rule(
-    pattern = ["git", ["reset", "clean", "restore", "checkout", "switch"]],
-    decision = "prompt",
-    justification = "作業ツリーまたはindexへの影響を確認します。",
 )
 
 # 共有履歴への不可逆操作は禁止。
