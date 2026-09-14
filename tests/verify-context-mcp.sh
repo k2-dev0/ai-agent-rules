@@ -18,8 +18,8 @@ FIXTURE_ROOT="/opt/context dictionary"
 
 jq -e '
   .mcpServers["context-dictionary"].type == "stdio" and
-  .mcpServers["context-dictionary"].command == "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx" and
-  .mcpServers["context-dictionary"].args == ["__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
+  .mcpServers["context-dictionary"].command == "bash" and
+  .mcpServers["context-dictionary"].args == [".claude/hooks/shell/mcp-protected.sh", "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx", "__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
 ' "$CLAUDE_MCP" >/dev/null 2>&1 && ok "Claude MCP template" || ng "Claude MCP template"
 
 jq -e '
@@ -36,7 +36,7 @@ if awk '
   $0 == "[mcp_servers.context-dictionary]" { server=1; next }
   server && /^\[/ { exit !(prompt && command && agent) }
   server && $0 == "default_tools_approval_mode = \"prompt\"" { prompt=1 }
-  server && $0 == "command = \"__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx\"" { command=1 }
+  server && $0 == "command = \"bash\"" { command=1 }
   server && $0 == "env = { CONTEXT_AGENT = \"codex\" }" { agent=1 }
   END { if (server) exit !(prompt && command && agent) }
 ' "$CODEX_MCP" &&
