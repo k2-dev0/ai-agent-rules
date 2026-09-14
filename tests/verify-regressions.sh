@@ -39,7 +39,18 @@ for agent in claude codex; do
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check grep -Fq '対応する`PreModelSwitch`がない環境だけ' "$model_selection"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  if [ "$agent" = codex ]; then difficulty_agent="$target/.codex/agents/difficulty-evaluator.toml"; else difficulty_agent="$target/.claude/agents/difficulty-evaluator.md"; fi
+  check grep -Fq '短い理由または入力エラーを返す' "$difficulty_agent"
+  check grep -Fq 'JSON error objectだけを返し、採点・作業をしない' "$difficulty_agent"
+  check grep -Fq 'difficulty contract unavailable' "$difficulty_agent"
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'evaluation input must be valid JSON' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'evaluation input must contain only repository and implementation_policy' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'repository is incorrect' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '4000文字以内' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'implementation_policy exceeds 4000 characters' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'implementation_policy must describe a concrete implementation change' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '加点した軸とコード上の根拠を優先し、0点の軸は省略' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '0点は対象要素がない場合だけでなく、調査により定型で追加判断が不要と確認できた場合も含む' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -50,9 +61,11 @@ for agent in claude codex; do
     echo "FAIL 採点契約に実行担当のモデル情報が残存: $agent"
     exit 1
   fi
-  check grep -Fq '1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / high' "$model_selection"
+  check grep -Fq '1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / xhigh' "$model_selection"
+  check grep -Fq '`{"error":"..."}`（入力エラー）' "$model_selection"
+  check grep -Fq '正常終了・評価済みとして扱わない' "$model_selection"
   check grep -Fq '同じfile内の関数・section・testへの指摘が再発した場合' "$target/$skill_root/FIX_FLOW.md"
-  check grep -Fq 'LunaからSol、SolからAstraへ昇格し、Astra / highでは維持する' "$target/$skill_root/FIX_FLOW.md"
+  check grep -Fq 'LunaからSol、SolからAstraへ昇格し、Astra / xhighでは維持する' "$target/$skill_root/FIX_FLOW.md"
   check grep -Fq '変更file・直接依存先以外の未変更文書' "$target/$skill_root/CODE_REVIEW_CONTRACT.md"
   check grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$target/$skill_root/INDEPENDENT_REVIEW.md"
   check grep -Fq '次の応答では`switch_model`だけを呼び' "$target/$skill_root/MODEL_SWITCH.md"
@@ -314,8 +327,11 @@ for agent in claude codex; do
       if [ "$agent" = codex ]; then contract=.agents/skills/ponytail/REVIEW_CONTRACT.md; else contract=.claude/skills/ponytail/REVIEW_CONTRACT.md; fi
     fi
     effort=high
+    case "$agent:$role" in
+      *:difficulty-evaluator) effort=medium ;;
+      codex:deep-reviewer|codex:design-reviewer) effort=xhigh ;;
+    esac
     if [ "$role" = difficulty-evaluator ]; then
-      effort=medium
       if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
     fi
     definition=".$agent/agents/$role.$extension"
@@ -358,6 +374,12 @@ for agent in claude codex; do
       for mutation in 'del(.tool_input.prompt)' '.tool_input.prompt="plain text"' '.tool_input.prompt |= (fromjson | .background="history" | tojson)' '.tool_input.prompt |= (fromjson | .repository="/wrong" | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy="  " | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy=[] | tojson)'; do
         invalid=$(printf '%s' "$input" | jq "$mutation")
         check implementer_denied "$invalid" '難易度調査は'
+      done
+      # 方針の長さ・意味はdifficulty契約が返却を決め、起動hookの境界は変えない。
+      overlong_policy=$(jq -nr '"x" * 4001')
+      for policy in "$overlong_policy" 'Only provide background and model selection guidance.'; do
+        evaluator_input=$(printf '%s' "$input" | jq --arg policy "$policy" '.tool_input.prompt |= (fromjson | .implementation_policy=$policy | tojson)')
+        check test -z "$(printf '%s' "$evaluator_input" | bash -c "$command")"
       done
       message_input=$(printf '%s' "$input" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
       check test -z "$(printf '%s' "$message_input" | bash -c "$command")"
