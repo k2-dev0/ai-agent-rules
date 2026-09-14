@@ -213,7 +213,7 @@ if bash .claude/skills/polish/quality-gate.sh example --direct-check -- linked/e
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/git" <<'SH'
 #!/bin/bash
-if [ "$1" = diff ] && [ "${2:-}" = --quiet ] && [ "$#" = 4 ] && [ ! -e "$RACE_ROOT/injected" ]; then
+if [ "$1" = diff ] && [ "${2:-}" = --quiet ] && [ "$#" -ge 4 ] && [ ! -e "$RACE_ROOT/injected" ]; then
   : > "$RACE_ROOT/injected"
   if [ "$RACE_MODE" = edit ]; then
     printf 'user worktree\n' >> "$RACE_ROOT/one.ts"
