@@ -6,26 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/shell-file-write.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/deny-eval.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/deny-registry.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/deny-migration.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/deny-history.sh"
-          },
-          {
-            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/protect-git.sh"
           },
           {
@@ -167,12 +147,24 @@
         ],
         "matcher": "^(code-reviewer|deep-reviewer)$"
       }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/shell/command-approval.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
-    "autoAllowBashIfSandboxed": false,
+    "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
       "bash .claude/skills/bootstrap/bootstrap.sh",
       "bash .claude/skills/bootstrap/bootstrap.sh *",
@@ -181,7 +173,8 @@
       "bash .claude/skills/rebase/rebase.sh",
       "bash .claude/skills/rebase/rebase.sh *",
       "bash .claude/skills/e2e/apply-e2e-plan.sh",
-      "bash .claude/skills/e2e/apply-e2e-plan.sh *"
+      "bash .claude/skills/e2e/apply-e2e-plan.sh *",
+      "bash .claude/hooks/shell/outside.sh *"
     ],
     "filesystem": {
       "denyWrite": [
@@ -198,12 +191,14 @@
         ".codex/agents",
         ".codex/config.toml",
         ".codex/hooks.json",
-        ".agents/skills"
+        ".agents/skills",
+        ".codex/rules"
       ]
     },
     "network": {
       "allowLocalBinding": false,
       "allowedDomains": []
-    }
+    },
+    "allowUnsandboxedCommands": false
   }
 }
