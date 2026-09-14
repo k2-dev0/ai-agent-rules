@@ -19,8 +19,11 @@ case "$ROLE" in
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
     REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "reviewerのリポジトリを確認できません。"
     EFFORT=high
+    case "$HOOK_AGENT:$ROLE" in
+      *:difficulty-evaluator) EFFORT=medium ;;
+      codex:deep-reviewer|codex:design-reviewer) EFFORT=xhigh ;;
+    esac
     if [ "$ROLE" = difficulty-evaluator ]; then
-      EFFORT=medium
       case "$HOOK_AGENT:$(hook_tool_name)" in
         codex:*spawn_agent)
           hook_agent_message_valid || hook_deny "Codexの難易度調査はspawn_agentのmessageに依頼を渡してください。promptは併用しないでください。"
