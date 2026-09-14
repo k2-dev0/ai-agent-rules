@@ -41,8 +41,6 @@ CLAUDE_SAFE_READ_PERMISSIONS=(
   'Bash(nl:*)'
   'Bash(ps -p:*)'
   'Bash(sort:*)'
-  'Bash(git ls-files:*)'
-  'Bash(git grep:*)'
 )
 LEGACY_PRODUCT_NAME="claude"
 LEGACY_HOOK_NAME="enforce-${LEGACY_PRODUCT_NAME}-commit"
@@ -158,7 +156,7 @@ grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
-grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'client検証とserverの最新dataによる再検証' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && grep -Fq '設計書形式の実装情報を保持' "$COWLICK_SKILL" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
+grep -Fq '実装者が挙動を再設計せずコードへ変換できる密度' "$COWLICK_FORMAT" && grep -Fq 'guardの評価順、導出値と計算式' "$COWLICK_FORMAT" && grep -Fq '`where`の全条件と日付境界' "$COWLICK_FORMAT" && grep -Fq 'client検証とserverの最新dataによる再検証' "$COWLICK_FORMAT" && grep -Fq '圧縮してよいのは重複説明と同一の外枠だけ' "$COWLICK_FORMAT" && ok "cowlickの実装可能な疑似コード密度" || ng "cowlickの疑似コードが実装契約を省略可能"
 grep -Fq '| 書き方 | 対象 | 例 |' "$COWLICK_FORMAT" && grep -Fq '予約語・演算子・構文・組み込み型/object' "$COWLICK_FORMAT" && grep -Fq '標準・外部library・framework API、method・property' "$COWLICK_FORMAT" && grep -Fq '新設する業務関数・引数・変数・型・結果field・error・処理' "$COWLICK_FORMAT" && grep -Fq '既存symbol・schema field・file path' "$COWLICK_FORMAT" && grep -Fq '設計書形式に従い' "$COWLICK_SKILL" && ok "cowlick疑似コードの英語構文・日本語識別子契約" || ng "cowlick疑似コードの言語規則が曖昧"
 grep -Fq '配列は`[]`、objectは`{}`を宣言・参照の両方へ付ける' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].length' "$COWLICK_FORMAT" && grep -Fq '候補一覧[].slice(...)' "$COWLICK_FORMAT" && grep -Fq '利用結果{}' "$COWLICK_FORMAT" && grep -Fq '分岐・loopは構文で書く' "$COWLICK_FORMAT" && grep -Fq '共通処理と対象固有の差を残す' "$COWLICK_FORMAT" && ok "cowlick疑似コードの形状・制御構文" || ng "cowlick疑似コードの形状・制御構文が不足"
 grep -q '## 必須監査成果物' "$PONYTAIL_CONTRACT" && grep -Fq '`ponytail_audit`' "$PONYTAIL_CONTRACT" && grep -Fq '`minimalAlternative`' "$PONYTAIL_CONTRACT" && grep -Fq '`counterexamples`' "$PONYTAIL_CONTRACT" && grep -Fq '`unresolved`' "$PONYTAIL_CONTRACT" && grep -q '何も削らなかった場合' "$PONYTAIL_CONTRACT" && grep -q '全fieldが埋まり.*ponytail_ready' "$PONYTAIL_CONTRACT" && ok "ponytailの横断削除・ready gate契約" || ng "ponytailの横断削除・ready gate契約が不足"
@@ -232,6 +230,13 @@ else
   cat "$S/independent-review.out"
 fi
 
+if python3 "$SUITE/test_git_policy.py" > "$S/git-policy.out" 2>&1; then
+  ok "両配布のGit読み取り・単一file add/commit・外部helper抑止・未許可Gitと間接path拒否"
+else
+  ng "Git権限境界の動作検証に失敗"
+  cat "$S/git-policy.out"
+fi
+
 echo "== メイン実装と直列の独立レビュー =="
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
@@ -290,8 +295,8 @@ grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとda
 ! grep -Eq '自己確認|最終レビュー|再レビュー' "$FIX_FLOW" "$TDD_SKILL" && grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
 grep -Fq '降格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SWITCH.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
 grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '同じfile内の関数・section・testへの指摘が再発した場合' "$FIX_FLOW" && grep -Fq 'LunaからSol、SolからAstraへ昇格し、Astra / xhighでは維持する' "$FIX_FLOW" && ok "レビューseverityと再発時のモデル昇格を分離" || ng "レビューseverityの処理が不正"
-grep -Fq '変更file・直接依存先以外の未変更文書' "$REPO/skills/CODE_REVIEW_CONTRACT.md" && grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '文書変更のreviewerは変更fileと直接依存先だけを読む' "$REPO/README.md" && grep -Fq 'CODE_REVIEW_CONTRACT.md' "$REPO/hooks/shell/load-operation-context.sh" && ok "レビューの参照範囲を子へ限定注入" || ng "レビューの参照範囲が過剰"
-grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$MODEL_SELECTION" && grep -Fq 'テストを含む最初の編集前' "$MODEL_SELECTION" && grep -Fq '同じ方針の修正・再開では再利用' "$MODEL_SELECTION" && grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$REPO/skills/DIFFICULTY_CONTRACT.md" && grep -Fq '`{"error":"..."}`（入力エラー）' "$MODEL_SELECTION" && grep -Fq 'error object・`null`・形式不正' "$REPO/README.md" && grep -Fq '専用roleを指定できない汎用子を`difficulty-evaluator`の代用にしない' "$MODEL_SELECTION" && ok "方針確定後・最初の編集前に独立難度評価" || ng "独立難度評価の順序または再利用条件が不正"
+grep -Fq '変更file・直接依存先以外の未変更文書' "$REPO/skills/CODE_REVIEW_CONTRACT.md" && grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq 'CODE_REVIEW_CONTRACT.md' "$REPO/hooks/shell/load-operation-context.sh" && ok "レビューの参照範囲を子へ限定注入" || ng "レビューの参照範囲が過剰"
+grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$MODEL_SELECTION" && grep -Fq 'テストを含む最初の編集前' "$MODEL_SELECTION" && grep -Fq '同じ方針の修正・再開では再利用' "$MODEL_SELECTION" && grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$REPO/skills/DIFFICULTY_CONTRACT.md" && grep -Fq '`{"error":"..."}`（入力エラー）' "$MODEL_SELECTION" && ok "方針確定後・最初の編集前に独立難度評価" || ng "独立難度評価の順序または再利用条件が不正"
 grep -Fq '`schema.prisma`、`constants.ts` / `constants.js`、`constants/`だけの変更' "$TDD_SKILL" && grep -Fq '候補提示・test追加・Red / Greenを省略' "$TDD_SKILL" && grep -Fq '他のruntime挙動も変える場合はその挙動を通常どおり扱う' "$TDD_SKILL" && ok "tddフローはschema・定数のtest除外境界を固定" || ng "tddフローのschema・定数test除外境界が不正"
 grep -Fq '選択済みtest、直接の回帰test、変更packageのtypecheck' "$TDD_SKILL" && grep -Fq '`tsc -p <tsconfig> --noEmit`' "$TDD_SKILL" && grep -Fq '無関係なpackage・repository全体へ広げず' "$TDD_SKILL" && grep -Fq 'Prisma `format`・`validate`・`generate`' "$TDD_SKILL" && ok "tddフローは調査commandと最終検証の範囲を固定" || ng "tddフローの調査commandまたは最終検証が曖昧"
 grep -Fq '../FIX_FLOW.md' "$TDD_SKILL" && grep -Fq "FIX_FLOW.md#診断のscope帰属" "$POLISH_SKILL" && grep -Fq "scope-related" "$FIX_FLOW" && grep -Fq "unrelated" "$FIX_FLOW" && grep -Fq "uncertain" "$FIX_FLOW" && grep -Fq "ignored / untracked test" "$FIX_FLOW" && grep -Fq "どの分類が残っていても完了マークを自動判定せず" "$FIX_FLOW" && ok "tdd・polishは対象外失敗と完了判断を分離" || ng "対象外失敗がタスク完了を自動阻止"
@@ -741,9 +746,9 @@ if command -v codex >/dev/null 2>&1; then
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git add src/example.ts 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git add を allow" || ng "rules: git add 判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git add を許可" || ng "rules: git add 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git commit -m message 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git commit を allow" || ng "rules: git commit 判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: git commit を許可" || ng "rules: git commit 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git status --short 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: git status は未制限" || ng "rules: git status 誤検出 out=[$OUT]"
   GROUP_FAILURES=
