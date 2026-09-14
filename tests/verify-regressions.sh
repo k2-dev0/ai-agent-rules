@@ -368,15 +368,42 @@ for agent in claude codex; do
     check implementer_denied "$input" '定義が無い'
     mv "$definition.missing" "$definition"
     if [ "$role" = difficulty-evaluator ]; then
-      for mutation in 'del(.tool_input.prompt)' '.tool_input.prompt="plain text"' '.tool_input.prompt |= (fromjson | .background="history" | tojson)' '.tool_input.prompt |= (fromjson | .repository="/wrong" | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy="  " | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy=[] | tojson)'; do
+      for mutation in 'del(.tool_input.prompt)' '.tool_input.prompt="plain text"' '.tool_input.prompt="[]"' '.tool_input.prompt="null"' '.tool_input.prompt |= (fromjson | del(.repository) | tojson)' '.tool_input.prompt |= (fromjson | del(.implementation_policy) | tojson)' '.tool_input.prompt |= (fromjson | .background="history" | tojson)' '.tool_input.prompt |= (fromjson | .repository="/wrong" | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy="  " | tojson)' '.tool_input.prompt |= (fromjson | .implementation_policy=[] | tojson)'; do
         invalid=$(printf '%s' "$input" | jq "$mutation")
         check implementer_denied "$invalid" '難易度調査は'
+        invalid_message=$(printf '%s' "$invalid" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
+        check implementer_denied "$invalid_message" '難易度調査は'
+        # native transportでもobjectとして読める本文は、同じ2キー契約で検査する。
+        if [ "$agent" = codex ] && printf '%s' "$invalid_message" | jq -e '.tool_input.message | fromjson | type == "object"' >/dev/null 2>&1; then
+          invalid_native=$(printf '%s' "$invalid_message" | jq '.tool_name="spawn_agent"')
+          check implementer_denied "$invalid_native" '難易度調査は'
+        fi
       done
-      # 方針の意味は子が判定する。起動hookは任意の文字数上限を課さない。
-      long_policy=$(jq -nr '"Add the specified behavior. " * 200')
-      for policy in "$long_policy" 'Only provide background and model selection guidance.'; do
-        evaluator_input=$(printf '%s' "$input" | jq --arg policy "$policy" '.tool_input.prompt |= (fromjson | .implementation_policy=$policy | tojson)')
-        check test -z "$(printf '%s' "$evaluator_input" | bash -c "$command")"
+      # 意味の判定は子へ残すが、本文が見える起動経路は長文を送信前に拒否する。
+      semantic_input=$(printf '%s' "$input" | jq '.tool_input.prompt |= (fromjson | .implementation_policy="Only provide background and model selection guidance." | tojson)')
+      check test -z "$(printf '%s' "$semantic_input" | bash -c "$command")"
+      for transport in prompt message native; do
+        [ "$transport" != native ] || [ "$agent" = codex ] || continue
+        for character in x あ; do
+          for size in 4000 4001; do
+            policy=$(jq -nr --arg character "$character" --argjson size "$size" '$character * $size')
+            for encoding in unicode escaped; do
+              brief=$(printf '%s' "$input" | jq -r '.tool_input.prompt' | jq -c --arg policy "$policy" '.implementation_policy=$policy')
+              [ "$encoding" != escaped ] || brief=$(printf '%s' "$brief" | jq -ac .)
+              if [ "$transport" = prompt ]; then
+                boundary_input=$(printf '%s' "$input" | jq --arg brief "$brief" '.tool_input.prompt=$brief')
+              else
+                boundary_input=$(printf '%s' "$input" | jq --arg brief "$brief" 'del(.tool_input.prompt) | .tool_input.message=$brief')
+                [ "$transport" != native ] || boundary_input=$(printf '%s' "$boundary_input" | jq '.tool_name="spawn_agent"')
+              fi
+              if [ "$size" = 4000 ]; then
+                check test -z "$(printf '%s' "$boundary_input" | bash -c "$command")"
+              else
+                check implementer_denied "$boundary_input" 'implementation_policy exceeds 4000 characters'
+              fi
+            done
+          done
+        done
       done
       message_input=$(printf '%s' "$input" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
       check test -z "$(printf '%s' "$message_input" | bash -c "$command")"
