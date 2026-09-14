@@ -39,7 +39,7 @@ if echo "$MASKED" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+commit'; then
   echo "$MASKED" | grep -qE 'git[[:space:]]+commit[^;&|]*[[:space:]](-a[m]?|--all)([[:space:]]|$)' && \
     hook_deny "-a / --all でのコミットは禁止です。1 ファイル = 1 コミットの契約に従い、対象ファイルだけを git add してからコミットしてください。"
   # commit 直前の index を正として検査し、別コマンドで複数 stage 済みの状態も拒否する。
-  STAGED_FILES=$(git diff --cached --name-only)
+  STAGED_FILES=$(git --no-pager --no-optional-locks -c core.fsmonitor=false diff --no-ext-diff --no-textconv --cached --name-only)
   STAGED_FILE_COUNT=$(printf '%s\n' "$STAGED_FILES" | awk 'NF { count++ } END { print count + 0 }')
   [ "$STAGED_FILE_COUNT" -eq "$EXPECTED_STAGED_FILE_COUNT" ] || \
     hook_deny "コミット直前に stage 済みのファイルが $STAGED_FILE_COUNT 件あります。1 ファイル = 1 コミットの契約に従い、厳密に1件だけ stage してください。"
