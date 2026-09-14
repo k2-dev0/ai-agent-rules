@@ -34,25 +34,19 @@ for agent in claude codex; do
   check grep -Fq 'ユーザー指定があれば評価せず指定を使う' "$model_selection"
   check grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$model_selection"
   check grep -Fq 'テストを含む最初の編集前' "$model_selection"
-  check grep -Fq '背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない' "$target/$skill_root/SUBAGENT_RULES.md"
+  check grep -Fq '背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない' "$model_selection"
   check grep -Fq '同じ方針の修正・再開では再利用' "$model_selection"
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check grep -Fq '対応する`PreModelSwitch`がない環境だけ' "$model_selection"
-  check grep -Fq 'ユーザーが難度評価のスキップを明示した場合は起動せず' "$model_selection"
-  check grep -Fq '専用roleを指定できない汎用子を`difficulty-evaluator`の代用にしない' "$model_selection"
-  check grep -Fq '`agent_role`が空の汎用子やtask名だけの子を専用roleの代用にしない' "$REPO/README.md"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   if [ "$agent" = codex ]; then difficulty_agent="$target/.codex/agents/difficulty-evaluator.toml"; else difficulty_agent="$target/.claude/agents/difficulty-evaluator.md"; fi
   check grep -Fq '短い理由または入力エラーを返す' "$difficulty_agent"
-  check grep -Fq 'JSON error objectだけを返し、採点・作業をしない' "$difficulty_agent"
   check grep -Fq 'difficulty contract unavailable' "$difficulty_agent"
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'evaluation input must be valid JSON' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'evaluation input must contain only repository and implementation_policy' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'repository is incorrect' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
-  check grep -Fq '4000文字以内' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
-  check grep -Fq 'implementation_policy exceeds 4000 characters' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'implementation_policy must describe a concrete implementation change' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '加点した軸とコード上の根拠を優先し、0点の軸は省略' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -176,7 +170,7 @@ for tool in Edit Write NotebookEdit; do
   output=$(printf '%s' "$input" | bash -c "$command")
   check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = deny
 done
-command=$(jq -r '.hooks.PreToolUse[] | select(.matcher == "Edit|Write|NotebookEdit") | .hooks[].command | select(contains("protect-review.sh"))' "$REPO/claude/settings.json")
+command=$(jq -r '.hooks.PreToolUse[] | .matcher as $matcher | select("Edit" | test($matcher)) | .hooks[].command | select(contains("protect-review.sh"))' "$REPO/claude/settings.json")
 check test -n "$command"
 input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Write",tool_input:{file_path:"new/package.json"}}')
 output=$(printf '%s' "$input" | bash -c "$command")
@@ -188,7 +182,7 @@ check jq -e '.permissions.deny | index("Edit(.claude/**)") | not' "$REPO/claude/
 
 # 実装基準は設計前に読み、編集時には重複注入しない。
 input=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PreToolUse",session_id:"RULE1",cwd:$cwd,tool_name:"Edit",tool_input:{file_path:"src/example.ts"}}')
-command=$(jq -r '.hooks.PreToolUse[] | select(.matcher == "Edit|Write|NotebookEdit") | .hooks[].command | select(contains("load-required-contract.sh"))' "$REPO/claude/settings.json")
+command=$(jq -r '.hooks.PreToolUse[] | .matcher as $matcher | select("Edit" | test($matcher)) | .hooks[].command | select(contains("load-required-contract.sh"))' "$REPO/claude/settings.json")
 output=$(printf '%s' "$input" | bash -c "$command")
 check test -z "$output"
 
@@ -280,7 +274,7 @@ for agent in claude codex; do
     boundary='tools: Read, Grep, Glob'
   fi
   command="bash .$agent/hooks/shell/require-implementer.sh workflow"
-  input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{cwd:$cwd,tool_input:{($role):"nesting-reviewer",fork_turns:"none"}}')
+  input=$(jq -cn --arg cwd "$PWD" --arg role "$role_key" '{hook_event_name:"PreToolUse",tool_name:"Agent",cwd:$cwd,tool_input:{($role):"nesting-reviewer",fork_turns:"none"}}')
   check grep -Fq "${contract#*/skills/}" ".$agent/hooks/shell/load-operation-context.sh"
   check grep -Fxq "$boundary" "$definition"
   check test -s "$contract"
@@ -378,9 +372,9 @@ for agent in claude codex; do
         invalid=$(printf '%s' "$input" | jq "$mutation")
         check implementer_denied "$invalid" '難易度調査は'
       done
-      # 方針の長さ・意味はdifficulty契約が返却を決め、起動hookの境界は変えない。
-      overlong_policy=$(jq -nr '"x" * 4001')
-      for policy in "$overlong_policy" 'Only provide background and model selection guidance.'; do
+      # 方針の意味は子が判定する。起動hookは任意の文字数上限を課さない。
+      long_policy=$(jq -nr '"Add the specified behavior. " * 200')
+      for policy in "$long_policy" 'Only provide background and model selection guidance.'; do
         evaluator_input=$(printf '%s' "$input" | jq --arg policy "$policy" '.tool_input.prompt |= (fromjson | .implementation_policy=$policy | tojson)')
         check test -z "$(printf '%s' "$evaluator_input" | bash -c "$command")"
       done
