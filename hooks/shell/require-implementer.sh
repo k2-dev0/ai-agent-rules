@@ -6,6 +6,8 @@ exec 2>/dev/null
 # 旧skill内の全tool登録が残っていても、起動以外は対象にしない。
 case "$(hook_tool_name)" in
   Read|Edit|Write|apply_patch|switch_model|Bash) exit 0 ;;
+  Agent|*spawn_agent|*spawn_agents_on_csv|*resume_agent|*followup_task) ;;
+  *) hook_deny "専用roleを指定する起動toolを確認できません。" ;;
 esac
 hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。background・一括起動・resumeを使わず、子の完了後に次へ進んでください。"
 ROLE=$(hook_agent_type)
@@ -14,6 +16,10 @@ case "$ROLE" in
   difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer) ;;
   *) hook_deny "子は難易度調査・独立コードレビュー・設計監査・ネスト候補抽出の専用roleだけ起動できます。方針決定の調査・実装はメインで行ってください。" ;;
 esac
+REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "子のリポジトリを確認できません。"
+SKILLS_ROOT=.claude/skills
+[ "$HOOK_AGENT" != codex ] || SKILLS_ROOT=.agents/skills
+[ -s "$REPOSITORY/$SKILLS_ROOT/CHILD_RULES.md" ] || hook_deny "子の共通制約がありません。"
 case "$ROLE" in
   difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer)
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
@@ -50,7 +56,7 @@ model_reasoning_effort = \"$EFFORT\"
 sandbox_mode = \"read-only\""
       [ -r "$AGENT_FILE" ] || hook_deny "reviewer定義が無い、または読めません。"
       SETTINGS=$(sed '/^developer_instructions[[:space:]]*=/,$d' "$AGENT_FILE")
-      grep -Fxq 'enabled = false' "$AGENT_FILE" || hook_deny "reviewerの再委任は禁止です。"
+      [ "$(sed -n '/^\[agents\]$/,$p' "$AGENT_FILE")" = $'[agents]\nenabled = false' ] || hook_deny "reviewerの再委任は禁止です。"
     else
       [ "$ROLE" != deep-reviewer ] || hook_deny "Claudeのコードレビューはcode-reviewerを使ってください。"
       AGENT_FILE="$REPOSITORY/.claude/agents/$ROLE.md"
@@ -98,6 +104,9 @@ tools: Read, Grep, Glob'
       ;;
   esac
   [ -r "$AGENT_FILE" ] || hook_deny "nesting-reviewer定義が無い、または読めません。"
+  if [ "$HOOK_AGENT" = codex ]; then
+    [ "$(sed -n '/^\[agents\]$/,$p' "$AGENT_FILE")" = $'[agents]\nenabled = false' ] || hook_deny "reviewerの再委任は禁止です。"
+  fi
   while IFS= read -r EXPECTED; do
     KEY=${EXPECTED%%[: =]*}
     ACTUAL=$(printf '%s\n' "$SETTINGS" | grep -E "^$KEY[[:space:]]*[:=]")
