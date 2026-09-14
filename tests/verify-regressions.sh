@@ -11,7 +11,7 @@ check() {
   if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*" >&2; exit 1; fi
 }
 
-# 短いAGENTSはモデル選択の起動時刻だけを示し、詳細はdifficulty起動hookへ遅延する。
+# 起動前に親の正本へ到達でき、子には共通制約と専用契約を配信する。
 for agent in claude codex; do
   target="$TMP/$agent project"
   mkdir -p "$target/.$agent"
@@ -25,9 +25,8 @@ for agent in claude codex; do
   (cd "$target" && bash "$skill_root/bootstrap/bootstrap.sh" "$agent") >/dev/null
   rule_paths=$(sed -nE 's/.*`(typescript\/[^`]+\.md)`.*/\1/p' "$target/$skill_root/IMPLEMENTATION_RULES.md")
   model_selection="$target/$skill_root/MODEL_SELECTION.md"
-  check grep -Fq '実装方針確定後・最初の編集前に`difficulty-evaluator`を起動する' "$target/AGENTS.md"
-  check test "$(grep -Fxc "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md")" = 0
-  check grep -Fq 'MODEL_SELECTION.md' "$target/.$agent/hooks/shell/load-operation-context.sh"
+  check grep -Fq "$skill_root/MODEL_SELECTION.md" "$target/AGENTS.md"
+  check grep -Fq 'SUBAGENT_RULES.md' "$model_selection"
   check test -s "$model_selection"
   check test -s "$target/$skill_root/MODEL_SWITCH.md"
   check grep -Fq '変更を伴う依頼だけに使う' "$model_selection"
@@ -109,7 +108,7 @@ for agent in claude codex; do
   check grep -Fq 'syntax・import・型の失敗はシナリオを変えず先に直す' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '[設計書モード](FROM_DOC.md)' "$target/$skill_root/tdd/SKILL.md"
   check grep -Fq '`tsc -p <tsconfig> --noEmit`' "$target/$skill_root/tdd/SKILL.md"
-  check grep -Fq 'polish後に専用reviewerで独立レビュー' "$target/$skill_root/tdd/FROM_DOC.md"
+  check grep -Fq '../INDEPENDENT_REVIEW.md' "$target/$skill_root/tdd/FROM_DOC.md"
   check grep -Fq "\`.$agent/prompt/.prompt.md\`" "$target/$skill_root/tdd/FROM_DOC.md"
 done
 
@@ -375,8 +374,8 @@ for agent in claude codex; do
         check implementer_denied "$invalid" '難易度調査は'
         invalid_message=$(printf '%s' "$invalid" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
         check implementer_denied "$invalid_message" '難易度調査は'
-        # native transportでもobjectとして読める本文は、同じ2キー契約で検査する。
-        if [ "$agent" = codex ] && printf '%s' "$invalid_message" | jq -e '.tool_input.message | fromjson | type == "object"' >/dev/null 2>&1; then
+        # native transportでも同じ2キー契約で検査する。
+        if [ "$agent" = codex ] && printf '%s' "$invalid_message" | jq -e '.tool_input.message | type == "string" and test("\\\\S")' >/dev/null 2>&1; then
           invalid_native=$(printf '%s' "$invalid_message" | jq '.tool_name="spawn_agent"')
           check implementer_denied "$invalid_native" '難易度調査は'
         fi
@@ -410,10 +409,10 @@ for agent in claude codex; do
       message_input=$(printf '%s' "$input" | jq '.tool_input.message=.tool_input.prompt | del(.tool_input.prompt)')
       check test -z "$(printf '%s' "$message_input" | bash -c "$command")"
       if [ "$agent" = codex ]; then
-        # native起動のmessageは本文が不透明でも通す。設定・文脈の検査は維持する。
+        # native起動もJSONとして観測できない本文を通さず、訂正後は同じ経路で通す。
         for tool_name in spawn_agent collaboration.spawn_agent collaborationspawn_agent; do
           native_input=$(printf '%s' "$message_input" | jq --arg name "$tool_name" '.tool_name=$name | .tool_input.message="opaque-transport-fixture"')
-          check test -z "$(printf '%s' "$native_input" | bash -c "$command")"
+          check implementer_denied "$native_input" '難易度調査は'
           plain_input=$(printf '%s' "$message_input" | jq --arg name "$tool_name" '.tool_name=$name')
           check test -z "$(printf '%s' "$plain_input" | bash -c "$command")"
           for mutation in 'del(.tool_input.message)' '.tool_input.message=" "' '.tool_input.message={}' '.tool_input.prompt="extra"'; do
@@ -491,9 +490,9 @@ for agent in claude codex; do
       check implementer_denied "$invalid" '並列実行は禁止'
     done
   done
-  for tool_name in resume_agent collaboration.resume_agent spawn_agents_on_csv; do
+  for tool_name in resume_agent collaboration.resume_agent spawn_agents_on_csv send_input functions.send_input send_message collaboration.send_message collaborationsend_message send_message_to_agent; do
     input=$(jq -cn --arg tool "$tool_name" '{hook_event_name:"PreToolUse",tool_name:$tool,tool_input:{}}')
-    check implementer_denied "$input" '並列実行は禁止'
+    check implementer_denied "$input" '子への追送・再開・一括起動は禁止'
   done
 done
 cd "$TMP/codex project"
