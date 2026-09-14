@@ -6,8 +6,11 @@
 # 使い方: bash mark-prompt-done.sh <機能名>   例) bash mark-prompt-done.sh user-address
 # 失敗の扱い: 対象が無い・既に [x] は exit 1（握りつぶし禁止）。実装済みの取り違えを黙って通さない。
 set -u
+SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
+. "$SCRIPT_DIR/../../../.[agent_name]/hooks/shell/git-safe-env.sh" || exit 1
 
 NAME="${1:?usage: mark-prompt-done.sh <機能名>}"
+[ "$#" -eq 1 ] || { echo "ERROR: expected one feature argument" >&2; exit 1; }
 INDEX=".[agent_name]/prompt/.prompt.md"
 # 機能名は設計書のファイル名と同じASCII kebab-caseに限定する。
 NAME_RE='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
@@ -27,6 +30,7 @@ grep -qE "^[[:space:]]*-[[:space:]]*\[[ xX]\][[:space:]]+$ESC[[:space:]]*$" "$IN
 grep -qE "^[[:space:]]*-[[:space:]]*\[ \][[:space:]]+$ESC[[:space:]]*$" "$INDEX" \
   || die "already marked as done: $ENTRY"
 
+python3 ".[agent_name]/hooks/shell/safe-files.py" "[agent_name]" check "${TMPDIR:-/tmp}/mark-prompt-done.XXXXXX" || exit 1
 TMP=$(mktemp "${TMPDIR:-/tmp}/mark-prompt-done.XXXXXX") || die "cannot create temp file"
 trap 'rm -f "$TMP"' EXIT
 
@@ -43,7 +47,7 @@ awk -v entry="$ENTRY" '
   END { exit(flipped ? 0 : 1) }
 ' "$INDEX" > "$TMP" || die "failed to mark: $ENTRY"
 
-cp -- "$TMP" "$INDEX" || die "copy failed: $INDEX"
+python3 ".[agent_name]/hooks/shell/safe-files.py" "[agent_name]" prompt-index "$TMP" || die "replace failed: $INDEX"
 echo "done: $ENTRY"
 
 REMAIN=$(grep -cE '^[[:space:]]*-[[:space:]]*\[ \][[:space:]]+branch-' "$INDEX")
