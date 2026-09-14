@@ -20,6 +20,8 @@
 # backup ブランチ: swap（update-ref）の間だけ ORIG へ名前を張る一時的な足場であり、
 #   swap 成功後は削除する。成功時に残さないので、backup が残っていれば swap 失敗の証拠になる。
 set -u
+SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
+. "$SCRIPT_DIR/../../../.[agent_name]/hooks/shell/git-safe-env.sh" || exit 1
 
 err() { echo "ERROR: $*" >&2; }
 die() { err "$*"; exit 1; }
@@ -59,6 +61,19 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ�
 
 # 通常コミット hook と同じ配置済み契約を読む。subject の規則をこの実行器に複製しない。
 REPO_ROOT=$(git rev-parse --show-toplevel)
+# 一時worktreeは保存済みblobをそのまま扱い、filterを実行しない。
+# 環境変数でこの実行の設定だけを上書きし、repository設定は変更しない。
+FILTERS=$(git config --name-only --get-regexp '^filter\..*\.(clean|smudge|process|required)$')
+FILTER_STATUS=$?
+[ "$FILTER_STATUS" -le 1 ] || die "Git filter設定を検査できない"
+while IFS= read -r key; do
+  [ -n "$key" ] || continue
+  [[ "$key" =~ ^filter\.[A-Za-z0-9_.-]+\.(clean|smudge|process|required)$ ]] || die "Git filter名を安全に処理できない"
+  value=
+  case "$key" in *.required) value=false ;; esac
+  export "GIT_CONFIG_KEY_$GIT_CONFIG_COUNT=$key" "GIT_CONFIG_VALUE_$GIT_CONFIG_COUNT=$value"
+  export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))
+done <<< "$FILTERS"
 COMMIT_MESSAGE_CONTRACT="$REPO_ROOT/.[agent_name]/hooks/shell/commit-subject.sh"
 [ -r "$COMMIT_MESSAGE_CONTRACT" ] || die "コミットsubject契約が無い: $COMMIT_MESSAGE_CONTRACT"
 . "$COMMIT_MESSAGE_CONTRACT"
@@ -72,7 +87,7 @@ ORIGINAL_BRANCH=$(git symbolic-ref -q HEAD) || die "現在のbranchを確定で�
 
 # base の決定: --base 指定 > @{upstream}。upstream なしで --base も無ければ動かない
 if [ -n "$BASE_ARG" ]; then
-  BASE=$(git rev-parse --verify "${BASE_ARG}^{commit}" 2>/dev/null) || die "base を解決できない: $BASE_ARG"
+  BASE=$(git rev-parse --verify --end-of-options "${BASE_ARG}^{commit}" 2>/dev/null) || die "base を解決できない: $BASE_ARG"
 else
   BASE=$(git rev-parse --verify '@{upstream}' 2>/dev/null) || die "upstream が無い。--base <ref> で明示すること"
 fi
@@ -91,7 +106,7 @@ INVISIBLE=$(git rev-list --count "$BASE..$ORIG" --not --remotes)
 EFFECTIVE_BASE=$BASE
 while IFS=$'\t' read -r sha subject; do
   commit_message_subject_is_valid "$subject" || EFFECTIVE_BASE=$sha
-done < <(git log --reverse --format='%H%x09%s' "$BASE..$ORIG")
+done < <(git log --no-show-signature --reverse --format='%H%x09%s' "$BASE..$ORIG")
 
 COUNT=$(git rev-list --count "$EFFECTIVE_BASE..$ORIG")
 
@@ -106,8 +121,8 @@ if [ "$MODE" = check ]; then
   fi
   # 分類の材料: 対象コミット（古い順）と、それぞれの変更ファイル
   while IFS= read -r sha; do
-    printf '%s\t%s\n' "$(git log -1 --format=%h "$sha")" "$(git log -1 --format=%s "$sha")"
-    git show --name-only --format= "$sha" | sed 's/^/\t/'
+    printf '%s\t%s\n' "$(git log --no-show-signature -1 --format=%h "$sha")" "$(git log --no-show-signature -1 --format=%s "$sha")"
+    git show --no-show-signature --no-ext-diff --no-textconv --name-only --format= "$sha" | sed 's/^/\t/'
   done < <(git rev-list --reverse "$EFFECTIVE_BASE..$ORIG")
   exit 0
 fi
@@ -137,7 +152,7 @@ while [ "$gi" -lt "$NGROUPS" ]; do
   OLD_IFS=$IFS
   IFS=','
   for s in $COMMIT_LIST; do
-    full=$(git rev-parse --verify "${s}^{commit}" 2>/dev/null) || die "group に解決できない sha がある: $s"
+    full=$(git rev-parse --verify --end-of-options "${s}^{commit}" 2>/dev/null) || die "group に解決できない sha がある: $s"
     GROUP_SHAS="$GROUP_SHAS$full
 "
   done
@@ -152,6 +167,7 @@ BACKUP="backup/rebase-$(git rev-parse --short=7 "$ORIG")"
 git show-ref --verify --quiet "refs/heads/$BACKUP" && \
   die "backup ブランチが既に存在する: ${BACKUP}。成功時は自動削除されるので、これは前回の swap が失敗した証拠。確認と削除は人間の仕事"
 
+python3 "$REPO_ROOT/.[agent_name]/hooks/shell/safe-files.py" "[agent_name]" check "${TMPDIR:-/tmp}/rebase.XXXXXX" || exit 1
 WT=$(mktemp -d "${TMPDIR:-/tmp}/rebase.XXXXXX") || die "temp dir を作れない"
 cleanup() {
   git worktree remove --force "$WT" >/dev/null 2>&1
@@ -169,7 +185,7 @@ while [ "$gi" -lt "$NGROUPS" ]; do
   OLD_IFS=$IFS
   IFS=','
   for s in $COMMIT_LIST; do
-    full=$(git rev-parse --verify "${s}^{commit}" 2>/dev/null) || { cleanup; die "group に解決できない sha がある: $s"; }
+    full=$(git rev-parse --verify --end-of-options "${s}^{commit}" 2>/dev/null) || { cleanup; die "group に解決できない sha がある: $s"; }
     GROUP_RESOLVED="$GROUP_RESOLVED$full
 "
   done
@@ -179,14 +195,14 @@ while [ "$gi" -lt "$NGROUPS" ]; do
 
   for sha in $GROUP_ORDERED; do
     if ! git -C "$WT" cherry-pick --no-commit "$sha" >/dev/null 2>&1; then
-      short=$(git log -1 --format=%h "$sha")
+      short=$(git log --no-show-signature -1 --format=%h "$sha")
       cleanup
       die "コンフリクト: group $((gi + 1))「${SUBJECT}」の $short を並べ替えて適用できない。グループを併合するか、元履歴で連続する run だけを squash する縮退 group に組み直すこと(本体ブランチは無傷)"
     fi
   done
 
   # 相殺で空になったグループは分類の誤り。--allow-empty で誤魔化さない
-  if git -C "$WT" diff --cached --quiet; then
+  if git -C "$WT" diff --no-ext-diff --no-textconv --cached --quiet; then
     cleanup
     die "group $((gi + 1))「${SUBJECT}」は変更が相殺されて空。revert とその対象は同一グループに入れないこと"
   fi
@@ -202,7 +218,7 @@ done
 NEW_TIP=$(git -C "$WT" rev-parse HEAD)
 
 # 二重検証: これに合格するまで本体ブランチには触れない
-git diff --quiet "$ORIG" "$NEW_TIP" || \
+git diff --quiet --no-ext-diff --no-textconv "$ORIG" "$NEW_TIP" || \
   { cleanup; die "検証失敗: squash 後の tree が元 HEAD と一致しない。リプレイのどこかで内容が変わった"; }
 NEWCOUNT=$(git rev-list --count "$EFFECTIVE_BASE..$NEW_TIP")
 [ "$NEWCOUNT" -eq "$NGROUPS" ] || \
@@ -226,4 +242,4 @@ cleanup
 echo "OK: $COUNT commits -> $NGROUPS commits"
 echo "元 HEAD: $ORIG (backup ブランチは削除済み。reflog から辿れる)"
 echo "検証: tree 一致(元 HEAD と diff 空) / 全コミット exactly-once 消費"
-git log --reverse --format='%h%x09%s' "$EFFECTIVE_BASE..HEAD"
+git log --no-show-signature --reverse --format='%h%x09%s' "$EFFECTIVE_BASE..HEAD"
