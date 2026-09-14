@@ -6,7 +6,9 @@ exec 2>/dev/null
 # 旧skill内の全tool登録が残っていても、起動以外は対象にしない。
 case "$(hook_tool_name)" in
   Read|Edit|Write|apply_patch|switch_model|Bash) exit 0 ;;
-  Agent|*spawn_agent|*spawn_agents_on_csv|*resume_agent|*followup_task) ;;
+  *send_input|*send_message|*send_message_to_agent|*followup_task|*resume_agent|*spawn_agents_on_csv)
+    hook_deny "子への追送・再開・一括起動は禁止です。入力を訂正し、専用roleで新規起動してください。" ;;
+  Agent|*spawn_agent) ;;
   *) hook_deny "専用roleを指定する起動toolを確認できません。" ;;
 esac
 hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。background・一括起動・resumeを使わず、子の完了後に次へ進んでください。"
@@ -34,8 +36,7 @@ case "$ROLE" in
       case "$HOOK_AGENT:$(hook_tool_name)" in
         codex:*spawn_agent)
           hook_agent_message_valid || hook_deny "Codexの難易度調査はspawn_agentのmessageに依頼を渡してください。promptは併用しないでください。"
-          # JSON objectとして見える本文は共通検査へ渡す。不透明なtransportの長さは使わない。
-          BRIEF=$(hook_review_brief) || BRIEF=
+          BRIEF=$(hook_review_brief) || hook_deny "難易度調査はmessage全体をrepositoryとimplementation_policyだけのJSON objectにしてください。正しい本文でも確認できなければ、この経路は利用不能として報告してください。"
           ;;
         *)
           BRIEF=$(hook_review_brief) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。"
