@@ -1,8 +1,10 @@
 """Fixed script writes: reject metadata aliases and replace through pinned dirs."""
 import os
+import json
 from pathlib import Path
 import runpy
 import secrets
+import re
 import stat
 import sys
 
@@ -78,6 +80,16 @@ def main(args):
     if operation == "check" and values:
         for value in values:
             check_path(value, root, protected)
+        return
+    if operation == "review-state" and len(values) == 1:
+        session = values[0]
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", session):
+            raise ValueError("invalid review session")
+        data = json.load(sys.stdin)
+        if not isinstance(data, dict) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", data.get("base", "")):
+            raise ValueError("invalid review state")
+        destination = product / "tmp" / ("independent-review." + session + ".json")
+        replace_file(root, destination, json.dumps(data, ensure_ascii=False).encode(), check_path, protected, create_parent=True)
         return
     if operation in ("plan", "prompt-index") and len(values) == 1:
         destination = product / ("e2e/.e2e.md" if operation == "plan" else "prompt/.prompt.md")
