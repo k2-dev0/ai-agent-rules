@@ -40,7 +40,7 @@ is_injected_context() {
       ;;
   esac
   case "$path" in
-    */skills/SUBAGENT_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
+    */skills/SUBAGENT_RULES.md|*/skills/CHILD_RULES.md|*/skills/INDEPENDENT_REVIEW.md|*/skills/DIFFICULTY_CONTRACT.md|*/skills/CODE_REVIEW_CONTRACT.md|*/skills/ponytail/REVIEW_CONTRACT.md|*/skills/unwind/NESTING_CONTRACT.md) return 0 ;;
   esac
   return 1
 }
