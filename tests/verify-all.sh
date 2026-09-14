@@ -591,23 +591,12 @@ else
   cat apply-e2e.out
 fi
 grep -q '^hooks = true$' .codex/config.toml && ok "config: hooks を明示有効化" || ng "config: hooks が未設定"
-[ "$(jq '[.hooks.PreToolUse[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 読み取り検索の正規化hookをBashへ配線" || ng "codex: 読み取り検索の正規化hookが未配線"
-[ "$(jq '[.hooks.PermissionRequest[] | select(.matcher == "^Bash$") | .hooks[].command | select(contains("readonly-search.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "codex: 安全な読み取りの承認省略hookをBashへ配線" || ng "codex: 読み取り承認省略hookが未配線"
-READONLY_PERMISSION_COMMAND='rg -n "requirements\.phone|requirements\.message|karadenResult\.status|console\.log\(filterRes|userId|prefix: \"karaden/\"" lambda/karaden/index.ts'
-READONLY_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command "$READONLY_PERMISSION_COMMAND" '{hook_event_name:"PermissionRequest",session_id:"CREAD1",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"opaque shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ "$(printf '%s' "$READONLY_PERMISSION_OUT" | jq -r '.hookSpecificOutput.decision.behavior' 2>/dev/null)" = "allow" ] && ok "codex: quoteを含む単一rgの承認表示を省略" || ng "codex: 単一rgの承認省略失敗 out=[$READONLY_PERMISSION_OUT]"
-GLOB_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'rg --files src -g *.ts' '{hook_event_name:"PermissionRequest",session_id:"CREADGLOB",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"opaque wildcard shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ "$(printf '%s' "$GLOB_PERMISSION_OUT" | jq -r '.hookSpecificOutput.decision.behavior' 2>/dev/null)" = "allow" ] && ok "codex: 読み取りglobを含む単一commandの承認表示を省略" || ng "codex: 読み取りglobの承認省略失敗 out=[$GLOB_PERMISSION_OUT]"
-WRITER_GLOB_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'rm src/*.ts' '{hook_event_name:"PermissionRequest",session_id:"CWRITEGLOB",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"opaque wildcard shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ -z "$WRITER_GLOB_PERMISSION_OUT" ] && ok "codex: 書き込みglobの承認判断へ介入しない" || ng "codex: 書き込みglobを誤って自動許可 out=[$WRITER_GLOB_PERMISSION_OUT]"
-AWS_READONLY_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'aws sts get-caller-identity --profile daresuma-readonly --region ap-northeast-1 --output json' '{hook_event_name:"PermissionRequest",session_id:"CAWSREAD1",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"daresuma readonly aws"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ "$(printf '%s' "$AWS_READONLY_PERMISSION_OUT" | jq -r '.hookSpecificOutput.decision.behavior' 2>/dev/null)" = "allow" ] && ok "codex: daresuma-readonlyのAWS commandを承認表示なしで許可" || ng "codex: daresuma-readonlyのAWS command承認省略失敗 out=[$AWS_READONLY_PERMISSION_OUT]"
-AWS_OTHER_PROFILE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'aws sts get-caller-identity --profile default' '{hook_event_name:"PermissionRequest",session_id:"CAWSREAD2",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"other aws profile"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ -z "$AWS_OTHER_PROFILE_PERMISSION_OUT" ] && ok "codex: daresuma-readonly以外のAWS承認へ介入しない" || ng "codex: 別AWS profileを誤って自動許可 out=[$AWS_OTHER_PROFILE_PERMISSION_OUT]"
-AWS_MIXED_PROFILE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" --arg command 'aws sts get-caller-identity --profile daresuma-readonly --profile default' '{hook_event_name:"PermissionRequest",session_id:"CAWSREAD3",cwd:$cwd,tool_name:"Bash",tool_input:{command:$command,description:"mixed aws profiles"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ -z "$AWS_MIXED_PROFILE_PERMISSION_OUT" ] && ok "codex: daresuma-readonlyと別profileの混在を自動許可しない" || ng "codex: 混在AWS profileを誤って自動許可 out=[$AWS_MIXED_PROFILE_PERMISSION_OUT]"
-UNSAFE_PERMISSION_OUT=$(jq -cn --arg cwd "$PWD" '{hook_event_name:"PermissionRequest",session_id:"CREAD2",cwd:$cwd,tool_name:"Bash",tool_input:{command:"rg foo src | sort",description:"opaque shell"}}' | bash .codex/hooks/shell/readonly-search.sh)
-[ -z "$UNSAFE_PERMISSION_OUT" ] && ok "codex: 複合shellの承認判断へ介入しない" || ng "codex: 複合shellを誤って自動許可 out=[$UNSAFE_PERMISSION_OUT]"
+if python3 "$SUITE/test_command_permissions.py" > "$S/command-permissions.out" 2>&1; then
+  ok "両配布の通常command・複合拒否・境界外承認の動作検証"
+else
+  ng "command権限の動作検証に失敗"
+  cat "$S/command-permissions.out"
+fi
 grep -q '^default_permissions = "distributed"$' .codex/config.toml && ok "config: distributed permission profile を既定化" || ng "config: permission profile が未設定"
 grep -q '^extends = ":workspace"$' .codex/config.toml && ok "permissions: 通常ファイルは workspace write を継承" || ng "permissions: 通常書き込みが未設定"
 grep -q '^enabled = false$' .codex/config.toml && grep -q '^allow_local_binding = false$' .codex/config.toml && ok "permissions: localhost を含む network を遮断" || ng "permissions: network 境界が未設定"
@@ -630,7 +619,7 @@ else
 fi
 CM="$REPO/claude/.mcp.json"
 CODEX_SERENA_SOURCE=$(awk -F'"' '/"--from", "git\+https:\/\/github.com\/oraios\/serena@/ { print $4 }' .codex/config.toml)
-CLAUDE_SERENA_SOURCE=$(jq -r '.mcpServers.serena.args[1] // empty' "$CM" 2>/dev/null)
+CLAUDE_SERENA_SOURCE=$(jq -r '.mcpServers.serena.args[3] // empty' "$CM" 2>/dev/null)
 if printf '%s\n' "$CODEX_SERENA_SOURCE" | grep -qE "$PINNED_SERENA_SOURCE_PATTERN" && [ "$CLAUDE_SERENA_SOURCE" = "$CODEX_SERENA_SOURCE" ]; then
   ok "serena: Claude/Codex は同じcommitを固定"
 else
@@ -638,8 +627,8 @@ else
 fi
 if jq -e --arg source "$CODEX_SERENA_SOURCE" '
   .mcpServers.serena.type == "stdio" and
-  .mcpServers.serena.command == "uvx" and
-  .mcpServers.serena.args == ["--from", $source, "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
+  .mcpServers.serena.command == "bash" and
+  .mcpServers.serena.args == [".claude/hooks/shell/mcp-protected.sh", "uvx", "--from", $source, "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
 ' "$CM" >/dev/null 2>&1; then
   ok "serena: Claude Code contextでcurrent projectを起動"
 else
@@ -647,7 +636,8 @@ else
 fi
 if jq -e '
   .mcpServers["chrome-devtools"].type == "stdio" and
-  .mcpServers["chrome-devtools"].command == "npx" and
+  .mcpServers["chrome-devtools"].command == "bash" and
+  .mcpServers["chrome-devtools"].args[:2] == [".claude/hooks/shell/mcp-protected.sh", "npx"] and
   (.mcpServers["chrome-devtools"].args | index("chrome-devtools-mcp@1.9.0")) and
   (.mcpServers["chrome-devtools"].args | index("--workspace=.")) and
   (.mcpServers["chrome-devtools"].args | index("--experimentalScreencast=true")) and
@@ -696,7 +686,7 @@ jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
 [ "$(jq '[.hooks.PreModelSwitch[] | .hooks[].command | select(contains("pre-model-switch.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "Baton PreModelSwitchをCodex配置へ配線" || ng "Baton PreModelSwitchの配線が不正"
 GROUP_FAILURES=
-for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
+for SCRIPT in protect-config.sh protect-locks.sh; do
   BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .matcher as $matcher | select(("Bash" | test($matcher)) or ("apply_patch" | test($matcher))) | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
   [ "$BINDING_COUNT" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] || append_group_failure "$SCRIPT: $BINDING_COUNT bindings"
 done
@@ -704,7 +694,6 @@ report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURE
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "必須契約hookを編集toolへ配線" || ng "必須契約hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' .codex/hooks.json)" = "0" ] && ok "Codexはexact実装scope hookを配線しない" || ng "Codexにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("require-test.sh"))] | length' .codex/hooks.json)" = "0" ] && ok "Codexはsession marker依存のtest hookを配線しない" || ng "Codexにsession marker依存のtest hookが残存"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "migration禁止hookをBashへ配線" || ng "migration禁止hookの配線漏れ"
 if jq -e '[.hooks.PreToolUse[] | .hooks[].command | select(contains("overwrite.sh"))] | length == 0' .codex/hooks.json >/dev/null; then
   ok "未対応 ask hook を codex へ未配線"
 else
@@ -731,24 +720,14 @@ if command -v codex >/dev/null 2>&1; then
     ng "codex --strict-config で配布設定を読めない"
     cat codex-config.out
   fi
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- rm -rf tmp/example 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: rm を prompt" || ng "rules: rm 判定失敗 out=[$OUT]"
   GROUP_FAILURES=
-  for METADATA_COMMAND in "${METADATA_COMMANDS[@]}"; do
-    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$METADATA_COMMAND" target 2>/dev/null)
-    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] || append_group_failure "$METADATA_COMMAND: $OUT"
+  for NORMAL_COMMAND in rm cp mv sed rsync dd truncate tee patch touch chmod chown chgrp mkdir node python3 npm npx yarn; do
+    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$NORMAL_COMMAND" target 2>/dev/null)
+    [ "$(echo "$OUT" | jq -r '.matchedRules | length')" = 0 ] || append_group_failure "$NORMAL_COMMAND: $OUT"
   done
-  report_group "rules: 新規作成・metadata変更をallow" "$GROUP_FAILURES"
-  GROUP_FAILURES=
-  for WRITER_COMMAND in "${CONTENT_WRITER_COMMANDS[@]}"; do
-    OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- "$WRITER_COMMAND" target 2>/dev/null)
-    [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] || append_group_failure "$WRITER_COMMAND: $OUT"
-  done
-  report_group "rules: shellの内容変更をforbidden" "$GROUP_FAILURES"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- cp -n -- source target 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision')" = allow ] && ok "rules: 上書きしないcpをallow" || ng "rules: cp -n判定失敗"
-  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- mkdir -p prompt-work 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: sandbox内mkdirは承認対象外" || ng "rules: mkdirが承認対象 out=[$OUT]"
+  report_group "rules: 単一通常commandはsandboxへ委ね、外部実行のallowを追加しない" "$GROUP_FAILURES"
+  OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .codex/hooks/shell/outside.sh 'curl https://example.invalid' 2>/dev/null)
+  [ "$(echo "$OUT" | jq -r '.decision')" = prompt ] && ok "rules: Git保護付き境界外入口は承認を要求" || ng "rules: 境界外入口の承認が不正"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git push origin main 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "forbidden" ] && ok "rules: git push を forbidden" || ng "rules: push 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- git add src/example.ts 2>/dev/null)
@@ -764,11 +743,11 @@ if command -v codex >/dev/null 2>&1; then
   done
   report_group "rules: 単一読み取りcommandは未制限" "$GROUP_FAILURES"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- ps -p "$$" -o pid=,stat=,etime=,command= 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: ps -p のprocess状態確認をallow" || ng "rules: ps -p 判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: ps -p のprocess状態確認に外部allowを追加しない" || ng "rules: ps -p 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- ps aux 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: ps -p 以外へ許可を拡張しない" || ng "rules: ps の許可範囲が過剰 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- zsh -lc 'echo x > output.txt' 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "prompt" ] && ok "rules: opaque shell を prompt" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: 単一shell wrapperに一律確認を追加しない" || ng "rules: opaque shell 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/bootstrap/bootstrap.sh codex 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: bootstrap の固定経路を allow" || ng "rules: bootstrap 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/e2e/apply-e2e-plan.sh "$S/e2e-plan.md" 2>/dev/null)
@@ -776,13 +755,13 @@ if command -v codex >/dev/null 2>&1; then
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/tdd/mark-prompt-done.sh user-api 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: mark-prompt-done の固定経路を allow" || ng "rules: mark-prompt-done 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/quality-gate.sh user-api -- src/example.ts 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: quality-gate の固定経路を allow" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: quality-gate の固定経路に外部allowを追加しない" || ng "rules: quality-gate 判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/polish/capture-scope.sh user-api -- src/example.ts 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: polish scope記録の固定経路を allow" || ng "rules: polish scope記録判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: polish scope記録の固定経路に外部allowを追加しない" || ng "rules: polish scope記録判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- ./base/scripts/run-unit.sh test/features/purchase/unit/device-discount-utils.test.ts test/features/purchase/unit/purchase-api.integration.test.ts 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: 承認済みunit test runnerを allow" || ng "rules: unit test runner判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: 承認済みunit test runnerに外部allowを追加しない" || ng "rules: unit test runner判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- yarn eslint --ext .ts,.js,.tsx features/mypage/resources/contract/components/ContractSecurityOptionForm.tsx 'features/mypage/routes/contract/pages/-.[number].option.security.add._index.tsx' 2>/dev/null)
-  [ "$(echo "$OUT" | jq -r '.decision' 2>/dev/null)" = "allow" ] && ok "rules: local ESLintを allow" || ng "rules: local ESLint判定失敗 out=[$OUT]"
+  [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: local ESLintに外部allowを追加しない" || ng "rules: local ESLint判定失敗 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash ./base/scripts/run-unit.sh test/features/purchase/unit/device-discount-utils.test.ts 2>/dev/null)
   [ "$(echo "$OUT" | jq -r '.matchedRules | length' 2>/dev/null)" = "0" ] && ok "rules: unit test runnerのallowを別起動形式へ拡張しない" || ng "rules: unit test runner許可が過剰 out=[$OUT]"
   OUT=$(CODEX_HOME="$S/codex-home" codex execpolicy check --rules .codex/rules/default.rules -- bash .agents/skills/rebase/rebase.sh --check 2>/dev/null)
@@ -889,42 +868,24 @@ for JSON_CONFIG in "$SJ" "$SL" "$CM"; do
   jq -e . "$JSON_CONFIG" >/dev/null 2>&1 || append_group_failure "$JSON_CONFIG"
 done
 report_group "Claude JSON設定の構文" "$GROUP_FAILURES"
-jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
+jq -e '.sandbox.failIfUnavailable == true and .sandbox.autoAllowBashIfSandboxed == true and .sandbox.allowUnsandboxedCommands == false and .sandbox.network.allowLocalBinding == false and (.sandbox.network.allowedDomains | length == 0)' "$SJ" >/dev/null 2>&1 && ok "Claude sandbox はfail-closedかつnetwork自動許可なし" || ng "Claude sandbox境界が不正"
 jq -e '.permissions.allow | index("WebFetch(domain:localhost)") | not' "$SL" >/dev/null 2>&1 && ok "Claude localhost WebFetch 自動許可なし" || ng "Claude localhost WebFetch が自動許可"
 if ! jq -e '.permissions.allow[] | select(test("delegate\\.sh (research|survey)"))' "$SL" >/dev/null 2>&1 && ! jq -e '.sandbox.excludedCommands[] | select(test("delegate\\.sh (research|survey)"))' "$SJ" >/dev/null 2>&1; then
   ok "Claude: research / survey委任を自動許可しない"
 else
   ng "Claude: research / survey委任の許可が残存"
 fi
-GROUP_FAILURES=
-for READ_PERMISSION in "${CLAUDE_SAFE_READ_PERMISSIONS[@]}"; do
-  jq -e --arg permission "$READ_PERMISSION" '.permissions.allow | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$READ_PERMISSION"
-done
-report_group "Claude: 単一読み取りcommandをallow" "$GROUP_FAILURES"
-GROUP_FAILURES=
-for METADATA_COMMAND in "${METADATA_COMMANDS[@]}"; do
-  PERMISSION="Bash($METADATA_COMMAND:*)"
-  jq -e --arg permission "$PERMISSION" '(.permissions.allow | index($permission)) and (.permissions.ask | index($permission) | not)' "$SL" >/dev/null 2>&1 || append_group_failure "$PERMISSION"
-done
-report_group "Claude: 新規作成・metadata変更をallow" "$GROUP_FAILURES"
-GROUP_FAILURES=
-for WRITER_COMMAND in "${CONTENT_WRITER_COMMANDS[@]}"; do
-  PERMISSION="Bash($WRITER_COMMAND:*)"
-  jq -e --arg permission "$PERMISSION" '(.permissions.deny | index($permission)) and (.permissions.ask | index($permission) | not)' "$SL" >/dev/null 2>&1 || append_group_failure "$PERMISSION"
-done
-report_group "Claude: shellの内容変更をdeny" "$GROUP_FAILURES"
-jq -e '.permissions.allow | index("Bash(cp -n --:*)")' "$SL" >/dev/null && ok "Claude: 上書きしないcpをallow" || ng "Claude: cp -nが未許可"
-jq -e '.permissions.allow | index("Bash(mkdir:*)")' "$SL" >/dev/null 2>&1 && jq -e '.permissions.ask | index("Bash(mkdir:*)") | not' "$SL" >/dev/null 2>&1 && ok "Claude: sandbox内mkdirをallow" || ng "Claude: mkdirが承認対象"
+jq -e '[.permissions.allow[] | select(startswith("Bash(")) | select(startswith("Bash(git ") | not) | select(startswith("Bash(bash .claude/skills/") | not)] | length == 0' "$SL" >/dev/null && ok "Claude: 通常commandの境界外allowを残さない" || ng "Claude: 通常commandのallowが残存"
+jq -e '.permissions.ask | index("Bash(bash .claude/hooks/shell/outside.sh:*)")' "$SL" >/dev/null && ok "Claude: Git保護付き境界外入口は確認" || ng "Claude: 境界外入口の確認なし"
 jq -e '
   (.permissions.allow | index("mcp__chrome-devtools__screencast_start")) and
   (.permissions.allow | index("mcp__chrome-devtools__screencast_stop")) and
   (.enabledMcpjsonServers | index("chrome-devtools"))
 ' "$SL" >/dev/null 2>&1 && ok "Claude: chrome-devtoolsのscreencastを有効化" || ng "Claude: chrome-devtoolsのscreencast設定が不足"
-jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") == null and index("./base/scripts/run-unit.sh *") == null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: unit test runnerの許可を維持してsandbox除外を削除" || ng "Claude: unit test runnerの許可またはsandbox境界が不正"
+jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") == null and index("./base/scripts/run-unit.sh *") == null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") == null and index("Bash(./base/scripts/run-unit.sh:*)") == null)' "$SL" >/dev/null 2>&1 && ok "Claude: unit test runnerをsandbox内の通常commandへ統合" || ng "Claude: unit test runnerの許可またはsandbox境界が不正"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && ! grep -q '^hooks:' "$REPO/skills/cowlick/SKILL.md" && ! grep -Fq 'worker/DELEGATION.md' "$REPO/hooks/shell/load-required-contract.sh" && ok "Claude必須契約hookを編集時の読み込みへ配線" || ng "Claude必須契約hookの配線漏れ"
-[ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("deny-migration.sh"))] | length' "$SJ")" = "1" ] && jq -e '.permissions.ask | index("Edit(**/schema.prisma)") | not' "$SL" >/dev/null && ok "Claude: schema.prismaは自動編集・migrationはhook拒否" || ng "Claude: Prisma境界が不正"
 GROUP_FAILURES=
 for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
   PERMISSION="mcp__serena__${MCP_TOOL}"
@@ -947,6 +908,7 @@ for SC in bootstrap/bootstrap.sh tdd/mark-prompt-done.sh polish/quality-gate.sh 
     *)
       jq -e --arg c "$CMD" '.sandbox.excludedCommands | (index($c) != null and index($c + " *") != null)' "$SJ" >/dev/null || { ng "固定書き込みscriptの除外設定が不正: $SC"; MISS=1; } ;;
   esac
+  case "$SC" in polish/*) continue ;; esac
   jq -e --arg c "Bash($CMD)"    '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "Bash($CMD:*)"  '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数あり形が無い: $SC"; MISS=1; }
 done
