@@ -286,7 +286,7 @@ if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDe
   PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは deny JSON + exit 0"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 未実装エージェント rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash ./skills/bootstrap/bootstrap.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash .agents/skills/bootstrap/bootstrap.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも bootstrap は棄権"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: bootstrap例外 rc=$RC out=[$OUT]"; fi
 
