@@ -115,111 +115,6 @@ check "config: rm .claude は deny"      deny  protect-config.sh '{"tool_name":"
 check "config: 設定読み取りは棄権"      empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"cat .claude/settings.json"}}'
 check "config: 設定script起動は棄権"    empty protect-config.sh '{"tool_name":"Bash","tool_input":{"command":"bash .claude/skills/bootstrap/bootstrap.sh claude"}}'
 
-# --- deny-history ---
-check "history: git rebase は deny"   deny  deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git rebase -i HEAD~3"}}'
-check "history: force push は deny"   deny  deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git push -f origin master"}}'
-check "history: git commit は棄権"    empty deny-history.sh '{"tool_name":"Bash","tool_input":{"command":"git commit -m msg"}}'
-
-# --- deny-eval ---
-check "eval: python3 -c は deny"       deny  deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 -c import_os"}}'
-check "eval: node -e は deny"          deny  deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"node -e code"}}'
-check "eval: python3 foo.py は棄権"    empty deny-eval.sh '{"tool_name":"Bash","tool_input":{"command":"python3 foo.py"}}'
-
-# --- readonly-search ---
-check_bash_rewrite "readonly-search: rg stderr破棄をoptionへ正規化" \
-  "rg --no-messages -n 'foo|bar' front --glob '!generated/**'" \
-  readonly-search.sh \
-  "rg -n 'foo|bar' front --glob '!generated/**' 2>/dev/null"
-check_bash_rewrite "readonly-search: findのstderr破棄を許可" \
-  "find .codex/tmp/checks -maxdepth 2 -type f -print" \
-  readonly-search.sh \
-  "find .codex/tmp/checks -maxdepth 2 -type f -print 2>/dev/null"
-check_bash_rewrite "readonly-search: stdoutのdev null破棄を許可" \
-  "nl -ba src/foo.ts >/dev/null" \
-  readonly-search.sh \
-  "nl -ba src/foo.ts > /dev/null"
-check_bash_rewrite "readonly-search: Codexのquote済みrgを直接実行へ正規化" \
-  "rg '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'" \
-  readonly-search.sh \
-  "'rg' '-n' '^(model|enum) |@@(?:unique|index|map)' 'front/prisma/schema.prisma'"
-check_bash_rewrite "readonly-search: quote済みrgのglob引数を保持" \
-  "rg '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'" \
-  readonly-search.sh \
-  "'rg' '--files' 'front' '-g' '*schema.test.*' '-g' '*schema.spec.*'"
-check_bash_group "readonly-search: 安全な単一コマンドを明示allow" allow readonly-search.sh \
-  "rg 'foo|bar' src" \
-  "rg --files src -g *.ts" \
-  "find src -maxdepth 2 -type f -print" \
-  "find src -name *.ts -print" \
-  "cat src/*.ts" \
-  "nl -ba src/foo.ts" \
-  "sort src/files.txt"
-check_bash_group "readonly-search: daresuma-readonlyのAWS単一commandを全action許可" allow readonly-search.sh \
-  "aws sts get-caller-identity --profile daresuma-readonly --region ap-northeast-1 --output json" \
-  "aws lambda update-function-code --function-name heartbeat --profile daresuma-readonly" \
-  "aws s3 cp s3://bucket/key ./local --profile=daresuma-readonly" \
-  "'aws' 'logs' 'filter-log-events' '--profile' 'daresuma-readonly'"
-check_bash_group "readonly-search: allow対象外の単一コマンドは棄権" empty readonly-search.sh \
-  "sed -n '1,240p' src/foo.ts" \
-  "rm src/*.ts" \
-  "aws sts get-caller-identity" \
-  "aws sts get-caller-identity --profile default" \
-  "aws sts get-caller-identity --profile daresuma-readonly --profile default" \
-  'echo "$VALUE" 2>&1'
-check_bash_group "readonly-search: 複合shellを分割要求で拒否" deny readonly-search.sh \
-  "rg --files src | sort" \
-  "'rg' '--files' 'src' | 'sort'" \
-  "find src -type f -print 2>/dev/null | sort" \
-  "rg foo; rm target 2>/dev/null" \
-  "rg foo 2>/dev/null | tee result.txt" \
-  'rg $(danger) 2>/dev/null' \
-  $'pwd\nls' \
-  "zsh -lc 'pwd; ls'" \
-  "/bin/zsh -lc 'pwd; ls'" \
-  "env bash -c 'pwd; ls'" \
-  "/usr/bin/env zsh -lc 'pwd; ls'" \
-  "bash --noprofile -c 'pwd; ls'" \
-  "aws sts get-caller-identity --profile daresuma-readonly | jq ." \
-  "sleep 1 & echo done" \
-  'for f in a.ts b.ts; do if test -f "$f"; then sed -n '\''1,240p'\'' "$f"; fi; done; rg --files src | rg '\''smtp|s3'\'''
-check_bash_group "readonly-search: 危険な読み取りoptionを拒否" deny readonly-search.sh \
-  "find tmp -type f -delete" \
-  "'find' 'tmp' '-type' 'f' '-delete'" \
-  "/usr/bin/find tmp -type f -delete" \
-  "find tmp -type f -delete 2>/dev/null | sort" \
-  'find tmp "-de""lete"' \
-  "find tmp -type f -exec rm {} +" \
-  "find tmp -type f -fprint result.txt" \
-  "sort -o result.txt source.txt" \
-  "sort -oresult.txt source.txt" \
-  "sort --output=result.txt source.txt" \
-  "sort --compress-program=gzip source.txt" \
-  "rg --pre preprocess.sh pattern src" \
-  "rg --pre=preprocess.sh pattern src" \
-  "git diff --output=result.patch" \
-  "git show --output=result.txt HEAD"
-check_bash_group "readonly-search: 通常fileへのredirectはpermission層へ委任" empty readonly-search.sh \
-  "cat src/foo.ts > result.txt" \
-  "rg foo > result.txt 2>/dev/null"
-
-# --- deny-registry ---
-check "registry: npx は deny"           deny  deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"npx create-app"}}'
-check "registry: npm install は deny"   deny  deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"npm install left-pad"}}'
-check "registry: yarn build は棄権"     empty deny-registry.sh '{"tool_name":"Bash","tool_input":{"command":"yarn build"}}'
-
-# --- deny-migration ---
-check_bash_group "migration: PrismaのDB反映commandを拒否" deny deny-migration.sh \
-  "node_modules/.bin/prisma migrate dev" \
-  "yarn prisma migrate deploy" \
-  "npx prisma migrate reset" \
-  "prisma db push" \
-  "prisma db execute --file migration.sql" \
-  "yarn db:migrate"
-check_bash_group "migration: schemaの安全な検証commandは許可" empty deny-migration.sh \
-  "yarn prisma format --schema prisma/schema.prisma" \
-  "node_modules/.bin/prisma validate" \
-  "yarn prisma generate"
-
 # --- commit-gate ---
 check "commit-gate: git add -A は deny"       deny  commit-gate.sh '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}'
 check_bash_group "commit-gate: 強制stage は deny" deny commit-gate.sh \
@@ -281,16 +176,16 @@ check "protect-locks: 読み取りは棄権" empty protect-locks.sh '{"tool_name
 sed 's/^HOOK_AGENT="claude"/HOOK_AGENT="github"/' "$H/hook-io.sh" > "$H/hook-io.sh.github"
 mv "$H/hook-io.sh" "$H/hook-io.sh.orig" && mv "$H/hook-io.sh.github" "$H/hook-io.sh"
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/deny-history.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git rebase"}}' | bash "$H/protect-git.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ "$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = "deny" ]; then
   PASS=$((PASS+1)); echo "ok   hook-io: 未実装エージェントは deny JSON + exit 0"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 未実装エージェント rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash .agents/skills/bootstrap/bootstrap.sh codex"}}' | bash "$H/deny-history.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"bash .agents/skills/bootstrap/bootstrap.sh codex"}}' | bash "$H/protect-git.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: 未実装でも bootstrap は棄権"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: bootstrap例外 rc=$RC out=[$OUT]"; fi
 
-OUT=$(echo '{"hook_event_name":"UserPromptSubmit","prompt":"git rebase して"}' | bash "$H/deny-history.sh"); RC=$?
+OUT=$(echo '{"hook_event_name":"UserPromptSubmit","prompt":"git rebase して"}' | bash "$H/protect-git.sh"); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then PASS=$((PASS+1)); echo "ok   hook-io: PreToolUse 以外は JSON を出さず棄権"
 else FAIL=$((FAIL+1)); echo "FAIL hook-io: 非 PreToolUse rc=$RC out=[$OUT]"; fi
 
