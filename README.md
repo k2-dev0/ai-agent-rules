@@ -68,116 +68,81 @@ bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholder
 
 | 入口 | 処理 |
 |---|---|
-| [meeting](skills/meeting/SKILL.md) | 明示起動でpreflight → cowlick → ponytail。メインが設計書を作成・修正し、ponytailが独立監査 |
-| [tdd](skills/tdd/SKILL.md) | runtime挙動の実装・修正で自動選択。質問・調査・review、文書・設定・書式だけの変更、挙動不変の整理では選択しない。`$tdd --from-doc`だけ設計書モードを読む |
-| [polish](skills/polish/SKILL.md) | verifiedの実変更path、またはdirectの明示pathを整形・検証。directの完全性はscope-unverified |
-| [unwind](skills/unwind/SKILL.md) | 指定された本体コードの深いネストを検出・縮退 |
-| [rebase](skills/rebase/SKILL.md) | 未pushの1ファイル1コミット履歴を機能単位へsquash |
-| [e2e](skills/e2e/SKILL.md) | 計画を承認・保存し、動画・screenshotを残してブラウザで検証 |
-| [dictionary](skills/dictionary/SKILL.md) | 知見を検索・取得し、承認後に保存・更新 |
+| [meeting](skills/meeting/SKILL.md) | preflight → cowlick → ponytailで設計・独立監査 |
+| [tdd](skills/tdd/SKILL.md) | runtime挙動をテストから実装。`--from-doc`は明示指定だけ |
+| [polish](skills/polish/SKILL.md) | 対象pathを整形・検証 |
+| [unwind](skills/unwind/SKILL.md) | 指定コードの深いネストを検出・縮退 |
+| [rebase](skills/rebase/SKILL.md) | 未push履歴を固定スクリプトで整理 |
+| [e2e](skills/e2e/SKILL.md) | 計画を承認・保存し、録画と画像でブラウザ検証 |
+| [dictionary](skills/dictionary/SKILL.md) | 知見の検索・取得・保存 |
 | [bootstrap](skills/bootstrap/SKILL.md) | 手動配置後の初期化 |
 
-変更時は[AGENTS.md](AGENTS.md)の時刻目標に従い、方針確定後・最初の編集前に`difficulty-evaluator`で実装難度を判定する。`MODEL_SELECTION.md`はdifficulty起動直前にhookで親へ注入し、調査中は読ませない。子の起動時は親へ起動手順、子へrole専用契約をhookで分けて注入する。Codexのモデル切替手順はBatonの`PreModelSwitch`で元モデルへ一度だけ返し、Baton非対応環境だけ事前に読む。
+cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む。明示起動の制御はClaudeのfrontmatterとCodexの`agents/openai.yaml`に置く。
 
-hookの強制は、配置済み設定を読むtrusted projectと対応toolで有効。Codex本体の待機上限・再推論・利用量計算は変更しない。
-
-| 正本 | 内容 |
+| 正本 | 読む時点・責務 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 方針確定後・最初の編集前にdifficultyを起動する目標 |
-| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | difficulty起動直前に親へ注入する評価条件、モデル対応、再利用・再評価条件 |
-| [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | Batonでは切替前に元モデルへ注入し、非対応環境では切替前だけ読む手順 |
-| [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 共通判断と該当規約への入口 |
-| [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗の分類・メインによる修正・再検証 |
-| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | reviewer起動直前に親へ注入する起動・待機・指摘対応 |
-| [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書の形式・実装情報 |
+| [AGENTS.md](AGENTS.md) | 常時必要なモデル選択の起動条件 |
+| [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 調査後・方針決定前の共通判断、規約への入口 |
+| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | difficulty起動直前に親へ注入。入力・採用モデル・失敗・再評価 |
+| [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 子の起動直前に親へ注入。roleの起動方法・完了待ち・利用不能時の行動 |
+| [CHILD_RULES.md](skills/CHILD_RULES.md)と各role契約 | 子の開始時に子だけへ注入。調査範囲・実行制約・返却内容 |
+| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | コードreviewer起動直前に親へ注入。入力と指摘対応 |
+| [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | BatonのPreModelSwitchで元モデルへ注入。非対応環境だけ切替前に読む |
+| [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗・採用した指摘の修正時 |
+| [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書作成時。モデルが生成する形式・実装情報 |
 
+## 設定・実施箇所
 
-## 設定・hook
-
-明示起動skillはClaudeの`disable-model-invocation: true`とCodexの`agents/openai.yaml`の`allow_implicit_invocation: false`を設定する。[起動policy](https://learn.chatgpt.com/docs/build-skills#optional-metadata)。
-
-| 変更・調査対象 | ファイル |
+| 対象 | 正本 |
 |---|---|
-| Claudeの許可・確認・禁止 | `claude/settings.local.json` |
-| Codexの権限・network・MCP | `codex/config.toml` |
-| Codexのcommand規則 | `codex/rules/default.rules` |
-| hook配線 | `claude/settings.json`、`codex/hooks.json` |
-| hook入出力 | `hooks/shell/hook-io.sh` |
-| 読み取りcommand・AWS readonly | `hooks/shell/readonly-search.sh` |
-| shell上書き・redirect | `hooks/shell/shell-file-write.sh` |
-| 設定・秘密情報・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh`（hooks/shell配下） |
-| migration／履歴制限 | `hooks/shell/deny-migration.sh`・`hooks/shell/deny-history.sh` |
-| 全面Write確認・commit契約 | `hooks/shell/overwrite.sh`・`hooks/shell/commit-gate.sh` |
-| 必須資料・専用の子の起動検査 | `hooks/shell/load-operation-context.sh`・`hooks/shell/load-required-contract.sh`・`hooks/shell/require-implementer.sh` |
+| Claudeのtool権限／sandbox | `claude/settings.local.json`／`claude/settings.json` |
+| Codexの権限・network・MCP／command規則 | `codex/config.toml`／`codex/rules/default.rules` |
+| hook配線・入出力 | `claude/settings.json`、`codex/hooks.json`、`hooks/shell/hook-io.sh` |
+| Git引数・.git path保護 | `protect-git.sh`・`git-policy.py`と両環境のsandbox設定 |
+| stage・commit契約 | `commit-gate.sh`・`commit-subject.sh` |
+| 読み取り・shell書き込み | `readonly-search.sh`・`shell-file-write.sh` |
+| 設定・秘密・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
+| registry・migration・履歴・inline実行 | `deny-registry.sh`・`deny-migration.sh`・`deny-history.sh`・`deny-eval.sh` |
+| 全面Write・skill実装の直接取得 | `overwrite.sh`・`deny-skill-source.sh` |
+| 必須文書・専用role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
+| 起動済み独立レビューの証跡 | `independent-review.sh` |
+| Codexの待機時間補正 | `agent-wait.sh` |
 
-Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用role以外の起動・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
+hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
 
-難易度評価の起動hookは専用設定を検査し、difficulty起動直前に`MODEL_SELECTION.md`を親へ注入する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。`agent_role`が空の汎用子やtask名だけの子を専用roleの代用にしない。専用roleを渡せない起動toolしかない場合は子を起動せず、ユーザーが難度評価を明示的にスキップした場合だけメインで続行する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
+Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通るadd/commitを許可する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。
 
-評価役へモデル情報・選択基準は渡さず、成功時だけ1〜10の点数と200文字を目安にした理由を返す。入力エラー時は`{"error":"<concise English reason>"}`を返す。主担当が点数をモデルへ対応させ、error object・`null`・形式不正・範囲外・空の理由・起動不能は評価失敗として正常終了・評価済みにせず、自己採点や依存する編集を止めて原因を報告する。
+## 保証範囲
 
-| 操作 | 扱い |
+hookは設定を読み込んだtrusted projectと対応toolで有効。project設定の存在・hook単体テスト・task名だけでは、runtimeへの適用や専用roleの適用を証明しない。[Codex hooksのtool coverage](https://learn.chatgpt.com/docs/hooks#tool-coverage)を参照する。
+
+| 強制される部分 | 残る判断・境界 |
 |---|---|
-| 単一読み取りcommand、ps -p、安全な/dev/null出力 | 自動 |
-| AWS CLIで`--profile daresuma-readonly`を明示 | service/actionを限定せず自動 |
-| 通常file・promptのEdit/apply_patch、新規Write、metadata変更、mkdir | workspace内で自動 |
-| `cp -n -- SOURCE DEST`・`ln [-s] -- SOURCE DEST` | 既存宛先を置換せず実行 |
-| 既存fileの全面Write | Claudeで確認。Codexはapply_patch |
-| 承認済みtestを`./base/scripts/run-unit.sh`で実行 | 自動 |
-| schema.prisma編集、Prisma format/validate/generate | 自動 |
-| package.json・CI・migration file・Docker・Terraform編集、削除 | 確認 |
-| localhostを含むHTTP | sandbox外で確認 |
-| 単一file・対象名一致・日本語・AI署名なしの契約準拠commit | 自動 |
-| shell上書き・mv・sed -i・tee・redirect、複合command・危険option | 拒否。内容変更はEdit/apply_patch |
-| .env・lockfile・.git・agent設定の直接変更 | 拒否。設定更新は固定スクリプト |
-| skill内スクリプトの直接表示・内容検索・trace実行 | hookで拒否。文書・ファイル名一覧・通常実行は維持。実行に問題があれば報告して停止 |
-| Prisma migrate/db push/db execute、Git push/cherry-pick、依存install/add | 拒否 |
-| 複数stage・対象名不一致・日本語なし・AI署名・amendのcommit | 拒否 |
+| 起動引数のrole・設定上書き・background・一括起動・resume拒否、Codexの同時起動数 | 親の作業停止・環境間代替禁止・入力の意味・実際のrole metadata。起動不能は成功にしない |
+| 子のsandbox／tool制限 | shellのtest実行・調査範囲・MCP等の外部通信はread-onlyだけでは制限されない。共通制約を子へ注入する |
+| reviewer入力・対象SHA・clean状態・SubagentStopの結果形式 | reviewの必要性、指摘の妥当性・採否。形式検査は内容の自動生成ではない |
+| polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
+| .gitの直接path・実path・symlink・親directory・worktree参照先の操作検査 | 任意script内部の書き込みはcommand文字列では検査できない |
+| sandbox内の.git書き込み制限 | 承認付きsandbox外実行、除外command、MCP・未対応tool、上位設定による保護解除はrepository設定だけでは保証できない |
 
-Codexのpath単位確認はrules経由の1回限りtokenを使う。Claudeのlocal ESLintは既定確認、Codexは固定prefixで許可する。両環境のchrome-devtoolsは`chrome-devtools-mcp@1.9.0`を`--workspace=.`付きで起動し、Chrome 149以上でlocalhost・127.0.0.1・::1の全ポートに限定し、PATH上の`ffmpeg`を使う実験screencastを有効化する。E2E録画前は`Meta+0`でpage zoomを100%へ戻し、`visualViewport.scale`と整数viewport寸法を確認する。E2E成果物の`.[agent_name]/e2e/artifacts/`だけは保護hookが保存先作成を許可する。Codexでは`upload_file`だけ確認する。外部URLへの遷移・subresource通信は遮断する。他のMCPの未登録toolは各serverの既定設定に従う。hookは呼び出したcommandを検査するもので、任意スクリプトの全副作用を保証しない。別スクリプトで制限を迂回しない。
+.gitの承認解除は禁止する。絶対保護には、sandbox外実行や全書き込みtoolにも及ぶruntime／OS側の強制が必要で、この配布物だけでは完成していない。通常shellの一律allowへは拡張しない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
 
 ## 文書の編集
 
-skill・文書には実行条件、手順、command、判定・返却内容を書く。背景・理由・重複説明は削り、意味が変わらない範囲で短くする。共通基準は一か所に置き、必要な工程から参照する。AGENTS.mdは全行動に共通する短い目標だけにし、自動選択skillの入口には通常経路だけを置く。
+適用条件・実行入口・判断基準・結果後の行動を残す。hook・設定で強制する制約とscriptが生成する形式は重複させない。モデル自身が生成する内容の指示は残す。共通判断は正本に集約し、既読文書を必要なく読み直させない。
 
 ## 検証
 
-hook・skill・配布設定の変更後に実行する。前提はjqとgit。
+前提はgit・jq・Python 3.8以上。配布物の変更後に実行する。
 
 ```bash
 bash tests/verify-all.sh
 ```
 
-成功は`PASS=n FAIL=0`。Claude／Codexへの一時配置、placeholder解決、hookのdeny/ask/棄権、権限・commit・MCP・参照先、rebase・並行編集・専用agentを検証する。作業用directoryは終了時に削除する。
+Claude／Codexへの一時配置・bootstrap・hookの決定と文書配信・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分ける。
 
-Codex CLIがあればversion・strict config・execpolicyも検証し、なければ省略する。skill形式検査は配布形式に対応した`python3 tests/validate-skills.py skills/<skill名>`を使い、全体テストでは全skillと検査器の異常系を検証する。`tests/run-tests.sh`は全体テストから呼び、単体では使わない。
+`python3 tests/test_git_policy.py`は両配布のGit guardへ入力し、許可された読み取りと外部helperの抑止をfixtureで実行する。`python3 tests/test_git_sandbox.py`はインストール済みCodexのOS sandboxで、隔離した.gitへの書き込み・コピー・リンク・親directory移動を試す。後者はsandboxを二重起動できない環境では外側の実行承認が必要。通常suiteの成功だけではOS境界の検証済みとはしない。
 
-`test_context_delivery.py`は両配布の全matcherを再現し、hook出力のUTF-8 bytesと回数を測る。実モデルの受信証明とは区別する。`python3 tests/probe_context_runtime.py <codex|claude> <investigation|document_change|normal_implementation|from_doc|review_repair>`は認証済みCLIでの任意検証で、隔離fixture・hook出力・モデル応答を一時directoryへ保存する。project hookの発火なしは失敗とし、Codexの`--inline-hooks`診断をproject配置の成功扱いにしない。
+skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
-`test_pre_model_switch.py`はBaton eventの入力・model/effortだけの同値要求・thread別receipt・文書変更・nested cwd・失敗を検証する。`BATON_ROOT=/path/to/baton bash tests/verify-all.sh`はBatonの実loader・runnerへ配布hookを接続する。`node tests/probe_baton_pre_model_switch_runtime.mjs /path/to/baton`は認証済みCodexで、旧モデルへの本文配信・1回の再試行・切替後の完了を実測する。
-
-### 独立レビューと文書の読込
-
-`independent-review.sh`はコード・testの最初の編集前HEADをsession別に保持し、起動された専用子の入力と`SubagentStop`のJSON結果を照合する。独立レビューが必要かはskillが判断し、`Stop`で完了を推測・阻止しない。要求の追加・訂正、編集、HEAD変更は旧結果を失効させる。
-
-配布先は`PreToolUse`・`SubagentStart`・`SubagentStop`対応のruntimeを使う。hookを通らないtool経路や、ユーザー自身による状態変更は保証対象外。イベント仕様は[Codex hooks](https://learn.chatgpt.com/docs/hooks)を参照する。
-
-cowlick・ponytail・polish・unwindの`SKILL.md`は明示呼び出し用の入口とし、内部工程は各配下の`PROCEDURE.md`を直接読む。tddの`FROM_DOC.md`は`$tdd --from-doc`だけが読む。
-
-共通基準は調査後、設計・実装方針を決める前にskillから読む。モデル選択は方針確定後・最初の編集前のdifficulty起動時にだけ親へ注入する。子の起動と独立レビューの手順は`load-operation-context.sh`、Codexのモデル切替手順はBaton用`pre-model-switch.sh`が対象操作を一度止めて親へ注入し、role専用契約は`SubagentStart`で子だけへ注入する。注入専用文書は通常の参照から外し、対応する直接読込をhookで拒否する。文書変更のreviewerは変更fileと直接依存先だけを読む。
-
-| 禁止・制約の種類 | 実施箇所・境界 |
-|---|---|
-| push・一括commit・強制stage | `commit-gate.sh`。認識対象のGitコマンドとindexを検査 |
-| registry取得・Prisma反映 | `deny-registry.sh`・`deny-migration.sh`。コマンド検査。任意script内部の通信・副作用は保証しない |
-| 一般調査・実装の委任、起動設定の上書き | `require-implementer.sh`。専用roleだけ許可 |
-| reviewerの編集・再委任 | Codexのread-only sandboxとagents無効化。Claudeはtool制限。Bashの意味的な読み取り専用性は文書だけでは保証しない |
-| 開始HEAD保持・起動済み独立レビューの証跡 | `independent-review.sh`。対象SHA・clean状態・専用子の最終結果を検査。レビューの必要性は判定しない |
-| 設定・秘密・lockfile・migration fileの編集 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
-| polishの対象path・tracked・clean | `polish/capture-scope.sh`・`polish/quality-gate.sh`。検査scriptの実行自体の省略は防がない |
-| assertionの弱体化・不要な抽象化・要件の推測・検証結果の誤認 | 共通基準・各工程・独立レビュー。操作名だけでは判定できないため文書に残す |
-| シナリオの選択・設計revision・指摘の採否 | 各workflow。ユーザーの自然言語の意味や判断の妥当性をhookで代行しない |
-| 履歴の書き換え・script経由の迂回 | `deny-history.sh`・`deny-eval.sh`。rebaseは固定実行器に限定 |
-| skill実装の直接取得・既存fileの全上書き | `deny-skill-source.sh`・`overwrite.sh`。対象tool・pathを検査 |
-| 短い子の完了待ち | `agent-wait.sh`がCodexのtimeoutを補正。無意味な再確認かどうかはメインが判断 |
-| E2Eの承認前操作・passwordの平文保存 | E2E手順に残す。承認状態・秘密値と全browser／出力経路がhookへ連携されていない |
+認証済みCLIの親子配信probeとBatonの実loader／実モデルprobeは[検証記録](tests/context-delivery-report.md)を参照する。未発火のproject hook、未開始の専用子、inline配線だけの成功を配布の実機成功として扱わない。
