@@ -12,4 +12,4 @@
 | Claudeで正しいcommandも`Operation not permitted` | `sandbox.excludedCommands`を確認し、設定更新とsandbox外実行を依頼 |
 | Codexで正しいcommandも拒否 | project trustと`.codex/rules/default.rules`を確認 |
 
-限定allowを迂回する別コマンドへ変更しない。
+固定入口を別コマンドで代用しない。配置・権限・script自体の修復が必要なら配布元の修正またはユーザーの対応を求め、エージェント自身の保護設定を変更して続行しない。
