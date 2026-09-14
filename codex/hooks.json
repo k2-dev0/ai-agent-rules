@@ -195,6 +195,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^mcp__(chrome[-_]devtools__(take_screenshot|take_snapshot|screencast_start)|serena__write_memory)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git.sh\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStart": [
