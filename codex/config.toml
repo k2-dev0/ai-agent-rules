@@ -1,6 +1,6 @@
 # プロジェクト配布用設定。<repo>/.codex/config.toml として配置する。
 # trusted project でのみ読み込まれ、CLI / profile / user config より優先度は低い。
-# 可逆な workspace 内操作は自動化し、不可逆操作は rules の確認か hooks の拒否へ分離する。
+# sandbox内の単一通常commandは自動。境界外はGit保護付き入口で承認する。
 default_permissions = "distributed"
 approval_policy = "on-request"
 
@@ -9,6 +9,12 @@ extends = ":workspace"
 
 [permissions.distributed.filesystem.":workspace_roots"]
 ".git" = "read"
+".codex/hooks" = "read"
+".codex/agents" = "read"
+".codex/config.toml" = "read"
+".codex/hooks.json" = "read"
+".codex/rules" = "read"
+".agents/skills" = "read"
 ".mcp.json" = "read"
 ".claude/hooks" = "read"
 ".claude/skills" = "read"
@@ -31,9 +37,9 @@ default_subagent_model = "gpt-5.6-luna"
 default_subagent_reasoning_effort = "max"
 
 [mcp_servers.chrome-devtools]
-command = "npx"
+command = "bash"
 # Chrome 149以上。localhostの全ポートだけを操作対象にする。
-args = ["-y", "chrome-devtools-mcp@1.9.0", "--workspace=.", "--experimentalScreencast=true", "--allowed-url-pattern=*://localhost:*/*", "--allowed-url-pattern=*://127.0.0.1:*/*", "--allowed-url-pattern=*://[\\:\\:1]:*/*"]
+args = [".codex/hooks/shell/mcp-protected.sh", "npx", "-y", "chrome-devtools-mcp@1.9.0", "--workspace=.", "--experimentalScreencast=true", "--allowed-url-pattern=*://localhost:*/*", "--allowed-url-pattern=*://127.0.0.1:*/*", "--allowed-url-pattern=*://[\\:\\:1]:*/*"]
 startup_timeout_sec = 20
 default_tools_approval_mode = "approve"
 
@@ -41,8 +47,9 @@ default_tools_approval_mode = "approve"
 approval_mode = "prompt"
 
 [mcp_servers.serena]
-command = "uvx"
+command = "bash"
 args = [
+  ".codex/hooks/shell/mcp-protected.sh", "uvx",
   "--from", "git+https://github.com/oraios/serena@29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2",
   "serena", "start-mcp-server",
   "--context", "codex",
@@ -65,8 +72,8 @@ disabled_tools = [
 ]
 
 [mcp_servers.context-dictionary]
-command = "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx"
-args = ["__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
+command = "bash"
+args = [".codex/hooks/shell/mcp-protected.sh", "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx", "__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
 env = { CONTEXT_AGENT = "codex" }
 startup_timeout_sec = 20
 default_tools_approval_mode = "prompt"
