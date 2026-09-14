@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 ## 実行
 
-引数の`claude`／`codex`を使う。未指定は確認し、未知の値は配置先を確認して`bootstrap.sh`のcase対応後に実行する。
+引数の`claude`／`codex`を使う。未指定は確認し、未知の値は実行せず対応外と報告する。
 
 | agent | 設定・hooks・rules・prompt | skills_root |
 |---|---|---|
