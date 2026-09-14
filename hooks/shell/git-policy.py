@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 
 class Denied(ValueError):
@@ -39,16 +40,41 @@ def metadata_paths(cwd):
 def check_path(value, cwd, protected):
     if not isinstance(value, str) or not value or "\x00" in value:
         raise Denied("編集対象pathを確認できません。")
-    path = Path(os.path.abspath(cwd / value))
-    resolved = path.resolve()
+    original = cwd / value
+    path = Path(os.path.abspath(original))
+    # Resolve symlinks before collapsing '..': link/../file can enter .git.
+    resolved = original.resolve()
     if any(p.casefold() == ".git" for p in (*path.parts, *resolved.parts)):
         raise Denied(".gitへの直接・間接の変更は禁止です。承認による解除はできません。")
     if any(p == t or t in p.parents or p in t.parents for p in (path, resolved) for t in protected):
         raise Denied(".gitの参照先または親directoryの変更は禁止です。")
+    if resolved.is_file() and resolved.stat().st_nlink > 1:
+        raise Denied("hardlinkされたfileは保護対象との共有を排除できないため変更できません。")
     if resolved.is_dir():
-        for _, directories, files in os.walk(resolved):
+        # Finish before the configured 5s hook timeout, which is not a deny.
+        deadline = time.monotonic() + 2
+        def fail_scan(error):
+            raise error
+        for _, directories, files in os.walk(resolved, onerror=fail_scan):
+            if time.monotonic() > deadline:
+                raise Denied("directory内の.git検査を完了できないため変更できません。")
             if any(name.casefold() == ".git" for name in directories + files):
                 raise Denied(".gitを含むdirectoryの変更は禁止です。")
+
+
+def check_controller(value, cwd):
+    # Protect the guard itself when a filesystem alias or MCP bypasses Edit rules.
+    original = cwd / value
+    for path in (Path(os.path.abspath(original)), original.resolve()):
+        if path.name == ".mcp.json":
+            raise Denied("MCP設定の直接変更は禁止です。")
+        for index, part in enumerate(path.parts):
+            if part not in (".claude", ".codex", ".agents"):
+                continue
+            tail = path.parts[index + 1:]
+            if part != ".agents" and (tail[:1] == ("prompt",) or tail[:2] == ("e2e", "artifacts")):
+                continue
+            raise Denied("設定・hook・skillの直接変更は禁止です。固定スクリプトを使ってください。")
 
 
 # Unknown options fail closed, including abbreviations. The runtime sandbox is
@@ -166,6 +192,23 @@ def inspect(payload):
     inputs = payload.get("tool_input") or {}
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     protected = metadata_paths(cwd)
+    if re.fullmatch(r"mcp__chrome[-_]devtools__(take_screenshot|take_snapshot|screencast_start)", tool):
+        if inputs.get("filePath") is not None:
+            check_path(inputs["filePath"], cwd, protected)
+            check_controller(inputs["filePath"], cwd)
+        return
+    if tool == "mcp__serena__write_memory":
+        names = [inputs[k] for k in ("memory_name", "memory_file_name") if k in inputs]
+        if not names:
+            raise Denied("memoryの保存先を確認できません。")
+        for name in names:
+            if not isinstance(name, str) or not name or name.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", name) or any(part.casefold() in ("..", ".git") for part in name.replace("\\", "/").split("/")):
+                raise Denied("memory名から保存領域や.gitへ移動することは禁止です。")
+            if not name.startswith("global/"):
+                destination = str(Path(".serena/memories") / (name + ".md"))
+                check_path(destination, cwd, protected)
+                check_controller(destination, cwd)
+        return
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"):
         if tool == "apply_patch":
             patch = inputs.get("command") if isinstance(inputs, dict) else inputs
@@ -177,6 +220,7 @@ def inspect(payload):
             raise Denied("編集対象pathを確認できません。")
         for path in paths:
             check_path(path, cwd, protected)
+            check_controller(path, cwd)
         return
     if tool != "Bash":
         return
@@ -184,29 +228,51 @@ def inspect(payload):
     if not raw:
         raise Denied("shell commandがありません。")
     argv = shlex.split(raw)
-    while argv and argv[0] in ("command", "builtin", "exec", "env", "/usr/bin/env"):
-        argv.pop(0)
-        if argv and argv[0] == "--":
+    assignments = []
+    while argv:
+        if Path(argv[0]).name == "command" and argv[1:2] in (["-v"], ["-V"]):
+            return
+        if Path(argv[0]).name in ("command", "builtin", "exec", "env"):
             argv.pop(0)
+            if argv and argv[0] == "--":
+                argv.pop(0)
+            if argv and argv[0].startswith("-"):
+                raise Denied("wrapperのoptionで実行内容を変更することはできません。")
+        elif re.match(r"^[A-Za-z_][A-Za-z_0-9]*=", argv[0]):
+            assignments.append(argv.pop(0))
+        else:
+            break
     if not argv:
         raise Denied("実行commandを確認できません。")
+    if any(t.split("=", 1)[0] in ("BASH_ENV", "ENV") for t in assignments):
+        raise Denied("起動前のshell script注入は許可しません。")
     if Path(argv[0]).name == "git":
+        if assignments:
+            raise Denied("Gitの環境上書きによる起動は許可しません。")
         lexer = shlex.shlex(raw, posix=True, punctuation_chars=";&|<>()")
         lexer.whitespace_split = True
         if any(t in (";", "&&", "||", "|", ">", ">>", "<", "(", ")", "&") for t in lexer) or any(c in raw for c in ("$", "`", "\n", "\r")):
             raise Denied("Gitは展開・複合構文を使わず単独実行してください。")
         return git_command(argv, cwd, protected)
-    if any("=" in t and t.split("=", 1)[0].startswith("GIT_") for t in argv) or (any(re.match(r"^[A-Za-z_][A-Za-z_0-9]*=", t) for t in argv) and any(Path(t).name == "git" for t in argv)) or (Path(argv[0]).name in ("sudo", "doas", "nice", "timeout") and any(Path(t).name == "git" for t in argv)):
+    if any(t.split("=", 1)[0].startswith("GIT_") for t in assignments) or (Path(argv[0]).name in ("sudo", "doas", "nice", "timeout") and any(Path(t).name == "git" for t in argv)):
         raise Denied("Gitの環境上書き・別wrapperによる起動は許可しません。")
     binary = Path(argv[0]).name
     mutators = {"rm", "rmdir", "unlink", "shred", "srm", "mv", "gmv", "cp", "gcp", "rsync", "install", "ln", "gln", "touch", "chmod", "chown", "chgrp", "mkdir", "truncate", "dd", "tee", "patch"}
     if binary in mutators:
         operands = [a for a in argv[1:] if not a.startswith("-")]
-        if binary in ("cp", "gcp", "ln", "gln", "install", "rsync"):
+        if binary in ("cp", "gcp", "ln", "gln", "mv", "gmv") and len(operands) == 2:
+            source, destination = operands
+            if (cwd / destination).is_dir() and not (cwd / source).is_dir():
+                destination = str(Path(destination) / Path(source).name)
+            if binary in ("ln", "gln") and "-s" in argv:
+                source = str(Path(destination).parent / source) if not Path(source).is_absolute() else source
+            operands = [destination] if binary in ("cp", "gcp") else [source, destination]
+        elif binary in ("cp", "gcp", "install", "rsync"):
             operands = operands[-1:]
         for arg in operands:
             for path in glob.glob(str(cwd / arg)) or [arg]:
                 check_path(path, cwd, protected)
+                check_controller(path, cwd)
 
 
 def main():
@@ -218,6 +284,17 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--bootstrap-entry"]:
+        try:
+            payload = json.load(sys.stdin)
+            arguments = shlex.split(payload.get("tool_input", {}).get("command", ""))
+            valid = payload.get("tool_name") == "Bash" and arguments in (
+                ["bash", ".claude/skills/bootstrap/bootstrap.sh", "claude"],
+                ["bash", ".agents/skills/bootstrap/bootstrap.sh", "codex"],
+            )
+        except (ValueError, AttributeError, TypeError):
+            valid = False
+        sys.exit(0 if valid else 1)
     result = main()
     if result:
         print(json.dumps(result, ensure_ascii=False))
