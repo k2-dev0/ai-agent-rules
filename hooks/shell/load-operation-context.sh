@@ -86,7 +86,13 @@ $FILE"
       hook_review_context "専用契約 $RELATIVE が見つかりません。成功扱いせず失敗を返してください。"
       exit 0
     }
+    COMMON=$(skill_file CHILD_RULES.md) || {
+      hook_review_context "子の共通制約が見つかりません。成功扱いせず失敗を返してください。"
+      exit 0
+    }
     hook_review_context "契約の相対参照は $(dirname "$FILE") を基準に解決してください。
+
+$(cat "$COMMON")
 
 $(cat "$FILE")"
     ;;
