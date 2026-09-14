@@ -67,6 +67,7 @@ class GitPolicy(unittest.TestCase):
             "git diff --ext-diff", "git log --textconv", "git log --show-signature", "git log --format=%G?",
             "git branch --list --format=%(signature)", "git cat-file --filters HEAD:file.txt",
             "git grep --open-files-in-pager=sh one", "git grep -n --open-files-in-pager=sh one",
+            "git branch --format --list topic", "git tag --format --list topic",
             "git -c core.pager=sh log", "env GIT_CONFIG_COUNT=1 git status", "sudo git add file.txt",
             "env PATH=/tmp git add file.txt", "FOO=bar /usr/bin/git add file.txt",
             "git status; git add file.txt", "git status > .git/HEAD", "git log $(touch bad)",
@@ -75,6 +76,16 @@ class GitPolicy(unittest.TestCase):
             for command in commands:
                 with self.subTest(agent=agent, command=command):
                     self.assertEqual(self.guard(agent, "Bash", {"command": command}).get("permissionDecision"), "deny")
+
+    def test_optional_context_option_cannot_hide_file_output(self):
+        (self.root / "file.txt").write_text("two\n")
+        target = self.root / "unexpected.patch"
+        for agent in ("claude", "codex"):
+            hook = self.guard(agent, "Bash", {"command": "git diff -U --output=" + str(target)})
+            if hook.get("permissionDecision") == "allow":
+                subprocess.run(shlex.split(hook["updatedInput"]["command"]), cwd=self.root, capture_output=True)
+            self.assertFalse(target.exists(), "an optional -U argument hid a file-writing option")
+            self.assertEqual(hook.get("permissionDecision"), "deny")
 
     def test_configured_external_helpers_do_not_run(self):
         sentinel = self.root / "helper-ran"
