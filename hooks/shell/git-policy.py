@@ -187,7 +187,56 @@ def git_command(argv, cwd, protected):
     return {"command": shlex.join([*safe, *argv[1:]])}
 
 
-def inspect(payload):
+def single_command(raw):
+    """Reject shell control flow, not quoted program text or variable expansion.
+
+    This is a logging/input policy. Filesystem safety belongs to the OS sandbox.
+    """
+    state = None
+    escaped = False
+    for index, char in enumerate(raw):
+        following = raw[index + 1:index + 2]
+        if char in "\n\r":
+            raise Denied("複合commandは単一commandへ分割してください。")
+        if state == "'":
+            if char == "'":
+                state = None
+            continue
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "`" or (char == "$" and following == "("):
+            raise Denied("command substitutionは禁止です。commandを分割してください。")
+        if state == '"':
+            if char == '"':
+                state = None
+            continue
+        if char in "'\"":
+            state = char
+        elif char in ";|()" or (char == "&" and raw[index - 1:index] not in (">", "<") and following != ">"):
+            # >| is a redirection operator, not a pipeline.
+            if char != "|" or raw[index - 1:index] != ">":
+                raise Denied("複合commandは単一commandへ分割してください。")
+    if state or escaped:
+        raise Denied("shellのquoteまたはescapeが閉じていません。")
+    argv = shlex.split(raw)
+    if not argv or argv[0] in ("for", "while", "until", "if", "case", "select", "function", "{", "}"):
+        raise Denied("shellの制御構文は使わず、単一commandを指定してください。")
+    return argv
+
+
+def outside_command(argv):
+    if len(argv) == 3 and argv[0] == "bash" and argv[1] in (
+        ".codex/hooks/shell/outside.sh", ".claude/hooks/shell/outside.sh",
+    ):
+        return argv[2]
+    return None
+
+
+def inspect(payload, outside_payload=False):
     tool = payload.get("tool_name", "")
     inputs = payload.get("tool_input") or {}
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
@@ -227,7 +276,16 @@ def inspect(payload):
     raw = inputs.get("command", "")
     if not raw:
         raise Denied("shell commandがありません。")
-    argv = shlex.split(raw)
+    argv = single_command(raw)
+    inner = outside_command(argv)
+    if inner is not None:
+        if outside_payload:
+            raise Denied("境界外入口を入れ子にできません。")
+        result = inspect({**payload, "tool_input": {"command": inner}}, outside_payload=True)
+        if result and result.get("commit_check"):
+            raise Denied("add/commitは契約検査付きの単独Git commandを使ってください。")
+        # Never return allow for the wrapper: its real approval must remain.
+        return
     assignments = []
     while argv:
         if Path(argv[0]).name == "command" and argv[1:2] in (["-v"], ["-V"]):
@@ -244,6 +302,23 @@ def inspect(payload):
             break
     if not argv:
         raise Denied("実行commandを確認できません。")
+    if Path(argv[0]).name == "eval":
+        raise Denied("evalでは実行内容を確定できません。単一commandを直接指定してください。")
+    if Path(argv[0]).name in ("bash", "zsh", "sh", "dash", "ksh", "fish"):
+        option_value = False
+        for index, arg in enumerate(argv[1:], 1):
+            if option_value:
+                option_value = False
+                continue
+            if arg in ("-o", "-O", "+o", "+O", "--rcfile", "--init-file"):
+                option_value = True
+                continue
+            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", arg):
+                if index + 2 != len(argv) or "$" in argv[index + 1] or assignments:
+                    raise Denied("inline shellのcommandを展開せず直接指定してください。")
+                return inspect({**payload, "tool_input": {"command": argv[index + 1]}}, outside_payload=outside_payload)
+            if arg == "--" or not arg.startswith(("-", "+")):
+                break
     if any(t.split("=", 1)[0] in ("BASH_ENV", "ENV") for t in assignments):
         raise Denied("起動前のshell script注入は許可しません。")
     if Path(argv[0]).name == "git":
@@ -275,9 +350,33 @@ def inspect(payload):
                 check_controller(path, cwd)
 
 
+def approval(payload):
+    if payload.get("tool_name") != "Bash":
+        return
+    raw = payload.get("tool_input", {}).get("command", "")
+    argv = single_command(raw)
+    result = inspect(payload)
+    if outside_command(argv) is not None or (result and result.get("commit_check")):
+        return
+    # This fixed action issues a one-use review token, not an arbitrary command.
+    if argv[:3] == ["bash", ".codex/hooks/shell/protect-review.sh", "approve"] and len(argv) == 4:
+        return
+    control = Path(__file__).resolve().parents[2].name
+    if control not in (".codex", ".claude"):
+        raise Denied("配布済みhookから実行してください。")
+    retry = shlex.join(["bash", control + "/hooks/shell/outside.sh", raw])
+    raise Denied("境界外の実行にはGit保護を残す入口で承認を受けてください: " + retry)
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
+        if sys.argv[1:] == ["--approval"]:
+            return approval(payload)
+        if sys.argv[1:] == ["--command"]:
+            raw = payload.get("tool_input", {}).get("command", "")
+            print(outside_command(shlex.split(raw)) or raw)
+            return
         return inspect(payload)
     except (ValueError, OSError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError) as error:
         return {"error": str(error)}
