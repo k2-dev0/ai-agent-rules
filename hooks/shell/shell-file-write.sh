@@ -66,6 +66,7 @@ while IFS= read -r ARG; do ARGS+=("$ARG"); done <<< "$TOKENS"
 set -- "${ARGS[@]}"
 # wrapperとliteralな環境変数指定を重ねても、実際に起動するcommandを検査する。
 while [ "$#" -gt 0 ]; do
+  if [ "${1##*/}" = command ] && { [ "${2:-}" = -v ] || [ "${2:-}" = -V ]; }; then exit 0; fi
   case "${1##*/}" in
     command|builtin|exec|env)
       shift
