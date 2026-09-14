@@ -36,6 +36,7 @@ elif op == "hardlink":
     (root / "hardlink").write_text("changed")
 elif op == "controller": (root / ".codex/hooks/shell/git-policy.py").write_text("disabled")
 elif op == "new-controller": (root / ".mcp.json").write_text("disabled")
+elif op == "review-state": (root / ".claude/tmp/independent-review.TEST.json").write_text("forged")
 elif op == "script-git": subprocess.run(["git", "config", "fixture.unsafe", "changed"], cwd=root, check=True)
 else: raise ValueError(op)
 '''
@@ -61,6 +62,8 @@ class ProtectedExec(unittest.TestCase):
             shutil.copytree(REPO / "hooks", hooks)
             adapter = hooks / "shell/hook-io.sh"
             adapter.write_text(adapter.read_text().replace("[agent_name]", agent))
+        (self.root / ".claude/tmp").mkdir()
+        (self.root / ".claude/tmp/independent-review.TEST.json").write_text("unchanged")
 
     def run_entry(self, agent, entry, argv, **kwargs):
         args = ["bash", f".{agent}/hooks/shell/{entry}.sh"]
@@ -80,7 +83,7 @@ class ProtectedExec(unittest.TestCase):
         guard_before = guard.read_bytes()
         for agent in ("claude", "codex"):
             for entry in ("outside", "mcp-protected"):
-                for op in ("ordinary", "outside", "network", "write", "copy", "copy-tree", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink", "controller", "new-controller", "script-git"):
+                for op in ("ordinary", "outside", "network", "write", "copy", "copy-tree", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink", "controller", "new-controller", "script-git", "review-state"):
                     with self.subTest(agent=agent, entry=entry, op=op):
                         result = self.run_entry(agent, entry, ["python3", str(self.program), str(self.root), op])
                         if op in ("ordinary", "outside", "network"):
@@ -92,6 +95,7 @@ class ProtectedExec(unittest.TestCase):
                         self.assertEqual(guard.read_bytes(), guard_before)
                         self.assertFalse((self.root / ".mcp.json").exists())
                         self.assertFalse((self.root / "hardlink").exists())
+                        self.assertEqual((self.root / ".claude/tmp/independent-review.TEST.json").read_text(), "unchanged")
         self.assertEqual((self.parent / "outside").read_text(), "allowed")
         self.assertEqual((self.root / "ordinary").read_text(), "allowed")
 
