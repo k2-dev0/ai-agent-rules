@@ -79,21 +79,7 @@ else
   FAIL=$((FAIL+1)); echo "FAIL required-reading: cowlick形式receiptを再利用できない -> [$COWLICK_SECOND]"
 fi
 
-DIFFICULTY_AGENT=$(jq -cn --arg cwd "$READING_CWD" '{hook_event_name:"PreToolUse",session_id:"DIFF1",cwd:$cwd,tool_name:"Agent",tool_input:{subagent_type:"difficulty-evaluator",fork_turns:"none",prompt:"{}"}}')
-DIFFICULTY_FIRST=$(echo "$DIFFICULTY_AGENT" | bash "$H/load-operation-context.sh")
-if matches_expected deny "$DIFFICULTY_FIRST" &&
-   echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq '1〜3はLuna / max' &&
-   echo "$DIFFICULTY_FIRST" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -Fq 'サブエージェント'; then
-  PASS=$((PASS+1)); echo "ok   required-reading: difficulty起動前にモデル選択と親契約を注入"
-else
-  FAIL=$((FAIL+1)); echo "FAIL required-reading: difficulty起動前の親contextが不足 -> [$DIFFICULTY_FIRST]"
-fi
-DIFFICULTY_SECOND=$(echo "$DIFFICULTY_AGENT" | bash "$H/load-operation-context.sh")
-if matches_expected empty "$DIFFICULTY_SECOND"; then
-  PASS=$((PASS+1)); echo "ok   required-reading: difficulty親context receipt後は棄権"
-else
-  FAIL=$((FAIL+1)); echo "FAIL required-reading: difficulty親context receiptを再利用できない -> [$DIFFICULTY_SECOND]"
-fi
+check "contract loader: 親の起動入力を待ち伏せして拒否しない" empty load-operation-context.sh '{"hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":{"subagent_type":"difficulty-evaluator","prompt":"{}"}}'
 
 check "required-reading: 通常文書は設計形式の対象外" empty load-required-contract.sh '{"hook_event_name":"PreToolUse","session_id":"READOTHER","tool_name":"Edit","tool_input":{"file_path":"docs/notes.md"}}'
 
