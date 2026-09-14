@@ -26,6 +26,8 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 ## Red
 
+最初のtest編集前に[メインモデル選択](../MODEL_SELECTION.md)を完了する。
+
 選択済みシナリオのtestを書き、既存assertionを弱めない。既存の配置・方式に合わせて結合testを優先し、API・DB処理はPrisma mockでなくtest DBを使う。外部APIはmockで呼出条件と異常系、複雑な分岐はunit testで境界と分岐、非公開処理は公開APIから検証する。React component・hook専用の隣接unit testは新設しない。
 
 ユーザーがtest作成済みと明示した場合は候補提示・作成を省略できるが、対象testが要求を検出し、実装前に失敗することを確認する。
@@ -44,4 +46,4 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 ## 完了
 
-通常起動は検証とcommit後に専用reviewerで独立レビューし、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
+通常起動は検証とcommit後に[独立レビューの起動・結果処理](../INDEPENDENT_REVIEW.md)を読み、専用reviewerで独立レビューする。共通基準の作業対象とGit状態を再照合し、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
