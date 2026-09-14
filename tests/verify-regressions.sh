@@ -38,6 +38,9 @@ for agent in claude codex; do
   check grep -Fq '同じ方針の修正・再開では再利用' "$model_selection"
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check grep -Fq '対応する`PreModelSwitch`がない環境だけ' "$model_selection"
+  check grep -Fq 'ユーザーが難度評価のスキップを明示した場合は起動せず' "$model_selection"
+  check grep -Fq '専用roleを指定できない汎用子を`difficulty-evaluator`の代用にしない' "$model_selection"
+  check grep -Fq '`agent_role`が空の汎用子やtask名だけの子を専用roleの代用にしない' "$REPO/README.md"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   if [ "$agent" = codex ]; then difficulty_agent="$target/.codex/agents/difficulty-evaluator.toml"; else difficulty_agent="$target/.claude/agents/difficulty-evaluator.md"; fi
   check grep -Fq '短い理由または入力エラーを返す' "$difficulty_agent"
