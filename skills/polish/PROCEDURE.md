@@ -15,7 +15,7 @@ bash [skills_root]/polish/capture-scope.sh list-changed <機能名>
 
 出力が空なら実行表・unwindを省略してpath検査へ進む。
 
-directは開始前に次を実行し、失敗時は対象を推測し直さず原因を報告する。
+directは開始前に次を実行し、失敗時は対象を推測し直さず原因を報告する。未追跡fileは最終gate前に追跡・commitし、ignored・所有不明・ユーザー由来の変更は[作業対象の扱い](../IMPLEMENTATION_RULES.md#作業対象とgit状態)に従う。
 
 ```bash
 bash [skills_root]/polish/quality-gate.sh <機能名> --direct-check -- <明示path>...
