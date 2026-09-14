@@ -112,7 +112,7 @@ hookの強制は、配置済み設定を読むtrusted projectと対応toolで有
 
 Codexの子は`max_threads = 1`で同時起動数を制限する。hookは専用role以外の起動・background・一括起動・resumeを拒否する。nesting-reviewerのmodel・effortは専用定義を使う。
 
-難易度評価の起動hookは専用設定を検査し、difficulty起動直前に`MODEL_SELECTION.md`を親へ注入する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
+難易度評価の起動hookは専用設定を検査し、difficulty起動直前に`MODEL_SELECTION.md`を親へ注入する。Codexのnative `spawn_agent`では`message`がhookで解析可能な本文とは限らないため、非空の文字列であることだけを検査し、JSON・2キー・repositoryの検査は受信した評価役が行う。Claudeの`Agent`など本文を渡す形式ではhookでもbriefを検査する。`agent_role`が空の汎用子やtask名だけの子を専用roleの代用にしない。専用roleを渡せない起動toolしかない場合は子を起動せず、ユーザーが難度評価を明示的にスキップした場合だけメインで続行する。方針本文への背景混入、評価時点、点数の妥当性は文書による指示であり、hookによる強制ではない。採点契約は評価役だけが読み、同じ方針の再開・修正では結果を再利用する。モデルとeffortが現在値と一致する場合は切替手順を読まない。起動失敗時に別環境へ代替しない。
 
 評価役へモデル情報・選択基準は渡さず、成功時だけ1〜10の点数と200文字を目安にした理由を返す。入力エラー時は`{"error":"<concise English reason>"}`を返す。主担当が点数をモデルへ対応させ、error object・`null`・形式不正・範囲外・空の理由・起動不能は評価失敗として正常終了・評価済みにせず、自己採点や依存する編集を止めて原因を報告する。
 
