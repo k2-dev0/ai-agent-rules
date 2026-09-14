@@ -73,7 +73,7 @@ hook_agent_type() {
 # 子の直列起動と、専用reviewerの設定・文脈継承を検査する。
 hook_serial_agent_launch_valid() {
   echo "$HOOK_INPUT" | jq -e '
-    ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv|followup_task)$") | not) and
+    ((.tool_name // "") | test("(resume_agent|spawn_agents_on_csv|followup_task|send_input|send_message|send_message_to_agent)$") | not) and
     (.tool_input.run_in_background == null or .tool_input.run_in_background == false) and
     (.tool_input.background == null or .tool_input.background == false) and
     (.tool_input.resume == null or .tool_input.resume == "")
