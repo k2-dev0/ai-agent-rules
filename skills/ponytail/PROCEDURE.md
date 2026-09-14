@@ -10,8 +10,6 @@
 2. briefは上記対象・revision・元の要件と制約だけ
    - 前段の調査結果・作成経緯・採用理由・会話要約・過去のレビュー結果を渡さない
 3. 専用`design-reviewer`を新規起動する
-   - Codexは`agent_type: "design-reviewer"`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type: "design-reviewer"`
-   - model・effortは専用定義を使う
 4. 完了後は子を終了・解放する
    - 対応role・toolが利用不能、拒否、中断なら`blocked`
    - 同じ会話内の確認で代用しない
@@ -25,7 +23,6 @@
   - 全差分の自己レビューは行わない
 - `changes_requested`：メインが指摘の根拠を確認し、[メインモデル選択](../MODEL_SELECTION.md)に従う
   - 採用分は[cowlickの手順](../cowlick/PROCEDURE.md)を読み、現在の設計書・indexへ反映し、新revision・hashで新規レビューする
-  - 子へ編集を委任しない
 - `consultation_required`：要件・公開挙動・受入済みtrade-offの変更は、選択肢・挙動差・推奨を呼出元へ返す
   - ユーザー判断を代行しない
 - `blocked`・対象不一致・未確認範囲あり：未完了として理由を返す
