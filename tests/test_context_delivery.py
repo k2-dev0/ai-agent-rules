@@ -120,11 +120,23 @@ class ContextDelivery(unittest.TestCase):
                 self.assertNotIn("WRONG_PRODUCT_CONTEXT", parent_text[0])
                 self.assertNotIn("実装難度の独立評価", parent_text[0])
                 self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name="Agent", tool_input=difficulty_input)), [])
+                launch_tools = ("Agent", "spawn_agent", "collaboration.spawn_agent", "functions.spawn_agent", "collaborationspawn_agent") if agent == "codex" else ("Agent",)
+                for launch_tool in launch_tools:
+                    for role_fields in ({}, {"agent_role": None}, {"agent_role": "difficulty-evaluator"}, {role_key: "default"}):
+                        untyped = dict(task_name="difficulty_review", nickname="difficulty-evaluator", message="Act as difficulty-evaluator", fork_turns="none", **role_fields)
+                        outputs = configured("PreToolUse", "UNTYPED", tool_name=launch_tool, tool_input=untyped)
+                        self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), (agent, launch_tool, untyped))
+                        self.assertFalse(any("実装難度の独立評価" in t for t in visible(outputs)))
+                if agent == "codex":
+                    for tool in ("collaboration.followup_task", "collaboration.resume_agent", "spawn_agents_on_csv"):
+                        outputs = configured("PreToolUse", "REUSE", tool_name=tool, tool_input={"target": "old-child", "message": "try again"})
+                        self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), tool)
                 child_text = metric("difficulty_child", configured(
                     "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="difficulty", agent_type="difficulty-evaluator",
                 ))
                 self.assertEqual(len(child_text), 1)
                 self.assertIn("実装難度の独立評価", child_text[0])
+                self.assertIn((skilldir / "CHILD_RULES.md").read_text(), child_text[0])
                 self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
                 self.assertNotIn("サブエージェント", child_text[0])
                 self.assertNotIn("メインモデルの選択", child_text[0])
@@ -155,6 +167,7 @@ class ContextDelivery(unittest.TestCase):
                 ))
                 self.assertEqual(len(child_text), 1)
                 self.assertIn("読み取り専用の独立コードレビュー", child_text[0])
+                self.assertIn((skilldir / "CHILD_RULES.md").read_text(), child_text[0])
                 self.assertNotIn("独立レビューの起動・結果処理", child_text[0])
 
                 contract = skilldir / "DIFFICULTY_CONTRACT.md"
