@@ -1,6 +1,8 @@
 #!/bin/bash
 # polish のverified入力は実変更pathとの一致を、direct入力は明示pathの安全性だけを検査する。
 set -eu
+SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
+. "$SCRIPT_DIR/../../../.[agent_name]/hooks/shell/git-safe-env.sh" || exit 1
 
 FEATURE="${1:-}"
 FEATURE_RE='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
