@@ -81,12 +81,12 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 
 | 正本 | 読む時点・責務 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 常時必要なモデル選択の起動条件 |
-| [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 調査後・方針決定前の共通判断、規約への入口 |
-| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | difficulty起動直前に親へ注入。入力・採用モデル・失敗・再評価 |
-| [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 子の起動直前に親へ注入。roleの起動方法・完了待ち・利用不能時の行動 |
+| [AGENTS.md](AGENTS.md) | 変更前のモデル選択・適用確認への入口 |
+| [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 調査後・方針決定前の共通判断、規約・作業対象とGit状態への入口 |
+| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 最初の編集前に親が読む。評価入力・採用モデル・適用確認・失敗・再評価 |
+| [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 起動入力を組み立てる前に親が読む。role・完了待ち・入力訂正・利用不能時の行動 |
 | [CHILD_RULES.md](skills/CHILD_RULES.md)と各role契約 | 子の開始時に子だけへ注入。調査範囲・実行制約・返却内容 |
-| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | コードreviewer起動直前に親へ注入。入力と指摘対応 |
+| [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | コードreviewerの入力を組み立てる前に親が読む。JSON入力と指摘対応 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | BatonのPreModelSwitchで元モデルへ注入。非対応環境だけ切替前に読む |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗・採用した指摘の修正時 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書作成時。モデルが生成する形式・実装情報 |
@@ -104,8 +104,8 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | 単一command・境界外承認・MCPのOS保護 | `git-policy.py`・`command-approval.sh`・`outside.sh`・`mcp-protected.sh`・`protected-exec.py` |
 | 設定・秘密・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
 | 全面Write・skill実装の直接取得 | `overwrite.sh`・`deny-skill-source.sh` |
-| 必須文書・専用role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
-| 起動済み独立レビューの証跡 | `independent-review.sh` |
+| 設計形式・子の共通制約と専用契約・role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
+| shellを含む変更前HEAD・起動済み独立レビューの証跡 | `independent-review.sh`・`safe-files.py` |
 | Codexの待機時間補正 | `agent-wait.sh` |
 
 hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
@@ -114,7 +114,7 @@ Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通�
 
 通常の単一commandは、種類を列挙せずsandbox内で原則自動実行する。コピー・削除・上書き・interpreter・test・package操作も含む。複合command・loop・pipeline・command substitutionは拒否し、変数展開やquote内の記号とは区別する。Gitは上記の専用境界に従う。
 
-境界外の実行は`command-approval.sh`が`bash .<agent>/hooks/shell/outside.sh '<単一command>'`への再試行を案内し、人間の承認を待つ。入口は承認後も現在repositoryのGit metadata・保護設定をOSで書き込み禁止にする。保護を起動できなければ実行しない。stdio MCPも同じOS保護で起動する。起動directoryはrepository rootとする。
+境界外の実行は`command-approval.sh`が`bash .<agent>/hooks/shell/outside.sh '<単一command>'`への再試行を案内し、人間の承認を待つ。入口は承認後も現在repositoryのGit metadata・保護設定・hookの内部状態をOSで書き込み禁止にする。保護を起動できなければ実行しない。stdio MCPも同じOS保護で起動する。起動directoryはrepository rootとする。
 
 通常commandへのsandbox外allowは置かない。特権例外は契約付きadd/commitと固定のbootstrap・設計書完了mark・E2E計画保存・rebaseに限定する。Claudeはsandboxの自動許可を有効にし、保護付き入口以外の任意のsandbox解除を無効にする。
 
@@ -124,9 +124,9 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 
 | 強制される部分 | 残る判断・境界 |
 |---|---|
-| 起動引数のrole・設定上書き・background・一括起動・resume拒否、Codexの同時起動数 | 親の作業停止・環境間代替禁止・入力の意味・実際のrole metadata。起動不能は成功にしない |
+| 起動引数のrole・設定上書き・background・一括起動・追送・resume拒否、Codexの同時起動数 | 親の作業停止・環境間代替禁止・入力の意味・実際のrole metadata。起動不能は成功にしない |
 | 子のsandbox／tool制限 | shellのtest実行・調査範囲・MCP等の外部通信はread-onlyだけでは制限されない。共通制約を子へ注入する |
-| reviewer入力・対象SHA・clean状態・SubagentStopの結果形式 | reviewの必要性、指摘の妥当性・採否。形式検査は内容の自動生成ではない |
+| reviewer入力・対象SHA・tracked状態・SubagentStopの結果形式、shell後に古くなった結果の失効 | reviewの必要性、指摘の妥当性・採否、関連するignored / untracked資産。形式検査は内容の自動生成ではない |
 | polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
 | 直接tool入力の.git path・Git引数、Chromeの保存先・Serenaのmemory名を検査 | 文字列検査は任意script内部の保証ではない。scriptと子processの書き込みはOS保護で止める |
 | 固定scriptはリンクを拒否し、親directoryを開いてからfileを置換。一時領域も外部commandの起動前に検査 | 外部processによるdirectory移動など、同時のfilesystem変更すべてを制御するものではない |
@@ -136,6 +136,8 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 .gitの承認解除は禁止する。macOSはSeatbelt、Linuxはbubblewrapを使う。既存hardlink・保護tree内symlinkは実行前に拒否する。Linuxでは未作成の保護pathの最寄り既存親もread-onlyにするため、通常書き込みが狭まる場合がある。未対応OS・backend不在・二重sandboxの失敗を無保護の再実行へ切り替えない。
 
 検証済み経路と適用外を区別する。上位設定や外部processの並行変更までrepositoryの設定だけで完全保護したとは扱わない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
+
+親の手順は正本への参照で事前に読み、子の共通制約と専用契約はSubagentStartで渡す。JSON入力の不備は同じ専用role・toolで訂正でき、訂正しても本文を観測できない場合と区別する。手順を出力したreceiptは読了・評価成功・モデル切替・レビュー完了の証拠にしない。標準hook入力には現在modelはあるがeffortの適用確認は含まれないため、実際のモデル・effortの確認と利用不能時の判断は親の手順に残す。
 
 ## 文書の編集
 
@@ -149,7 +151,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 bash tests/verify-all.sh
 ```
 
-Claude／Codexへの一時配置・bootstrap・hookの決定と文書配信・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分ける。
+Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書配信・親の手順参照・入力訂正・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分け、実モデルが評価→切替→編集→レビューを完走した保証にはしない。
 
 `python3 tests/test_git_policy.py`は両配布のGit guardへ入力し、許可された読み取りと外部helperの抑止をfixtureで実行する。`python3 tests/test_git_sandbox.py`はインストール済みCodexのOS sandboxで、隔離した.gitへの書き込み・コピー・リンク・親directory移動を試す。後者はsandboxを二重起動できない環境では外側の実行承認が必要。通常suiteの成功だけではOS境界の検証済みとはしない。
 
