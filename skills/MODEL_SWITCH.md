@@ -7,11 +7,7 @@ Batonでは`PreModelSwitch`が元のモデルへ注入する。対応しない�
 ## 手順
 
 - モデルまたは設定が現在と異なる場合だけ、専用ツール `switch_model({"model":"モデルID","config":{"effort":"思考量"}})` を直接呼ぶ
-  - `config.effort`は必須
   - 例：`switch_model({"model":"gpt-6-astra","config":{"effort":"xhigh"}})`
-  - 追加設定も`config`内に指定する
-  - 同じモデルの設定変更も可
-  - コマンド探索・変更理由の提出は不要
 - 先行するツール・コマンド・子エージェント・承認の結果をすべて受け取る
   - 次の応答では`switch_model`だけを呼び、他のツール呼び出しを含めない
   - 切り替えのために処理を打ち切らない
@@ -23,8 +19,7 @@ Batonでは`PreModelSwitch`が元のモデルへ注入する。対応しない�
   - `baton`による中断をユーザーの停止と扱わない
   - 完了済み操作を繰り返さず、方針確定・工程移行だけで元のモデルへ戻さない
   - 再選定は`MODEL_SELECTION.md`の再評価条件に従う
-  - 修正後レビューで同じfile内の関数・section・testへの指摘が再発した場合は一段上へ昇格し、Astra / xhighでは維持する
-  - ユーザーの停止指示は優先する
+  - 修正後レビューの再発による昇格は[修正ループ](FIX_FLOW.md#修正ループ)に従う
 - 受付前の拒否は`result.success: false`、理由は`result.contentItems[].text`
   - モデル・設定・実行区間は維持される
   - 固定エラー文言で判定しない
