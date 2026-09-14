@@ -134,7 +134,7 @@ dangerous_read_reason() {
 
 is_safe_readonly_command() {
   case "$1" in
-    pwd|pwd\ *|ls|ls\ *|rg\ *|grep\ *|cat\ *|head\ *|tail\ *|wc\ *|jq\ *|find\ *|nl\ *|sort\ *|bash\ -n\ *|command\ -v\ *|git\ status*|git\ diff*|git\ log*|git\ show*|git\ ls-files*|git\ grep*) return 0 ;;
+    pwd|pwd\ *|ls|ls\ *|rg\ *|grep\ *|cat\ *|head\ *|tail\ *|wc\ *|jq\ *|find\ *|nl\ *|sort\ *|bash\ -n\ *|command\ -v\ *) return 0 ;;
     *) return 1 ;;
   esac
 }
