@@ -34,7 +34,7 @@ try {
   const event = {
     event: "PreModelSwitch", threadId: "thread", turnId: "turn-1", cwd: nested,
     from: { model: "gpt-5.6-sol", effort: "high" },
-    to: { model: "gpt-6-astra", config: { effort: "high" } },
+    to: { model: "gpt-6-astra", config: { effort: "xhigh" } },
   };
   const first = await runPreModelSwitchHooks(handlers, event);
   assert.equal(first.allowed, false);
