@@ -101,9 +101,8 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | Git引数・.git path保護 | `protect-git.sh`・`git-policy.py`と両環境のsandbox設定 |
 | 固定scriptの保存先・一時領域・Git環境 | `safe-files.py`・`git-safe-env.sh` |
 | stage・commit契約 | `commit-gate.sh`・`commit-subject.sh` |
-| 読み取り・shell書き込み | `readonly-search.sh`・`shell-file-write.sh` |
+| 単一command・境界外承認・MCPのOS保護 | `git-policy.py`・`command-approval.sh`・`outside.sh`・`mcp-protected.sh`・`protected-exec.py` |
 | 設定・秘密・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
-| registry・migration・履歴・inline実行 | `deny-registry.sh`・`deny-migration.sh`・`deny-history.sh`・`deny-eval.sh` |
 | 全面Write・skill実装の直接取得 | `overwrite.sh`・`deny-skill-source.sh` |
 | 必須文書・専用role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
 | 起動済み独立レビューの証跡 | `independent-review.sh` |
@@ -113,7 +112,11 @@ hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool
 
 Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通るadd/commitを許可する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。固定rebaseも外部hook・署名・filterを無効化し、一時worktreeでは保存済みblobを使う。
 
-Claudeのunit test runner・polishは許可を維持してsandbox内で実行する。bootstrap・設計書完了mark・E2E計画保存・rebaseだけに固定commandの除外を残す。通常shellの一律allowにはしない。
+通常の単一commandは、種類を列挙せずsandbox内で原則自動実行する。コピー・削除・上書き・interpreter・test・package操作も含む。複合command・loop・pipeline・command substitutionは拒否し、変数展開やquote内の記号とは区別する。Gitは上記の専用境界に従う。
+
+境界外の実行は`command-approval.sh`が`bash .<agent>/hooks/shell/outside.sh '<単一command>'`への再試行を案内し、人間の承認を待つ。入口は承認後も現在repositoryのGit metadata・保護設定をOSで書き込み禁止にする。保護を起動できなければ実行しない。stdio MCPも同じOS保護で起動する。起動directoryはrepository rootとする。
+
+通常commandへのsandbox外allowは置かない。特権例外は契約付きadd/commitと固定のbootstrap・設計書完了mark・E2E計画保存・rebaseに限定する。Claudeはsandboxの自動許可を有効にし、保護付き入口以外の任意のsandbox解除を無効にする。
 
 ## 保証範囲
 
@@ -125,12 +128,14 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 | 子のsandbox／tool制限 | shellのtest実行・調査範囲・MCP等の外部通信はread-onlyだけでは制限されない。共通制約を子へ注入する |
 | reviewer入力・対象SHA・clean状態・SubagentStopの結果形式 | reviewの必要性、指摘の妥当性・採否。形式検査は内容の自動生成ではない |
 | polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
-| .gitの実path・symlinkと`..`・hardlink・親directory・worktree参照先、Chromeの保存先・Serenaのmemory名を検査 | 未対応tool、MCPの別project／global保存先、任意script内部の書き込みは同じ検査で保証しない |
+| 直接tool入力の.git path・Git引数、Chromeの保存先・Serenaのmemory名を検査 | 文字列検査は任意script内部の保証ではない。scriptと子processの書き込みはOS保護で止める |
 | 固定scriptはリンクを拒否し、親directoryを開いてからfileを置換。一時領域も外部commandの起動前に検査 | 外部processによるdirectory移動など、同時のfilesystem変更すべてを制御するものではない |
 | 初期化前の例外はbootstrapの正規argvだけ | task名・文章・file pathへのbootstrap名の混入では解除しない |
-| sandbox内の.git書き込み制限 | 承認付きsandbox外実行、除外command、MCP・未対応tool、上位設定による保護解除はrepository設定だけでは保証できない |
+| sandbox内の.git制限と、保護付き境界外入口・配布stdio MCP内のOS制限 | 上位設定の既存allowによる直接の外部実行、別のMCP／未対応tool、既存外部serviceへ処理を委ねる経路はこの入口を通らない |
 
-.gitの承認解除は禁止する。配布物では上記経路を保護し、適用外の実行を保護済みと扱わない。特に承認付きsandbox外実行や任意MCPまでの絶対保護は、このリポジトリ内の変更だけでは保証しない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
+.gitの承認解除は禁止する。macOSはSeatbelt、Linuxはbubblewrapを使う。既存hardlink・保護tree内symlinkは実行前に拒否する。Linuxでは未作成の保護pathの最寄り既存親もread-onlyにするため、通常書き込みが狭まる場合がある。未対応OS・backend不在・二重sandboxの失敗を無保護の再実行へ切り替えない。
+
+検証済み経路と適用外を区別する。上位設定や外部processの並行変更までrepositoryの設定だけで完全保護したとは扱わない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
 
 ## 文書の編集
 
@@ -147,6 +152,8 @@ bash tests/verify-all.sh
 Claude／Codexへの一時配置・bootstrap・hookの決定と文書配信・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分ける。
 
 `python3 tests/test_git_policy.py`は両配布のGit guardへ入力し、許可された読み取りと外部helperの抑止をfixtureで実行する。`python3 tests/test_git_sandbox.py`はインストール済みCodexのOS sandboxで、隔離した.gitへの書き込み・コピー・リンク・親directory移動を試す。後者はsandboxを二重起動できない環境では外側の実行承認が必要。通常suiteの成功だけではOS境界の検証済みとはしない。
+
+`test_command_permissions.py`は両配布の実際のhook配線で、通常command・複合拒否・保護付き入口への承認引き渡しを検査する。`python3 tests/test_protected_exec.py`は外側のsandboxなしで実行し、両配布の境界外／MCP入口で実際のコピー・上書き・削除・リンク・親directory移動の拒否と、通常書き込み・境界外書き込み・loopback通信の成功を確認する。macOSで実機検証し、Linuxの実機成功はこの結果に含めない。
 
 `test_fixed_script_git_protection.py`は固定scriptを実行し、metadata alias・TMPDIR差し替え・外部Git helperを拒否／抑止しながら通常の保存・rebaseが成功することを検査する。
 
