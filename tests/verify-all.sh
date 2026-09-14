@@ -236,6 +236,12 @@ else
   ng "Git権限境界の動作検証に失敗"
   cat "$S/git-policy.out"
 fi
+if python3 "$SUITE/test_fixed_script_git_protection.py" > "$S/fixed-git-protection.out" 2>&1; then
+  ok "固定scriptのmetadata alias・一時領域・外部Git helperの動作検証"
+else
+  ng "固定scriptのGit保護に失敗"
+  cat "$S/fixed-git-protection.out"
+fi
 
 echo "== メイン実装と直列の独立レビュー =="
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
@@ -691,7 +697,7 @@ jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/n
 [ "$(jq '[.hooks.PreModelSwitch[] | .hooks[].command | select(contains("pre-model-switch.sh"))] | length' .codex/hooks.json)" = "1" ] && ok "Baton PreModelSwitchをCodex配置へ配線" || ng "Baton PreModelSwitchの配線が不正"
 GROUP_FAILURES=
 for SCRIPT in protect-config.sh protect-locks.sh protect-review.sh; do
-  BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
+  BINDING_COUNT=$(jq --arg script "$SCRIPT" '[.hooks.PreToolUse[] | .matcher as $matcher | select(("Bash" | test($matcher)) or ("apply_patch" | test($matcher))) | .hooks[].command | select(contains($script))] | length' .codex/hooks.json)
   [ "$BINDING_COUNT" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] || append_group_failure "$SCRIPT: $BINDING_COUNT bindings"
 done
 report_group "保護hookを apply_patch/Bash の両方へ配線" "$GROUP_FAILURES"
@@ -914,7 +920,7 @@ jq -e '
   (.permissions.allow | index("mcp__chrome-devtools__screencast_stop")) and
   (.enabledMcpjsonServers | index("chrome-devtools"))
 ' "$SL" >/dev/null 2>&1 && ok "Claude: chrome-devtoolsのscreencastを有効化" || ng "Claude: chrome-devtoolsのscreencast設定が不足"
-jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") != null and index("./base/scripts/run-unit.sh *") != null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: 承認済みunit test runnerをlocalでallow" || ng "Claude: unit test runnerの自動実行設定が不足"
+jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") == null and index("./base/scripts/run-unit.sh *") == null)' "$SJ" >/dev/null 2>&1 && jq -e '.permissions.allow | (index("Bash(./base/scripts/run-unit.sh)") != null and index("Bash(./base/scripts/run-unit.sh:*)") != null)' "$SL" >/dev/null 2>&1 && ok "Claude: unit test runnerの許可を維持してsandbox除外を削除" || ng "Claude: unit test runnerの許可またはsandbox境界が不正"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && ! grep -q '^hooks:' "$REPO/skills/cowlick/SKILL.md" && ! grep -Fq 'worker/DELEGATION.md' "$REPO/hooks/shell/load-required-contract.sh" && ok "Claude必須契約hookを編集時の読み込みへ配線" || ng "Claude必須契約hookの配線漏れ"
@@ -935,8 +941,12 @@ jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_rege
 MISS=0
 for SC in bootstrap/bootstrap.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
-  jq -e --arg c "$CMD"          '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数なし形が無い: $SC"; MISS=1; }
-  jq -e --arg c "$CMD *"        '.sandbox.excludedCommands | index($c)' "$SJ" >/dev/null 2>&1 || { ng "excludedCommands に引数あり形が無い: $SC"; MISS=1; }
+  case "$SC" in
+    polish/*)
+      jq -e --arg c "$CMD" '.sandbox.excludedCommands | (index($c) == null and index($c + " *") == null)' "$SJ" >/dev/null || { ng "polishがsandbox除外: $SC"; MISS=1; } ;;
+    *)
+      jq -e --arg c "$CMD" '.sandbox.excludedCommands | (index($c) != null and index($c + " *") != null)' "$SJ" >/dev/null || { ng "固定書き込みscriptの除外設定が不正: $SC"; MISS=1; } ;;
+  esac
   jq -e --arg c "Bash($CMD)"    '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数なし形が無い: $SC"; MISS=1; }
   jq -e --arg c "Bash($CMD:*)"  '.permissions.allow | index($c)' "$SL" >/dev/null 2>&1 || { ng "allow に引数あり形が無い: $SC"; MISS=1; }
 done
