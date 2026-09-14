@@ -1,5 +1,6 @@
 """Run the distributed Git/path guard and execute its accepted reads in fixtures."""
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -140,6 +141,73 @@ class GitPolicy(unittest.TestCase):
             self.assertEqual(self.guard(agent, "apply_patch", {"command": "*** Update File: file.txt\n*** Move to: alias/HEAD\n"}).get("permissionDecision"), "deny")
             self.assertEqual(self.guard(agent, "Edit", {"file_path": "file.txt"}), {})
 
+    def test_symlink_parent_traversal_and_environment_wrappers(self):
+        (self.root / "jump").symlink_to(self.root / ".git/objects", target_is_directory=True)
+        marker = self.root / ".git/created-by-wrapper"
+        for agent in ("claude", "codex"):
+            self.assertEqual(self.guard(agent, "Edit", {"file_path": "jump/../config"}).get("permissionDecision"), "deny")
+            for command in ("env MODE=test touch jump/../created-by-wrapper", "MODE=test command -- touch jump/../created-by-wrapper"):
+                hook = self.guard(agent, "Bash", {"command": command})
+                if hook.get("permissionDecision") != "deny":
+                    subprocess.run(command, shell=True, cwd=self.root, check=True)
+                self.assertFalse(marker.exists(), "wrapper wrote through a symlink followed by ..")
+                self.assertEqual(hook.get("permissionDecision"), "deny")
+
+    def test_metadata_hardlink_cannot_be_created_or_edited(self):
+        target = self.root / ".git/protected-sentinel"
+        target.write_text("unchanged")
+        alias = self.root / "metadata-alias"
+        os.link(target, alias)
+        for agent in ("claude", "codex"):
+            hook = self.guard(agent, "Edit", {"file_path": str(alias)})
+            if hook.get("permissionDecision") != "deny":
+                alias.write_text("modified")
+            self.assertEqual(target.read_text(), "unchanged")
+            self.assertEqual(hook.get("permissionDecision"), "deny")
+            for command in ("ln -- .git/protected-sentinel another-alias", "ln -s -- .git another-link"):
+                self.assertEqual(self.guard(agent, "Bash", {"command": command}).get("permissionDecision"), "deny")
+
+    def test_mcp_file_outputs_are_subject_to_metadata_guard(self):
+        for agent in ("claude", "codex"):
+            for tool in ("mcp__chrome-devtools__take_screenshot", "mcp__chrome_devtools__take_snapshot", "mcp__chrome-devtools__screencast_start"):
+                self.assertEqual(self.guard(agent, tool, {"filePath": ".git/output.png"}).get("permissionDecision"), "deny")
+                self.assertEqual(self.guard(agent, tool, {"filePath": ".codex/hooks/shell/git-policy.py"}).get("permissionDecision"), "deny")
+                self.assertEqual(self.guard(agent, tool, {"filePath": "output.png"}), {})
+                self.assertEqual(self.guard(agent, tool, {}), {})
+            for name in ("../../.git/config", ".git/config", "/tmp/memory", "topic/../../../.git/config"):
+                self.assertEqual(self.guard(agent, "mcp__serena__write_memory", {"memory_name": name, "content": "x"}).get("permissionDecision"), "deny")
+            self.assertEqual(self.guard(agent, "mcp__serena__write_memory", {"memory_name": "topic/context", "content": "x"}), {})
+
+    def test_controller_aliases_cannot_disable_the_guard(self):
+        (self.root / "control-alias").symlink_to(self.root / ".codex/hooks", target_is_directory=True)
+        for agent in ("claude", "codex"):
+            for path in ("control-alias/shell/git-policy.py", ".mcp.json"):
+                self.assertEqual(self.guard(agent, "Edit", {"file_path": path}).get("permissionDecision"), "deny")
+            self.assertEqual(self.guard(agent, "Write", {"file_path": ".codex/prompt/branch-example-prompt.md"}), {})
+
+    def test_copy_into_directory_checks_the_actual_destination(self):
+        destination = self.root / "copies"
+        (destination / "nested/.git").mkdir(parents=True)
+        for agent in ("claude", "codex"):
+            command = "cp -n -- file.txt copies"
+            self.assertEqual(self.guard(agent, "Bash", {"command": command}), {})
+        subprocess.run(shlex.split(command), cwd=self.root, check=True)
+        self.assertEqual((destination / "file.txt").read_text(), "one\n")
+
+    def test_bootstrap_exception_does_not_match_arbitrary_mentions(self):
+        for agent in ("claude", "codex"):
+            adapter = self.root / f".{agent}/hooks/shell/hook-io.sh"
+            adapter.write_text(adapter.read_text().replace('HOOK_AGENT="' + agent + '"', 'HOOK_AGENT="uninitialized"'))
+            for command in ("bash .claude/skills/bootstrap/bootstrap.sh claude", "'bash' '.agents/skills/bootstrap/bootstrap.sh' 'codex'"):
+                self.assertEqual(self.guard(agent, "Bash", {"command": command}), {})
+            for tool, inputs in (
+                ("Bash", {"command": "bash .agents/skills/bootstrap/bootstrap.sh codex; touch .git/new"}),
+                ("Bash", {"command": "BASH_ENV=evil.sh bash .agents/skills/bootstrap/bootstrap.sh codex"}),
+                ("Write", {"file_path": ".git/bootstrap/bootstrap.sh"}),
+                ("Bash", {"command": "python3 attack.py bootstrap/bootstrap.sh"}),
+            ):
+                self.assertEqual(self.guard(agent, tool, inputs).get("permissionDecision"), "deny")
+
     def test_worktree_pointer_and_common_directory_are_protected(self):
         worktree = Path(self.temp.name) / "worktree"
         self.git("worktree", "add", "--detach", "-q", str(worktree), "HEAD")
@@ -153,7 +221,8 @@ class GitPolicy(unittest.TestCase):
     def test_both_configurations_dispatch_to_the_guard(self):
         for agent, config in (("codex", "codex/hooks.json"), ("claude", "claude/settings.json")):
             settings = json.loads((REPO / config).read_text())
-            for tool in ("Bash", "apply_patch") if agent == "codex" else ("Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"):
+            edit_tools = ("Bash", "apply_patch") if agent == "codex" else ("Bash", "Edit", "Write", "NotebookEdit", "MultiEdit")
+            for tool in (*edit_tools, "mcp__chrome-devtools__take_screenshot", "mcp__chrome_devtools__take_snapshot", "mcp__chrome-devtools__screencast_start", "mcp__serena__write_memory"):
                 handlers = [h for group in settings["hooks"]["PreToolUse"] if re.search(group["matcher"], tool) for h in group["hooks"]]
                 self.assertTrue(any("protect-git.sh" in h["command"] for h in handlers), (agent, tool))
 
