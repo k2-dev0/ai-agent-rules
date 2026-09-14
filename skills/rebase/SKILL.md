@@ -42,7 +42,7 @@ bash [skills_root]/rebase/rebase.sh [--base <ref>] \
 
 group順が完成履歴の順序となり、group内は元履歴順に処理される。
 
-- 成功：全commitのexactly-once消費・tree一致を検証後、旧HEADを照合してswapする
+- 成功：scriptの検証結果と完成履歴を報告する
 - conflict：groupを併合するか、元履歴の連続範囲だけをまとめて再実行する
 - 空group：revertとの相殺を確認して組み直す
 - 並行commit・検証失敗：更新を拒否する
@@ -50,6 +50,4 @@ group順が完成履歴の順序となり、group内は元履歴順に処理さ�
 
 ## 報告
 
-完成履歴、元HEAD、exactly-once・tree一致の結果を報告する。
-
-成功後のbackupは残さず、元HEADはreflogから参照できる。`backup/rebase-*`が残ったら報告し、削除はユーザーに任せる。
+scriptの出力を使い、独自に検証済みの記録を作らない。backupのwarningがあれば報告する。
