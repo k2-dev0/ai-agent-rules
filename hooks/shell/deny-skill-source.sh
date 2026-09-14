@@ -128,7 +128,7 @@ done
 BIN=${ARGS[$INDEX]##*/}
 if [ "$TRACE_ENV" = true ] && is_skill_source "${ARGS[$INDEX]}"; then hook_deny "$READ_MSG"; fi
 
-# ファイル名の列挙はソースを返さない。複合commandは既存readonly-searchが拒否する。
+# ファイル名の列挙はソースを返さない。複合commandはgit-policyが拒否する。
 case "$BIN" in
   ls) exit 0 ;;
   find)
