@@ -9,6 +9,12 @@ extends = ":workspace"
 
 [permissions.distributed.filesystem.":workspace_roots"]
 ".git" = "read"
+".mcp.json" = "read"
+".claude/hooks" = "read"
+".claude/skills" = "read"
+".claude/agents" = "read"
+".claude/settings.json" = "read"
+".claude/settings.local.json" = "read"
 
 [permissions.distributed.network]
 # localhost を含む通信はsandbox内で許可せず、外部実行の承認へ送る。
