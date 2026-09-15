@@ -1,5 +1,5 @@
 # プロジェクト配布用設定。<repo>/.codex/config.toml として配置する。
-# trusted project でのみ読み込まれ、CLI / profile / user config より優先度は低い。
+# trusted projectでのみ読み込まれ、CLI overrideより低くprofile/user configより優先される。
 # sandbox内の単一通常commandは自動。境界外はGit保護付き入口で承認する。
 default_permissions = "distributed"
 approval_policy = "on-request"
