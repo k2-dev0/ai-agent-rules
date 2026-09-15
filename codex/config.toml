@@ -38,6 +38,22 @@ max_threads = 1
 default_subagent_model = "gpt-5.6-luna"
 default_subagent_reasoning_effort = "max"
 
+# roleの登録を明示し、定義ファイルの自動検出には依存しない。内容は各ファイルを正本とする。
+[agents.difficulty-evaluator]
+config_file = "agents/difficulty-evaluator.toml"
+
+[agents.code-reviewer]
+config_file = "agents/code-reviewer.toml"
+
+[agents.deep-reviewer]
+config_file = "agents/deep-reviewer.toml"
+
+[agents.design-reviewer]
+config_file = "agents/design-reviewer.toml"
+
+[agents.nesting-reviewer]
+config_file = "agents/nesting-reviewer.toml"
+
 [mcp_servers.chrome-devtools]
 command = "bash"
 # Chrome 149以上。localhostの全ポートだけを操作対象にする。
