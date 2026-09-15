@@ -162,6 +162,7 @@
     "failIfUnavailable": true,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
+      "git --no-pager --no-optional-locks -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null -c status.submoduleSummary=false restore --staged *",
       "bash .claude/skills/bootstrap/bootstrap.sh",
       "bash .claude/skills/bootstrap/bootstrap.sh *",
       "bash .claude/skills/tdd/mark-prompt-done.sh",
