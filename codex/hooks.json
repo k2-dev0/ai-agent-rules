@@ -96,6 +96,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/agent-input.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git.sh\"",
             "timeout": 5
           },
@@ -190,6 +195,16 @@
       }
     ],
     "SubagentStop": [
+      {
+        "matcher": "^(difficulty-evaluator|code-reviewer|deep-reviewer)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/agent-input.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "hooks": [
           {
