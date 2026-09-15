@@ -8,8 +8,8 @@
 
 閲覧は固定commitの内容を基準とする。worktreeを読む場合は対象HEADと一致し、追跡fileに未commit変更がないことを確認する。入力にない要件を推測して欠陥と断定しない。
 
-テストコードの確認と実行結果を区別し、実行していない検証を成功扱いしない。
+`unchecked`には固定差分・必要な直接参照先の未読、対象SHAの未照合を列挙する。子に禁止されたtest・typecheck・lintの未実行自体は含めず、実行したとも報告しない。実行結果とRed/Greenの確認は親の責務であり、子はtestコードの要求検出力と実装との整合性を読む。コードから分かる検証不足は`findings`へ含める。
 
 `findings`の各要素は`severity`、`path`、1以上の整数`line`、空でない`condition`・`impact`・`evidence`を持つ。
 
-返却はコードフェンスなしのJSON一つとし、`status`（`reviewed` / `incomplete`）、入力と同じ`review_base`・`review_head`、起動hookが渡した`request_id`、`unchecked`配列、`findings`配列を持たせる。`severity`はdata loss・security侵害・不可逆な破損を`critical`、明示要件違反・通常経路の誤動作・公開互換性破壊を`high`、明示要件外の限定条件だけで起きる回復可能かつ局所的な誤動作を`medium`、runtime挙動に影響しない保守性問題を`low`とし、該当する最高の値を一つ付ける。P0〜P3表記は使わない。全差分を確認できた場合だけ`reviewed`とし、問題がなければ`findings: []`。好みだけの変更、実装の称賛、コード全文、調査ログは返さない。
+返却はコードフェンスなしのJSON一つとし、`status`（`reviewed` / `incomplete`）、入力と同じ`review_base`・`review_head`、起動hookが渡した`request_id`、`unchecked`配列、`findings`配列を持たせる。`severity`は[重大度基準](REVIEW_SEVERITY.md)で判定し、P0〜P3表記は使わない。全差分を確認できた場合だけ`reviewed`とし、問題がなければ`findings: []`。好みだけの変更、実装の称賛、コード全文、調査ログは返さない。
