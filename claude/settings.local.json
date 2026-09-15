@@ -37,6 +37,7 @@
       "Edit(**)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
+      "Bash(git --no-pager --no-optional-locks -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null -c status.submoduleSummary=false restore --staged:*)",
       "Bash(git --no-pager --no-optional-locks -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null -c status.submoduleSummary=false --literal-pathspecs add --:*)",
       "Bash(git --no-pager --no-optional-locks -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null -c status.submoduleSummary=false -c commit.gpgSign=false commit -m:*)"
     ],
