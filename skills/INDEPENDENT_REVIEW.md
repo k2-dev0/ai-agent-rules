@@ -9,8 +9,9 @@
 ## 対象・入力
 
 1. `git rev-parse HEAD`を`review_head`として固定する
-2. 起動toolの`prompt`（`message`を使うtoolでは`message`）はJSON文字列とし、`repository`に絶対path、`review_base`・`review_head`に完全SHA、`requirements`に元の要求・制約の本文を入れる
-   - この4項目のobjectを1回serializeし、自然文の前置き・code fence・wrapper objectを加えず、role・fork指定は外側のtool引数に置く
+2. JSONの`repository`に絶対path、`review_base`・`review_head`に完全SHA、`requirements`に元の要求・制約の本文を入れる
+   - Codexは`python3 .codex/hooks/shell/agent-input.py prepare <選んだrole> '<4キーJSON>'`を実行し、出力された引数を変更せず`spawn_agent`へ渡す
+   - Claudeはこの4項目のobjectを1回serializeしたJSON文字列を`prompt`に入れ、自然文の前置き・code fence・wrapper objectを加えず、role指定は外側のtool引数に置く
    - 実装経緯・採用理由・自己評価・過去のレビュー結果・会話履歴を渡さない
    - 採点・モデル選択・切替手順はrequirementsへ含めない
    - 会話中の要件は意味を変えず必要部分だけ抜き出す
@@ -30,6 +31,8 @@
 ## 結果・修正
 
 終了時のHEADと追跡fileの状態が開始時と違えば結果を完了判定に使わず、変更内容を確認して対象を固定し直す。
+
+指摘のラベルをそのまま採用せず、`condition`・`impact`・`evidence`を[重大度基準](REVIEW_SEVERITY.md)と照合してから以下へ進む。
 
 - `reviewed`：両SHAと全差分の確認が一致した場合だけ受理する
   - 未確認範囲がなく、全指摘が修正済みまたは根拠付きで却下済みなら独立レビュー完了
