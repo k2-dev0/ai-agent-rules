@@ -88,6 +88,85 @@ class GitPolicy(unittest.TestCase):
             self.assertFalse(target.exists(), "an optional -U argument hid a file-writing option")
             self.assertEqual(hook.get("permissionDecision"), "deny")
 
+    def test_restore_staged_dot_only_changes_the_index(self):
+        for agent in ('claude', 'codex'):
+            (self.root / 'file.txt').write_text('staged version\n')
+            (self.root / 'new.txt').write_text('new staged file\n')
+            self.git('add', '--', 'file.txt', 'new.txt')
+            (self.root / 'file.txt').write_text('unstaged work must survive\n')
+            sentinel = self.root / 'external-helper-ran'
+            helper = self.root / '.git/hooks/post-checkout'
+            helper.write_text('#!/bin/sh\ntouch ' + shlex.quote(str(sentinel)) + '\n')
+            helper.chmod(0o755)
+            self.git('config', 'core.fsmonitor', str(helper))
+            worktree = {str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file() and '.git' not in p.relative_to(self.root).parts}
+            metadata = {str(p.relative_to(self.root / '.git')):p.read_bytes() for p in (self.root / '.git').rglob('*') if p.is_file() and p.name != 'index'}
+            decision = self.guard(agent, 'Bash', {'command':'git restore --staged .'})
+            self.assertEqual(decision.get('permissionDecision'), 'allow', decision)
+            rewritten = decision['updatedInput']['command']
+            if agent == 'codex' and shutil.which('codex'):
+                policy = subprocess.check_output(['codex','execpolicy','check','--rules',str(REPO/'codex/rules/default.rules'),'--',*shlex.split(rewritten)],stderr=subprocess.DEVNULL,text=True)
+                self.assertEqual(json.loads(policy).get('decision'), 'allow')
+            if agent == 'claude':
+                settings = json.loads((REPO/'claude/settings.local.json').read_text())
+                self.assertTrue(any(p.startswith('Bash(') and p.endswith(':*)') and rewritten.startswith(p[5:-3] + ' ') for p in settings['permissions']['allow']))
+                sandbox = json.loads((REPO/'claude/settings.json').read_text())['sandbox']
+                self.assertTrue(any(p.endswith(' *') and rewritten.startswith(p[:-1]) for p in sandbox['excludedCommands']))
+            completed = subprocess.run(shlex.split(rewritten),cwd=self.root,capture_output=True)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(self.git('-c','core.fsmonitor=false','diff','--cached','--name-only').strip(), '')
+            self.assertEqual(self.git('rev-parse','HEAD').strip(), self.head)
+            self.assertEqual(worktree, {str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file() and '.git' not in p.relative_to(self.root).parts})
+            self.assertEqual(metadata, {str(p.relative_to(self.root / '.git')):p.read_bytes() for p in (self.root / '.git').rglob('*') if p.is_file() and p.name != 'index'})
+            self.assertFalse(sentinel.exists())
+            self.git('config', 'core.fsmonitor', 'false')
+
+    def test_other_restore_forms_remain_denied(self):
+        for agent in ('claude', 'codex'):
+            for command in ('git restore .', 'git restore --worktree .', 'git restore --staged --worktree .',
+                            'git restore --staged . --worktree', 'git restore --staged -W file.txt',
+                            'git restore --staged --no-staged .', 'git restore -S .', 'git restore --staged --patch .',
+                            'git restore --staged -p .', 'git restore --staged --source --worktree .',
+                            'git restore --staged --source=', 'git restore --staged --unknown-option .',
+                            'git -C . restore --staged .', 'git restore --staged . --recurse-submodules',
+                            'git restore --staged . --pathspec-from-file=paths', 'git restore --staged .; git status'):
+                with self.subTest(agent=agent, command=command):
+                    self.assertEqual(self.guard(agent, 'Bash', {'command':command}).get('permissionDecision'), 'deny')
+
+    def test_restore_source_paths_and_pathspec_file_preserve_worktree(self):
+        def execute(agent, command):
+            decision = self.guard(agent, 'Bash', {'command':command})
+            self.assertEqual(decision.get('permissionDecision'), 'allow', decision)
+            result = subprocess.run(shlex.split(decision['updatedInput']['command']),cwd=self.root,capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        for agent in ('claude', 'codex'):
+            base = self.git('rev-parse', 'HEAD').strip()
+            old = self.git('show', 'HEAD:file.txt')
+            (self.root/'file.txt').write_text('staged ' + agent)
+            (self.root/'other.txt').write_text('keep this file')
+            (self.root/'--worktree').write_text('a literal filename')
+            self.git('add', '--', 'file.txt', 'other.txt', '--worktree')
+            (self.root/'file.txt').write_text('unstaged ' + agent)
+            execute(agent, 'git restore --staged -q --source=HEAD -- file.txt')
+            self.assertEqual(self.git('show', ':file.txt'), old)
+            self.assertEqual((self.root/'file.txt').read_text(), 'unstaged ' + agent)
+            execute(agent, 'git restore --staged -- --worktree')
+            self.assertEqual(self.git('diff','--cached','--name-only').strip(), 'other.txt')
+            (self.root/'paths.txt').write_bytes(b'other.txt\0')
+            execute(agent, 'git restore --staged --pathspec-from-file=paths.txt --pathspec-file-nul')
+            self.assertEqual(self.git('diff','--cached','--name-only').strip(), '')
+            self.assertEqual((self.root/'other.txt').read_text(), 'keep this file')
+            self.git('add','file.txt')
+            self.git('-c','core.hooksPath=/dev/null','commit','-qm','advance fixture')
+            head = self.git('rev-parse','HEAD').strip()
+            (self.root/'file.txt').write_text('retain working bytes ' + agent)
+            self.git('add','file.txt')
+            execute(agent, 'git restore --staged -s' + base + ' file.txt')
+            self.assertEqual(self.git('show', ':file.txt'), old)
+            self.assertEqual((self.root/'file.txt').read_text(), 'retain working bytes ' + agent)
+            self.assertEqual(self.git('rev-parse','HEAD').strip(), head)
+            execute(agent, 'git restore --staged .')
+
     def test_configured_external_helpers_do_not_run(self):
         sentinel = self.root / "helper-ran"
         helper = self.root / "helper.sh"
