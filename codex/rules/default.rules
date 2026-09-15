@@ -62,6 +62,12 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", "restore", "--staged"],
+    decision = "allow",
+    justification = "hookで検査したindexだけの復元を許可します。作業ファイルとHEADは変更しません。",
+)
+
+prefix_rule(
     pattern = ["git", "push"],
     decision = "forbidden",
     justification = "pushはユーザー自身が変更内容を確認して実行してください。",
