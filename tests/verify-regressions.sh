@@ -333,7 +333,7 @@ for agent in claude codex; do
       if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
     fi
     definition=".$agent/agents/$role.$extension"
-    input=$(jq -cn --arg cwd "$PWD" --arg key "$role_key" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"Agent",tool_input:{($key):$role,fork_turns:"none"}}')
+    input=$(jq -cn --arg cwd "$PWD" --arg key "$role_key" --arg role "$role" '{hook_event_name:"PreToolUse",session_id:"ROLE_TEST",cwd:$cwd,tool_name:"Agent",tool_input:{($key):$role,fork_turns:"none"}}')
     if [ "$role" = difficulty-evaluator ]; then
       input=$(printf '%s' "$input" | jq --arg root "$(git rev-parse --show-toplevel)" '.tool_input.prompt = ({repository:$root,implementation_policy:"Add a single pure value conversion and its test."} | tojson)')
     fi
