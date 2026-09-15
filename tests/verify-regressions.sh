@@ -47,6 +47,8 @@ for agent in claude codex; do
   check grep -Fq 'evaluation input must contain only repository and implementation_policy' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'repository is incorrect' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'implementation_policy must describe a concrete implementation change' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq '既存実装・caller・testがないこと自体は入力エラーにしない' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
+  check grep -Fq 'implementation_policy is missing: <target components, observable behavior, boundaries, or verification>' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '200文字を目安' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '加点した軸とコード上の根拠を優先し、0点の軸は省略' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '0点は対象要素がない場合だけでなく、調査により定型で追加判断が不要と確認できた場合も含む' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
