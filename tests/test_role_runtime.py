@@ -56,7 +56,7 @@ def find_spawn_schema(value):
 
 
 class RoleRuntime(unittest.TestCase):
-    def run_fixture(self, role, probe_permissions=False, probe_switch=False, trusted=True, fail_emit=False):
+    def run_fixture(self, role, probe_permissions=False, probe_switch=False, trusted=True, fail_emit=False, unstage=False):
         self.assertIsNotNone(shutil.which("codex"))
         with tempfile.TemporaryDirectory(prefix="role-runtime-") as directory:
             base = Path(directory).resolve()
@@ -74,6 +74,12 @@ class RoleRuntime(unittest.TestCase):
             if catalog.is_file():
                 shutil.copyfile(catalog, fixture_home/'models_cache.json')
             head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+            if unstage:
+                source = root / 'value.py'
+                source.write_text(source.read_text() + '# staged fixture\n')
+                subprocess.run(['git','add','--','value.py'],cwd=root,check=True,capture_output=True)
+                source.write_text(source.read_text() + '# unstaged work\n')
+                expected_worktree = source.read_bytes()
             prepared_role = role in ('difficulty-evaluator', 'code-reviewer', 'deep-reviewer')
             brief = (dict(repository=str(root), implementation_policy='Change double to return zero for negative inputs.')
                      if role == 'difficulty-evaluator' else dict(repository=str(root), review_base=head, review_head=head, requirements='Review double for its specified behavior.'))
@@ -104,7 +110,12 @@ class RoleRuntime(unittest.TestCase):
                     else:
                         child_requests_count += 1
                     number = len(requests)
-                    if is_parent and parent_requests == 1 and probe_permissions:
+                    if unstage:
+                        if is_parent and parent_requests == 1:
+                            item = dict(type='function_call', id='unstage', call_id='unstage', namespace='functions', name='exec_command', arguments=json.dumps(dict(cmd=unstage if isinstance(unstage, str) else 'git restore --staged .',workdir=str(root))))
+                        else:
+                            item = dict(type='message', id='unstage-done', role='assistant', content=[dict(type='output_text',text='Fixture transport complete.',annotations=[])])
+                    elif is_parent and parent_requests == 1 and probe_permissions:
                         item = dict(type="function_call", id="parent-write", call_id="parent-write", namespace="functions", name="exec_command", arguments=json.dumps(dict(cmd="touch " + shlex.quote(str(root / "parent-write")), workdir=str(root))))
                     elif is_parent and prepared_role and parent_requests == (2 if probe_permissions else 1):
                         command = shlex.join(['python3', '.codex/hooks/shell/agent-input.py', 'prepare', role, json.dumps(brief)])
@@ -176,6 +187,13 @@ class RoleRuntime(unittest.TestCase):
                     execution = subprocess.run(['codex', 'exec', '--json', '--strict-config', '--dangerously-bypass-hook-trust', 'Run only the isolated transport fixture.'],
                                                cwd=root, env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=cli_stderr, text=True, timeout=90)
                 self.assertEqual(execution.returncode, 0, execution.stdout + (root / 'cli-stderr.log').read_text())
+                if unstage:
+                    outputs = [x.get('output','') for request in requests for x in request.get('input',[]) if x.get('type') == 'function_call_output' and x.get('call_id') == 'unstage']
+                    self.assertTrue(any(re.search(r'^Process exited with code 0$', str(value), re.MULTILINE) for value in outputs), outputs)
+                    self.assertEqual(subprocess.check_output(['git','diff','--cached','--name-only'],cwd=root,text=True).strip(), '')
+                    self.assertEqual((root/'value.py').read_bytes(), expected_worktree)
+                    self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(), head)
+                    return dict(unstaged=True, worktree_preserved=True, head_preserved=True)
                 if fail_emit:
                     self.assertTrue(preparation_errors)
                     self.assertFalse(any(json.loads(r.get('client_metadata',{}).get('x-codex-turn-metadata','{}')).get('parent_thread_id') for r in requests))
@@ -312,6 +330,11 @@ class RoleRuntime(unittest.TestCase):
 
     def test_failed_emit_does_not_spawn_from_internal_state(self):
         self.run_fixture('difficulty-evaluator', fail_emit=True)
+
+    def test_validated_unstage_runs_through_the_real_policy(self):
+        for command in ('git restore --staged .', 'git restore --staged --source=HEAD -- value.py'):
+            with self.subTest(command=command):
+                print(self.run_fixture('difficulty-evaluator', unstage=command), flush=True)
 
 if __name__ == "__main__":
     import sys
