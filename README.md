@@ -6,7 +6,7 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
 `AGENTS.md`、`claude/`、`codex/`、`hooks/`、`rules/`、`skills/`、`prompt/`、`e2e/`を配布する。`SOURCE_REPOSITORY.md`、`tests/`、配布元のローカル`.claude/`・`.codex/`は配布しない。
 
-### Codex（0.138.0以上）
+### Codex
 
 | 配布元 | 配置先 |
 |---|---|
@@ -54,9 +54,9 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 $bootstrap codex
 ```
 
-3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する
+3. Codexは対象repositoryを信頼登録し、`/hooks`で初期化後のhook定義をレビュー・信頼して再起動する
    - hook変更時も再レビューする
-   - 未trustのproject-local設定は適用されない
+   - 未trustではskillsが読まれてもproject-local設定・hook・role登録は適用されない
    - role更新後は新しいタスクで、起動toolの`agent_type`と必要な専用roleが公開されていることを確認する
 4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する
    - 両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する
@@ -90,6 +90,7 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 起動入力を組み立てる前に親が読む。role・完了待ち・入力訂正・利用不能時の行動 |
 | [CHILD_RULES.md](skills/CHILD_RULES.md)と各role契約 | 子の開始時に子だけへ注入。調査範囲・実行制約・返却内容 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | コードreviewerの入力を組み立てる前に親が読む。JSON入力と指摘対応 |
+| [REVIEW_SEVERITY.md](skills/REVIEW_SEVERITY.md) | reviewerと親が同じ基準で成立条件・実害・影響範囲から重大度を判定 |
 | [MODEL_SWITCH.md](skills/MODEL_SWITCH.md) | BatonのPreModelSwitchで元モデルへ注入。非対応環境だけ切替前に読む |
 | [FIX_FLOW.md](skills/FIX_FLOW.md) | 検証失敗・採用した指摘の修正時 |
 | [DESIGN_FORMAT.md](skills/cowlick/DESIGN_FORMAT.md) | 設計書作成時。モデルが生成する形式・実装情報 |
@@ -108,6 +109,7 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | 設定・秘密・lockfile・確認対象 | `protect-config.sh`・`protect-env.sh`・`protect-locks.sh`・`protect-review.sh` |
 | 全面Write・skill実装の直接取得 | `overwrite.sh`・`deny-skill-source.sh` |
 | 設計形式・子の共通制約と専用契約・role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
+| 検証済みの子入力・実child IDへの結合 | `agent-input.py`・`agent-input.sh`・`load-operation-context.sh` |
 | shellを含む変更前HEAD・起動済み独立レビューの証跡 | `independent-review.sh`・`safe-files.py` |
 | Codexの待機時間補正 | `agent-wait.sh` |
 
@@ -140,7 +142,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 
 検証済み経路と適用外を区別する。上位設定や外部processの並行変更までrepositoryの設定だけで完全保護したとは扱わない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
 
-親の手順は正本への参照で事前に読み、子の共通制約と専用契約はSubagentStartで渡す。JSON入力の不備は同じ専用role・toolで訂正でき、訂正しても本文を観測できない場合と区別する。手順を出力したreceiptは読了・評価成功・モデル切替・レビュー完了の証拠にしない。標準hook入力には現在modelはあるがeffortの適用確認は含まれないため、実際のモデル・effortの確認と利用不能時の判断は親の手順に残す。
+親の手順は正本への参照で事前に読む。Codexの難度評価・独立コードレビューは`agent-input.py prepare`で入力を検査・固定し、生成された起動引数を使う。暗号化messageをJSONと誤認せず、SubagentStartで実child ID・roleと検証済み入力を結び付け、共通制約・専用契約とともに渡す。準備済み入力は評価・レビュー成功の証拠ではない。標準hook入力には現在modelはあるがeffortの適用確認は含まれないため、実際のモデル・effortの確認と利用不能時の判断は親の手順に残す。
 
 ## 文書の編集
 
@@ -162,7 +164,9 @@ Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書�
 
 `test_fixed_script_git_protection.py`は固定scriptを実行し、metadata alias・TMPDIR差し替え・外部Git helperを拒否／抑止しながら通常の保存・rebaseが成功することを検査する。
 
-`python3 tests/test_role_runtime.py`はsandbox外で実行し、一時Codex領域・local模擬API・実app-serverで全専用roleの公開schema、`agentRole`／`agent_role`、model・effortを検査する。外部モデルの評価は行わない。`--probe-permissions`は子の実書き込みも試す追加診断で、read-only指定が効かないruntimeでは失敗する。role登録の成功と権限制限の成功を混同しない。
+`python3 tests/test_role_runtime.py`はsandbox外で実行し、一時Codex領域・local模擬API・実CLIで入力準備→native起動→配布hook→子契約→結果受理を通し、app-serverで`agentRole`／`agent_role`を照合する。要求されたmodel・effort、未信頼project、未対応の切替を成功にしないことも検査する。外部モデルの評価は行わない。`--probe-permissions`は子の実書き込みも試す追加診断で、role登録の成功をOS read-onlyの成功とは扱わない。
+
+`python3 tests/probe_agent_workflow.py --case workflow`は認証済みCodexで難度評価・Red/Green・個別commit・独立レビュー受理を通す実モデル検査。CLIの切替不能時の降格継続と、Batonの実モデル切替検査を区別して記録する。hook未発火・子未開始・不正結果・レビュー未受理・Red/Green欠落は失敗とし、通常suiteや模擬応答の成功で代替しない。
 
 skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
