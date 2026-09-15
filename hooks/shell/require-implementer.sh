@@ -36,13 +36,13 @@ case "$ROLE" in
       case "$HOOK_AGENT:$(hook_tool_name)" in
         codex:*spawn_agent)
           hook_agent_message_valid || hook_deny "Codexの難易度調査はspawn_agentのmessageに依頼を渡してください。promptは併用しないでください。"
-          BRIEF=$(hook_review_brief) || hook_deny "難易度調査はmessage全体をrepositoryとimplementation_policyだけのJSON objectにしてください。正しい本文でも確認できなければ、この経路は利用不能として報告してください。"
+          BRIEF=$(hook_review_brief 2>&1) || hook_deny "難易度調査は検証済み入力が必要です。agent-input.py prepareで2キーJSONを検査し、出力された起動引数を使ってください。$BRIEF"
           ;;
         *)
-          BRIEF=$(hook_review_brief) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。"
+          BRIEF=$(hook_review_brief 2>&1) || hook_deny "難易度調査はrepositoryとimplementation_policyだけのJSONを渡してください。$BRIEF"
           ;;
       esac
-      if [ -n "$BRIEF" ]; then
+      if [ "$HOOK_AGENT" != codex ] && [ -n "$BRIEF" ]; then
         printf '%s' "$BRIEF" | jq -e --arg root "$REPOSITORY" '
           keys == ["implementation_policy", "repository"] and .repository == $root and
           (.implementation_policy | type == "string" and test("\\S"))
@@ -86,6 +86,9 @@ tools: Read, Grep, Glob, Bash"
     done <<< "$EXPECTED_SETTINGS"
     [ -s "$REPOSITORY/$CONTRACT" ] || hook_deny "reviewerの契約がありません。"
     [ -x "$REPOSITORY/.$HOOK_AGENT/hooks/shell/load-operation-context.sh" ] || hook_deny "reviewerの契約注入hookがありません。"
+    if [ "$ROLE" = difficulty-evaluator ]; then
+      hook_reserve_agent_input "$BRIEF" || hook_deny "難易度調査の入力を専用子へ予約できません。新規入力の準備と先行子の完了を確認してください。"
+    fi
     exit 0
     ;;
 esac
