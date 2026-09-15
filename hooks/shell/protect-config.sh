@@ -51,6 +51,12 @@ fi
 CONTROL_RE='(\.claude|\.codex|\.agents)'
 echo "$CMD" | grep -qE "$CONTROL_RE" || exit 0
 
+# 検査済みのindex復元は設定file自体を書き換えない。
+if [[ "$CMD" = *restore* ]] &&
+   printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/git-policy.py" | jq -e '.index_only == true' >/dev/null; then
+  exit 0
+fi
+
 # 削除・移動・生成・権限変更。
 echo "$CMD" | grep -qE '(^|[;&|[:space:]])(rm|rmdir|unlink|shred|srm|mv|dd|truncate|tee|ln|mkdir|touch|chmod|chown|chgrp)([[:space:]]|$)' && hook_deny "$CONFIG_MSG"
 # find / rsync 等の削除フラグ。
