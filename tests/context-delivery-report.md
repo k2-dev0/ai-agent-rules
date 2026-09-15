@@ -1,10 +1,35 @@
 # Context配信検証
 
-## 2026-09-15のrole登録・開始順序の修正
+## 2026-09-16: 暗号化輸送と実行経路の修正
+
+アプリ内蔵Codex 0.154.0-alpha.6.2で、正しい2キーJSONを渡してもPreToolUseには暗号化されたmessageが届き、旧hookが子の開始前に拒否することを再現した。検証済み入力を固定し、生成された起動引数・native role・実child IDと結び付けてSubagentStartから渡す方式へ変更した。JSONのキー・型・4000文字制限、レビューのSHA・要求hash・結果照合は維持する。
+
+実モデルの通し検査で、読み取り専用reviewerが禁止されたtest実行を未確認項目に入れる問題と、レビュー専用taskの比較元を読み取り時HEADから過去へ広げられない問題も検出して修正した。子によるtest未実行を実行成功に置き換えず、親の実行検証と子のコード確認を分ける。
+
+重大度は`REVIEW_SEVERITY.md`へ集約し、明示要件違反だけでhighにしない。親も成立条件・直接の実害を照合する。子への基準本文の配信・欠落時の失敗と、両配布の参照を検査し、変更後の実モデル再採点までは検証していない。
+
+| 検査 | 確認した範囲 |
+|---|---|
+| `verify-all.sh` | Claude/Codex両配置、bootstrap、hook・固定script・Git境界・文書参照。実モデル完走の代用ではない |
+| `test_agent_input.py` | 入力形式・文字数・role/要求の差し替え・再利用・実child ID・metadata alias拒否 |
+| `test_role_runtime.py` | 実CLI＋模擬APIで全5roleの起動、準備コマンドの実出力、配布hook、契約注入、model/effort要求、native metadata、結果受理。未信頼・emit故障・未対応切替も検査 |
+| `test_workflow_evidence.py` | hook受理記録のない評価・不正な理由・工程逆転・未解決指摘・複数file commit・0件/skip・Green後の内容変更を成功にしない |
+| `probe_agent_workflow.py --case workflow` | 実モデルで評価→test編集→Red→実装→Green→個別commit→独立レビュー受理、指摘なし、cleanを検証 |
+| Baton実モデルprobe | Sol/highの拒否結果に手順を1回注入し、同じ要求の再試行後にAstra/xhighで完了した実行記録を確認 |
+
+native CLIには`switch_model`がなく、通し検査は既存規約の降格不能時の継続を明示して検査する。これをLunaへの切替成功とは扱わない。切替対応経路はBatonの別検査で確認する。Claudeの実モデル完走、任意のdesktop設定・他versionでの同一挙動まではこの結果に含めない。
+
+`source-review`は今回の変更を一時repositoryの固定差分にして専用deep-reviewerへ渡す。旧重大度基準でhighとされた検査器の指摘を受け、受理記録との照合・工程順序・未解決指摘・準備失敗・0件/skipの拒否と、HEAD treeからのsnapshot作成を追加した。fixtureでは指摘を自動却下せず、未解決指摘があれば非ゼロ終了する。
+
+実モデルのworkflow成功記録は最終内容hash照合の追加前のもの。追加後はunitの異常系と、実CLIのPostToolUseで採取したfile hashを検査する。以前の記録へ存在しない観測点を補って完走済みとは扱わない。
+
+以下は旧版の記録であり、現行版の成功証拠には使わない。
+
+## 旧版: 2026-09-15のrole登録・開始順序の修正
 
 Codexの配布configに各roleの`config_file`登録を追加し、シナリオ承認前に起動可否を確認する入口をTDDへ追加した。local模擬APIを使った実行器への要求比較では、登録によって`agent_type`が公開されることを確認した。
 
-`test_role_runtime.py`は一時Codex領域で実app-serverを起動し、プロジェクト設定を読み込んでnative起動した全5roleの`agentRole`と`source.subAgent.thread_spawn.agent_role`、実際のモデル要求のmodel・effortを検査する。模擬応答を実モデルの採点・独立レビュー成功とは扱わない。
+この時点の`test_role_runtime.py`はhookを無効にした実app-serverで全5roleの`agentRole`・`agent_role`とmodel・effort要求を確認しただけで、配布hookとの接続は保証していなかった。
 
 追加の実書き込み診断ではCodex 0.154.0の子が親のworkspace-write権限を継承し、roleファイルの`sandbox_mode`と`default_permissions`のどちらでも子の書き込みを止められなかった。効かなかった設定変更は採用していない。`--probe-permissions`でこの制限を再検査でき、失敗をrole登録成功へ含めない。
 
