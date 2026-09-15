@@ -57,12 +57,15 @@ $bootstrap codex
 3. Codexは`/hooks`で初期化後の定義をレビュー・信頼し、再起動する
    - hook変更時も再レビューする
    - 未trustのproject-local設定は適用されない
+   - role更新後は新しいタスクで、起動toolの`agent_type`と必要な専用roleが公開されていることを確認する
 4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する
    - 両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する
 
 更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
+
+Codexのrole定義は`codex/config.toml`の`[agents.<role>].config_file`から登録する。定義ファイルの配置やtask名だけを専用roleの適用と扱わない。シナリオ承認前の確認は[子の起動手順](skills/SUBAGENT_RULES.md#開始時の可用性確認)に従う。
 
 ## skill・共通資料
 
@@ -125,7 +128,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 | 強制される部分 | 残る判断・境界 |
 |---|---|
 | 起動引数のrole・設定上書き・background・一括起動・追送・resume拒否、Codexの同時起動数 | 親の作業停止・環境間代替禁止・入力の意味・実際のrole metadata。起動不能は成功にしない |
-| 子のsandbox／tool制限 | shellのtest実行・調査範囲・MCP等の外部通信はread-onlyだけでは制限されない。共通制約を子へ注入する |
+| 子のrole・model・effortと共通制約の配信 | roleファイルのsandbox設定の実効性はruntime依存。Codex 0.154.0のnative起動で親のworkspace-write継承を確認したため、子をOSでread-onlyに強制済みとは扱わない。編集・test実行・調査範囲・外部通信の制約は子の共通契約に残す |
 | reviewer入力・対象SHA・tracked状態・SubagentStopの結果形式、shell後に古くなった結果の失効 | reviewの必要性、指摘の妥当性・採否、関連するignored / untracked資産。形式検査は内容の自動生成ではない |
 | polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
 | 直接tool入力の.git path・Git引数、Chromeの保存先・Serenaのmemory名を検査 | 文字列検査は任意script内部の保証ではない。scriptと子processの書き込みはOS保護で止める |
@@ -158,6 +161,8 @@ Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書�
 `test_command_permissions.py`は両配布の実際のhook配線で、通常command・複合拒否・保護付き入口への承認引き渡しを検査する。`python3 tests/test_protected_exec.py`は外側のsandboxなしで実行し、両配布の境界外／MCP入口で実際のコピー・上書き・削除・リンク・親directory移動の拒否と、通常書き込み・境界外書き込み・loopback通信の成功を確認する。macOSで実機検証し、Linuxの実機成功はこの結果に含めない。
 
 `test_fixed_script_git_protection.py`は固定scriptを実行し、metadata alias・TMPDIR差し替え・外部Git helperを拒否／抑止しながら通常の保存・rebaseが成功することを検査する。
+
+`python3 tests/test_role_runtime.py`はsandbox外で実行し、一時Codex領域・local模擬API・実app-serverで全専用roleの公開schema、`agentRole`／`agent_role`、model・effortを検査する。外部モデルの評価は行わない。`--probe-permissions`は子の実書き込みも試す追加診断で、read-only指定が効かないruntimeでは失敗する。role登録の成功と権限制限の成功を混同しない。
 
 skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
