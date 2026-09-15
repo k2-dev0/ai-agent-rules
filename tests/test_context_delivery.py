@@ -64,10 +64,10 @@ class ContextDelivery(unittest.TestCase):
                         if not matches(event, group, payload):
                             continue
                         for handler in group["hooks"]:
-                            script = re.search(r"shell/([\w-]+\.sh)", handler["command"])
+                            script = re.search(r"shell/([\w-]+\.(sh|py))", handler["command"])
                             self.assertIsNotNone(script, handler["command"])
                             result = subprocess.run(
-                                ["bash", str(hookdir / script.group(1))],
+                                (["python3", str(hookdir / script.group(1)), "hook"] if script.group(2) == "py" else ["bash", str(hookdir / script.group(1))]),
                                 input=json.dumps(payload), text=True, capture_output=True, check=True,
                             )
                             self.assertEqual(result.stderr, "")
@@ -150,6 +150,7 @@ class ContextDelivery(unittest.TestCase):
                 self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
                 self.assertNotIn("サブエージェント", child_text[0])
                 self.assertNotIn("メインモデルの選択", child_text[0])
+                configured("SubagentStop", "FLOW", agent_id="difficulty", agent_type="difficulty-evaluator", last_assistant_message='{"score":2,"reason":"Local change."}')
 
                 review_brief = {
                     "repository": str(root), "review_base": head, "review_head": head,
@@ -186,6 +187,15 @@ class ContextDelivery(unittest.TestCase):
                 self.assertIn("読み取り専用の独立コードレビュー", child_text[0])
                 self.assertIn((skilldir / "CHILD_RULES.md").read_text(), child_text[0])
                 self.assertNotIn("独立レビューの起動・結果処理", child_text[0])
+                self.assertIn((skilldir / "REVIEW_SEVERITY.md").read_text(), child_text[0])
+                configured("SubagentStop", "FLOW", agent_id="review", agent_type="code-reviewer", last_assistant_message='{"status":"incomplete"}')
+
+                severity = skilldir / 'REVIEW_SEVERITY.md'
+                severity.rename(severity.with_suffix('.missing'))
+                unavailable = visible(configured('SubagentStart', 'SEVERITY_MISSING', agent_id='missing', agent_type='code-reviewer'))
+                self.assertEqual(len(unavailable), 1)
+                self.assertIn('重大度基準がありません', unavailable[0])
+                severity.with_suffix('.missing').rename(severity)
 
                 contract = skilldir / "DIFFICULTY_CONTRACT.md"
                 missing = contract.with_suffix(".missing")
