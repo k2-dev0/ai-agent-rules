@@ -244,6 +244,12 @@ else
 fi
 
 echo "== メイン実装と直列の独立レビュー =="
+if python3 "$SUITE/test_role_runtime.py" RoleRuntime.test_every_distributed_role_is_registered RoleRuntime.test_preflight_reference_is_before_scenario_approval > "$S/role-config.out" 2>&1; then
+  ok "専用roleの登録先と承認前の参照順序を検証（設定・文書整合性）"
+else
+  ng "専用roleの登録または承認前の参照が不正"
+  cat "$S/role-config.out"
+fi
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
@@ -294,7 +300,7 @@ grep -Fq '**verified**' "$POLISH_SKILL" && grep -Fq '**direct**' "$POLISH_SKILL"
 ! grep -Fq 'quality-gate.sh' "$MARK_PROMPT_DONE_SCRIPT" && grep -Fq '完了markを付けるか確認する' "$TDD_FROM_DOC" && grep -Fq 'ユーザーが付けると回答した場合だけ' "$TDD_FROM_DOC" && ok "tdd はユーザー判断だけでindexを更新" || ng "tdd が完了マークを自動判定"
 [ -f "$FIX_FLOW" ] && grep -Fq '../FIX_FLOW.md' "$TDD_SKILL" && grep -Fq 'FIX_FLOW.md' "$POLISH_SKILL" "$UNWIND_SKILL" && ok "tdd・polish・unwindは検証・修正契約を共有" || ng "検証・修正フロー参照が不正"
 grep -Fq '../MODEL_SELECTION.md' "$TDD_SKILL" && grep -Fq 'MODEL_SELECTION.md' "$FIX_FLOW" && ! grep -Eq 'require-implementer|専用定義|IMPLEMENTER_CONTRACT.md' "$TDD_SKILL" && ok "tddはメインモデル選択に従い直接実装する" || ng "tddに実装専用agentの必須条件が残存"
-grep -Fq '## 調査' "$TDD_SKILL" && grep -Fq '`path:line`' "$TDD_SKILL" && grep -Fq '必須事実が足りなければ追加調査' "$TDD_SKILL" && ! grep -Fq 'SUBAGENT_RULES.md' "$TDD_SKILL" && ! grep -Fq 'IMPLEMENTATION_RULES.md' "$REPO/skills/preflight/SKILL.md" && grep -Fq 'シナリオと実装方針を決める前に[共通基準]' "$TDD_SKILL" && ok "調査後・設計前に共通基準を読む" || ng "共通基準の読込時点が不正"
+grep -Fq '## 調査' "$TDD_SKILL" && grep -Fq '`path:line`' "$TDD_SKILL" && grep -Fq '必須事実が足りなければ追加調査' "$TDD_SKILL" && ! grep -Fq 'IMPLEMENTATION_RULES.md' "$REPO/skills/preflight/SKILL.md" && grep -Fq 'シナリオと実装方針を決める前に[共通基準]' "$TDD_SKILL" && ok "調査後・設計前に共通基準を読む" || ng "共通基準の読込時点が不正"
 grep -Fq '## シナリオ選択' "$TDD_SKILL" && grep -Fq '採用・不採用・修正をユーザーへ確認' "$TDD_SKILL" && grep -Fq '全件採用を既定にしない' "$TDD_SKILL" && grep -Fq 'シナリオの不採用を実装要件の削減理由にしない' "$TDD_SKILL" && grep -Fq '選択確定まで編集せず' "$TDD_SKILL" && grep -Fq '新しいtestが必要なだけでは止めず' "$TDD_SKILL" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh' "$TDD_SKILL" && ok "tddフローはtest選択権・実装範囲・メイン実装を維持" || ng "tddフローのtest選択権・実装境界が不正"
 grep -Fq 'API・DB処理はPrisma mockでなくtest DBを使う' "$TDD_SKILL" && grep -Fq '実装不足または期待値との差により失敗' "$TDD_SKILL" && grep -Fq 'syntax・import・型の失敗はシナリオを変えず先に直す' "$TDD_SKILL" && ok "tddはDB境界と有効なRedを維持" || ng "tddのtest方式またはRed判定が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
