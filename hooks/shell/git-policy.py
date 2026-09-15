@@ -119,10 +119,54 @@ def git_command(argv, cwd, protected):
             if not argv or not argv[0] or argv[0].startswith("-"):
                 raise Denied("git -Cのpathが不正です。")
             directory.extend([flag, argv.pop(0)])
-    if not argv or argv[0] not in (*FLAGS, "add", "commit"):
-        raise Denied("Gitは許可された読み取り用途とadd/commitだけ実行できます。履歴整理は固定rebaseスクリプトを使ってください。")
+    if not argv or argv[0] not in (*FLAGS, "add", "commit", "restore"):
+        raise Denied("Gitは許可された読み取り用途・add/commit・restore --stagedだけ実行できます。履歴整理は固定rebaseスクリプトを使ってください。")
     command, *args = argv
     safe = ["git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c", "status.submoduleSummary=false", *directory]
+    if command == "restore":
+        if directory:
+            raise Denied("restore --stagedは対象repositoryのcwdから実行してください。")
+        options, paths = [], []
+        staged = operands = pathspec_file = False
+        index = 0
+        flags = {"--quiet", "-q", "--progress", "--no-progress", "--overlay", "--no-overlay",
+                 "--ignore-unmerged", "--no-ignore-unmerged", "--ignore-skip-worktree-bits",
+                 "--no-ignore-skip-worktree-bits", "--no-recurse-submodules", "--pathspec-file-nul"}
+        while index < len(args):
+            arg = args[index]
+            index += 1
+            if operands:
+                paths.append(arg)
+            elif arg == "--":
+                operands = True
+            elif arg == "--staged":
+                staged = True
+            elif arg in flags:
+                options.append(arg)
+            elif arg in ("--source", "-s", "--pathspec-from-file") or arg.startswith(("--source=", "--pathspec-from-file=")) or arg.startswith("-s"):
+                flag, separator, value = arg.partition("=")
+                if arg.startswith("-s") and arg != "-s":
+                    flag, separator, value = "--source", "=", arg[2:]
+                if not separator:
+                    if index >= len(args):
+                        raise Denied("restore optionの値がありません。")
+                    value = args[index]
+                    index += 1
+                flag = "--source" if flag == "-s" else flag
+                if not value or (value.startswith("-") and not (flag == "--pathspec-from-file" and value == "-")):
+                    raise Denied("restore optionの値が不正です。")
+                pathspec_file = pathspec_file or flag == "--pathspec-from-file"
+                options.append(flag + "=" + value)
+            elif arg.startswith("-"):
+                raise Denied("restoreの未許可optionです: " + arg)
+            else:
+                paths.append(arg)
+        if not staged or (not paths and not pathspec_file):
+            raise Denied("restoreは--stagedと対象pathまたはpathspec fileを指定してください。")
+        if (pathspec_file and paths) or ("--pathspec-file-nul" in options and not pathspec_file):
+            raise Denied("restoreのpath指定が矛盾しています。")
+        execution = [*safe, "restore", "--staged", *options, *(["--", *paths] if paths else [])]
+        return {"command": shlex.join(execution), "index_only": True}
     if command in ("add", "commit"):
         if directory:
             raise Denied("add/commitは対象repositoryのcwdから実行してください。")
@@ -284,6 +328,8 @@ def inspect(payload, outside_payload=False):
         result = inspect({**payload, "tool_input": {"command": inner}}, outside_payload=True)
         if result and result.get("commit_check"):
             raise Denied("add/commitは契約検査付きの単独Git commandを使ってください。")
+        if result and result.get("index_only"):
+            raise Denied("index復元は検査付きの単独git restore --stagedを使ってください。")
         # Never return allow for the wrapper: its real approval must remain.
         return
     assignments = []
@@ -356,7 +402,7 @@ def approval(payload):
     raw = payload.get("tool_input", {}).get("command", "")
     argv = single_command(raw)
     result = inspect(payload)
-    if outside_command(argv) is not None or (result and result.get("commit_check")):
+    if outside_command(argv) is not None or (result and (result.get("commit_check") or result.get("index_only"))):
         return
     # This fixed action issues a one-use review token, not an arbitrary command.
     if argv[:3] == ["bash", ".codex/hooks/shell/protect-review.sh", "approve"] and len(argv) == 4:
