@@ -124,6 +124,13 @@ hook_file_paths() {
 
 # 実行されようとしているシェルコマンド文字列を返す関数（取れなければ空）
 hook_command() {
+  if [ "$HOOK_AGENT" = codex ] && [[ "$HOOK_INPUT" = *agent-input.py* ]]; then
+    local PREPARATION_COMMAND
+    if PREPARATION_COMMAND=$(printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/agent-input.py" guard-command); then
+      printf '%s\n' "$PREPARATION_COMMAND"
+      return
+    fi
+  fi
   case "$HOOK_INPUT" in
     *outside.sh*) printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/git-policy.py" --command ;;
     *) echo "$HOOK_INPUT" | jq -r '.tool_input.command // empty' ;;
@@ -205,9 +212,18 @@ hook_ask() {
 }
 
 # 独立レビューのlifecycle入出力。transcriptの非公開形式には依存しない。
-hook_review_brief() { printf '%s' "$HOOK_INPUT" | jq -er '.tool_input.prompt // .tool_input.message | fromjson | select(type == "object")'; }
-# Codexのnative spawn_agentのmessageはhookで本文を解析できるとは限らない。
-# transportの形だけ検査し、本文の契約検査は受信した専用agentが行う。
+hook_review_brief() {
+  if [ "$HOOK_AGENT" = codex ]; then
+    printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/agent-input.py" brief
+  else
+    printf '%s' "$HOOK_INPUT" | jq -er '.tool_input.prompt // .tool_input.message | fromjson | select(type == "object")'
+  fi
+}
+hook_reserve_agent_input() {
+  [ "$HOOK_AGENT" = codex ] || return 0
+  printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/agent-input.py" reserve "$1"
+}
+# Codexのmessageは暗号化される。本文は検証済み入力を起動要求に結び付けて渡す。
 hook_agent_message_valid() {
   printf '%s' "$HOOK_INPUT" | jq -e '
     .tool_input | .prompt == null and
