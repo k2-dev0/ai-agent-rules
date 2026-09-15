@@ -16,7 +16,8 @@
 - 起動hookの通過を本文検査の代わりにしない
 - 方針から対象を探し、既存実装、影響caller、状態・副作用、不変条件、既存testと検証方法を独立に確認する
   - 設計書・実行担当の選択基準は読まない
-  - 必要な対象・挙動を特定できない場合は推測せず`{"error":"implementation target or behavior is unclear"}`を返す
+  - 新規実装や実装がないrepositoryでは、方針に明記された作成component、観測可能な入力・出力・error、状態・外部境界、検証方法から残る実装判断を評価し、既存実装・caller・testがないこと自体は入力エラーにしない
+  - 必要な対象・挙動を特定できない場合は推測せず、`{"error":"implementation_policy is missing: <target components, observable behavior, boundaries, or verification>"}`の`<>`へ実際に不足する項目だけを列挙する
 - 評価対象はその方針を実装する仕事自体の難度
   - 方針をコードへ反映する際に残る判断・調整・整合性確認を評価する
   - 方針に確定済みの選択、変更量、対象file・caller・consumer・操作・testの数や存在だけでは加減点しない
