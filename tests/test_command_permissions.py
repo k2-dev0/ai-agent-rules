@@ -50,6 +50,14 @@ class CommandPermissions(unittest.TestCase):
         self.assertEqual(self.chain('claude', '', 'PermissionRequest', 'mcp__baton__switch_model', request), [])
         self.assertEqual(self.chain('codex', '', 'PreToolUse', 'mcp__baton__switch_model', request), [])
 
+    def test_index_restore_does_not_count_as_a_config_file_write(self):
+        for agent in ('claude', 'codex'):
+            outputs = self.chain(agent, 'git restore --staged -- .' + agent + '/config.toml')
+            self.assertFalse(any(o.get('permissionDecision') == 'deny' for o in outputs), outputs)
+            self.assertTrue(any(o.get('updatedInput') for o in outputs), outputs)
+            outputs = self.chain(agent, 'git restore --staged --worktree .' + agent + '/config.toml')
+            self.assertTrue(any(o.get('permissionDecision') == 'deny' for o in outputs), outputs)
+
     def test_single_commands_are_not_a_command_allowlist(self):
         commands = [
             "cp source.txt destination.txt", "rm destination.txt", "mv source.txt destination.txt",
