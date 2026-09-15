@@ -161,6 +161,17 @@ class ReviewEvidence(unittest.TestCase):
                 self.assertFalse(accepted())
                 self.assertIsNone(call("Stop", last_assistant_message="Completed"))
 
+                # A fresh review-only task first captures HEAD during a read.
+                # The user's older comparison base must still be accepted.
+                state.unlink()
+                self.assertIsNone(call("PreToolUse", tool_name="Bash", tool_input={"command": "git status --short"}))
+                self.assertEqual(json.loads(state.read_text())["base"], head)
+                brief, response = launch(review_base=base)
+                self.assertEqual(response["hookSpecificOutput"]["permissionDecision"], "allow")
+                self.assertEqual(json.loads(state.read_text())["base"], base)
+                _, denied = launch(review_base=head)
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+
                 settings = json.loads((REPO / ("codex/hooks.json" if agent == "codex" else "claude/settings.json")).read_text())
                 for event in ("PreToolUse", "UserPromptSubmit", "SubagentStart", "SubagentStop"):
                     self.assertTrue(any("independent-review.sh" in hook["command"] for group in settings["hooks"][event] for hook in group["hooks"]))
@@ -176,6 +187,8 @@ class ReviewEvidence(unittest.TestCase):
                 self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
                 self.assertEqual(metadata.read_text(), "untouched")
                 state.unlink()
+                if agent == "codex":
+                    (state.parent / "agent-input.TEST.json").unlink()
                 state.parent.rmdir()
                 state.parent.symlink_to(root / ".git", target_is_directory=True)
                 denied = call("PreToolUse", tool_name="Bash", tool_input={"command": "pwd"})
