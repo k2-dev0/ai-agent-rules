@@ -118,7 +118,8 @@ try {
       item.type === "Text" && item.text.trim() === "PRE_MODEL_SWITCH_LIVE_OK"));
   const targetContext = contexts.find(record => record.payload.turn_id === finalMessage?.payload.turn_id);
   assert.equal(targetContext?.payload.model, "gpt-6-astra", "completion must run on the target model");
-  const metrics = { old_model: oldContext.payload.model, target_model: targetContext.payload.model, context_bytes: Buffer.byteLength(runtimeDelivered),
+  assert.equal(targetContext?.payload.effort, "xhigh", "completion must use the requested effort");
+  const metrics = { old_model: oldContext.payload.model, target_model: targetContext.payload.model, target_effort: targetContext.payload.effort, context_bytes: Buffer.byteLength(runtimeDelivered),
     context_injections: 1, unnecessary_injections: 0, retry_calls: 1, final_status: "completed" };
   writeFileSync(path.join(output, "report.json"), JSON.stringify(metrics, null, 2), { mode: 0o600 });
   writeFileSync(path.join(output, "events.json"), JSON.stringify(events, null, 2), { mode: 0o600 });
