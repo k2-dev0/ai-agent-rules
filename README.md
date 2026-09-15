@@ -115,13 +115,13 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 
 hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
 
-Gitは`git-policy.py`が列挙する読み取り用途と、契約検査を通るadd/commitを許可する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。固定rebaseも外部hook・署名・filterを無効化し、一時worktreeでは保存済みblobを使う。
+Gitは`git-policy.py`が列挙する読み取り用途、契約検査を通るadd/commit、`git restore --staged`によるindex復元を許可する。restoreは対象path・`--source`・pathspec file等を指定でき、worktree変更・対話patch・再帰submodule更新は拒否する。履歴整理は固定rebaseスクリプトだけを使う。外部diff・textconv・fsmonitor・pagerを無効化し、他のGit操作は拒否する。固定rebaseも外部hook・署名・filterを無効化し、一時worktreeでは保存済みblobを使う。
 
 通常の単一commandは、種類を列挙せずsandbox内で原則自動実行する。コピー・削除・上書き・interpreter・test・package操作も含む。複合command・loop・pipeline・command substitutionは拒否し、変数展開やquote内の記号とは区別する。Gitは上記の専用境界に従う。
 
 境界外の実行は`command-approval.sh`が`bash .<agent>/hooks/shell/outside.sh '<単一command>'`への再試行を案内し、人間の承認を待つ。入口は承認後も現在repositoryのGit metadata・保護設定・hookの内部状態をOSで書き込み禁止にする。保護を起動できなければ実行しない。stdio MCPも同じOS保護で起動する。起動directoryはrepository rootとする。
 
-通常commandへのsandbox外allowは置かない。特権例外は契約付きadd/commitと固定のbootstrap・設計書完了mark・E2E計画保存・rebaseに限定する。Claudeはsandboxの自動許可を有効にし、保護付き入口以外の任意のsandbox解除を無効にする。
+通常commandへのsandbox外allowは置かない。特権例外は契約付きadd/commit・検査済みindex復元と固定のbootstrap・設計書完了mark・E2E計画保存・rebaseに限定する。Claudeはsandboxの自動許可を有効にし、保護付き入口以外の任意のsandbox解除を無効にする。
 
 ## 保証範囲
 
