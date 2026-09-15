@@ -177,6 +177,18 @@ done
 report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
 echo "== skill context圧縮と参照整合性 =="
+if python3 "$SUITE/test_workflow_evidence.py" > "$S/workflow-evidence.out" 2>&1; then
+  ok "実モデル検査器が無効な評価・工程逆転・未解決指摘・commit不備を拒否"
+else
+  ng "実モデル検査器が未完了のworkflowを成功扱い"
+  cat "$S/workflow-evidence.out"
+fi
+if python3 "$SUITE/test_agent_input.py" > "$S/agent-input.out" 2>&1; then
+  ok "検証済み入力と暗号化輸送の分離・role/子ID照合・再利用拒否を検証"
+else
+  ng "専用子の入力準備・受け渡しが不正"
+  cat "$S/agent-input.out"
+fi
 if python3 "$SUITE/test_context_delivery.py" > "$S/context-delivery.out" 2>&1; then
   ok "親の事前参照・入力訂正・専用子への契約配信を検証"
   cat "$S/context-delivery.out"
