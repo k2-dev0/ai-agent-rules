@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from probe_agent_workflow import toml
 
 REPO = Path(__file__).resolve().parents[1]
 CASES = ("investigation", "document_change", "normal_implementation", "from_doc", "review_repair")
@@ -82,9 +83,7 @@ sys.exit(result.returncode)
                 hook["timeout"] = 10
     if engine == "codex":
         (product / "hooks.json").write_text(json.dumps(settings))
-        (product / "config.toml").write_text(
-            '[features]\nhooks = true\n[agents]\nmax_threads = 1\n'
-        )
+        (product / "config.toml").write_text((REPO / 'codex/config.toml').read_text().split('[mcp_servers.', 1)[0])
     else:
         (product / "settings.json").write_text(json.dumps(settings))
 
@@ -99,7 +98,7 @@ sys.exit(result.returncode)
         }),
     }
     prompt = (
-        "Work only in this isolated fixture. Use the current main model without difficulty evaluation. "
+        "Work only in this isolated fixture. "
         "Do not access any other repository or network service.\n" + prompts[case]
     )
     return root, prompt
@@ -116,19 +115,13 @@ def main():
     print(str(output), flush=True)
     if args.engine == "codex":
         command = [
-            "codex", "exec", "--ignore-user-config", "--ephemeral", "--json",
-            "--dangerously-bypass-hook-trust", "-s", "workspace-write",
+            "codex", "exec", "--ignore-user-config", "--json",
+            "--dangerously-bypass-hook-trust",
             "-c", "approval_policy=never", "-c", "features.hooks=true",
-            "-c", f'projects.{json.dumps(str(root))}.trust_level="trusted"',
+            "-c", 'projects=' + toml({str(root): {'trust_level':'trusted'}}),
             "-m", "gpt-5.6-sol", "-c", 'model_reasoning_effort="high"', "-C", str(root), prompt,
         ]
         if args.inline_hooks:
-            def toml(value):
-                if isinstance(value, dict):
-                    return "{" + ",".join(json.dumps(k) + "=" + toml(v) for k, v in value.items()) + "}"
-                if isinstance(value, list):
-                    return "[" + ",".join(map(toml, value)) + "]"
-                return json.dumps(value, ensure_ascii=False)
             hooks_path = root / ".codex/hooks.json"
             hooks = json.loads(hooks_path.read_text())["hooks"]
             hooks_path.unlink()
@@ -143,7 +136,7 @@ def main():
             "--model", "opus", prompt,
         ]
     with (output / "runtime.jsonl").open("w") as stdout, (output / "runtime.stderr").open("w") as stderr:
-        process = subprocess.Popen(command, cwd=root, stdout=stdout, stderr=stderr, start_new_session=True)
+        process = subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
         try:
             code = process.wait(timeout=180)
         except subprocess.TimeoutExpired:
