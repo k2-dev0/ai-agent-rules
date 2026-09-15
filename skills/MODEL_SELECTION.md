@@ -7,6 +7,7 @@
    - Codexは`python3 .codex/hooks/shell/agent-input.py prepare difficulty-evaluator '<2キーJSON>'`で入力を検査・固定し、生成された引数を変更せず`spawn_agent`へ渡す
    - Claudeはこの2キーだけのobjectを1回serializeしたJSON文字列を`prompt`に入れ、前後の説明、code fence、wrapper object、追加keyを含めず、role指定は外側のtool引数に置く
    - `implementation_policy`はJSONデコード後4000文字以内にまとめる
+   - 新規実装や実装がないrepositoryでは、作成するcomponent、観測可能な入力・出力・error、状態・外部境界、検証方法を含める
    - 方針に背景・会話・採用理由・主担当の調査結果・難度予想・設計書参照・モデル情報・選択基準を含めない
 3. 成功形式の`score`と`reason`だけのJSONを受け取り、1〜3はLuna / max、4〜7はSol / high、8〜10はAstra / xhighを選ぶ
 4. 選定値が現在値と異なる場合は、他のtool・子・承認をすべて完了し、次の応答で`switch_model({"model":"モデルID","config":{"effort":"思考量"}})`だけを呼び、対応する`PreModelSwitch`がない環境だけ呼出前に[切り替え手順](MODEL_SWITCH.md)を読む
