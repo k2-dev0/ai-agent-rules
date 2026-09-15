@@ -96,7 +96,7 @@ case "$EVENT" in
             hook_agent_message_valid || hook_deny "native reviewerはmessageだけを使ってください。別fieldで入力照合を迂回できません。"
             ;;
         esac
-        BRIEF=$(hook_review_brief) || hook_deny "レビュー入力がJSON objectではありません。prompt/message全体をrepository・review_base・review_head・requirementsのJSON文字列へ訂正し、同じtool・専用roleで新規起動してください。正しい本文でも確認できなければ未完了と報告してください。"
+        BRIEF=$(hook_review_brief 2>&1) || hook_deny "レビュー入力を確認できません。Codexはagent-input.py prepareで4キーJSONを検査し、出力された起動引数を使ってください。Claudeはprompt全体を4キーJSONにしてください。$BRIEF"
         printf '%s' "$BRIEF" | jq -e '((keys - ["repository","review_base","review_head","requirements","request_id"]) | length == 0) and all(.repository,.review_base,.review_head,.requirements; type == "string" and test("\\S"))' >/dev/null || hook_deny "独立レビューはrepository・review_base・review_head・requirementsの4項目を空でない文字列で渡してください。"
         BASE=$(printf '%s' "$BRIEF" | jq -r '.review_base')
         HEAD=$(printf '%s' "$BRIEF" | jq -r '.review_head')
@@ -104,7 +104,12 @@ case "$EVENT" in
         [ "$(printf '%s' "$BRIEF" | jq -r '.repository')" = "$ROOT" ] && [ "$HEAD" = "$(head)" ] && clean || hook_deny "独立レビューのrepository・HEAD・追跡fileのclean状態が一致しません。"
         git -C "$ROOT" merge-base --is-ancestor "$BASE" "$HEAD" || hook_deny "独立レビューの比較元が対象HEADの祖先ではありません。"
         if [ -f "$STATE" ]; then
-          [ "$BASE" = "$(printf '%s' "$DATA" | jq -r '.base')" ] || hook_deny "review_baseを変更開始後のcommitへ縮めることはできません。"
+          RECORDED_BASE=$(printf '%s' "$DATA" | jq -r '.base')
+          git -C "$ROOT" merge-base --is-ancestor "$BASE" "$RECORDED_BASE" || hook_deny "review_baseを変更開始後のcommitへ縮めることはできません。"
+          # A review-only task may first read the repository at review_head.
+          # An explicitly supplied older base expands the scope; it is not a
+          # forbidden narrowing to a commit after implementation began.
+          DATA=$(printf '%s' "$DATA" | jq --arg base "$BASE" '.base = $base')
         else
           DATA=$(jq -cn --arg base "$BASE" '{base:$base,generation:0,paths:[]}')
         fi
@@ -112,7 +117,13 @@ case "$EVENT" in
         REQUEST_ID=$(printf '%s' "$BRIEF" | jq -cS . | shasum -a 256 | awk '{print $1}')
         [ "${#REQUEST_ID}" = 64 ] || hook_deny "独立レビュー入力のhashを計算できません。"
         BRIEF=$(printf '%s' "$BRIEF" | jq -c --arg request_id "$REQUEST_ID" '. + {request_id:$request_id}')
+        hook_reserve_agent_input "$BRIEF" || hook_deny "独立レビューの入力を専用子へ予約できません。先行子の完了と新規入力の準備を確認してください。"
         save "$(printf '%s' "$DATA" | jq --argjson brief "$BRIEF" --arg role "$ROLE" --arg request_id "$REQUEST_ID" '.pending = {brief:$brief,role:$role,request_id:$request_id,generation:(.generation // 0)} | del(.result)')"
+        # Encrypted message transport cannot be rewritten as plaintext. The
+        # validated brief (including request_id) is delivered by SubagentStart.
+        if [ "$HOOK_AGENT" = codex ] && ! printf '%s' "$HOOK_INPUT" | jq -e '.tool_input.prompt // .tool_input.message | fromjson' >/dev/null; then
+          exit 0
+        fi
         UPDATED=$(printf '%s' "$HOOK_INPUT" | jq -c --argjson brief "$BRIEF" '.tool_input | if has("prompt") then .prompt = ($brief | tojson) else .message = ($brief | tojson) end')
         hook_rewrite_input "$UPDATED"
         ;;
