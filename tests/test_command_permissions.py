@@ -27,11 +27,11 @@ class CommandPermissions(unittest.TestCase):
             config = REPO / ("claude/settings.json" if agent == "claude" else "codex/hooks.json")
             self.configs[agent] = json.loads(config.read_text())
 
-    def chain(self, agent, command, event="PreToolUse"):
+    def chain(self, agent, command, event="PreToolUse", tool_name="Bash", tool_input=None):
         outputs = []
-        payload = dict(hook_event_name=event, session_id="COMMAND1", cwd=str(self.root), tool_name="Bash", tool_input=dict(command=command))
+        payload = dict(hook_event_name=event, session_id="COMMAND1", cwd=str(self.root), tool_name=tool_name, tool_input=tool_input if tool_input is not None else dict(command=command))
         for group in self.configs[agent]["hooks"].get(event, []):
-            if not re.search(group.get("matcher", ".*"), "Bash"):
+            if not re.search(group.get("matcher", ".*"), tool_name):
                 continue
             for hook in group["hooks"]:
                 name = re.search(r"/hooks/shell/([^\"/]+)", hook["command"])[1]
@@ -40,6 +40,15 @@ class CommandPermissions(unittest.TestCase):
                 if result.stdout:
                     outputs.append(json.loads(result.stdout)["hookSpecificOutput"])
         return outputs
+
+    def test_only_baton_switch_model_permission_is_approved(self):
+        request = {'model':'gpt-5.6-sol', 'config':{'effort':'high'}}
+        decisions = self.chain('codex', '', 'PermissionRequest', 'mcp__baton__switch_model', request)
+        self.assertEqual(decisions, [{'hookEventName':'PermissionRequest', 'decision':{'behavior':'allow'}}])
+        for name in ('mcp__baton__restart', 'mcp__other__switch_model', 'mcp__baton__switch_model_extra', 'switch_model'):
+            self.assertEqual(self.chain('codex', '', 'PermissionRequest', name, request), [])
+        self.assertEqual(self.chain('claude', '', 'PermissionRequest', 'mcp__baton__switch_model', request), [])
+        self.assertEqual(self.chain('codex', '', 'PreToolUse', 'mcp__baton__switch_model', request), [])
 
     def test_single_commands_are_not_a_command_allowlist(self):
         commands = [
