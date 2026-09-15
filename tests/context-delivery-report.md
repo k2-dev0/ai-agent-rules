@@ -1,5 +1,13 @@
 # Context配信検証
 
+## 2026-09-15のrole登録・開始順序の修正
+
+Codexの配布configに各roleの`config_file`登録を追加し、シナリオ承認前に起動可否を確認する入口をTDDへ追加した。local模擬APIを使った実行器への要求比較では、登録によって`agent_type`が公開されることを確認した。
+
+`test_role_runtime.py`は一時Codex領域で実app-serverを起動し、プロジェクト設定を読み込んでnative起動した全5roleの`agentRole`と`source.subAgent.thread_spawn.agent_role`、実際のモデル要求のmodel・effortを検査する。模擬応答を実モデルの採点・独立レビュー成功とは扱わない。
+
+追加の実書き込み診断ではCodex 0.154.0の子が親のworkspace-write権限を継承し、roleファイルの`sandbox_mode`と`default_permissions`のどちらでも子の書き込みを止められなかった。効かなかった設定変更は採用していない。`--probe-permissions`でこの制限を再検査でき、失敗をrole登録成功へ含めない。
+
 ## 2026-09-14の再監査後
 
 親向けMODEL_SELECTION・SUBAGENT_RULES・INDEPENDENT_REVIEWは、起動入力を組み立てる前に正本を読む。初回起動を拒否して全文を返す配信と、文書の先読み禁止は廃止した。子の共通制約・専用契約はSubagentStartの配信を維持する。
