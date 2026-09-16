@@ -42,9 +42,9 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 ### 初期化・更新
 
 1. `setup-agent`で配置する
-   - 初回・`--update`ともcontext-dictionaryの実pathと`[agent_name]`・`[skills_root]`を解決し、検証・bootstrap削除後に起動する
+   - 初回・`--update`ともcontext-dictionary・agent-lsp-tsの実pathと`[agent_name]`・`[skills_root]`を解決し、検証・bootstrap削除後に起動する
    - 起動省略時も初期化し、失敗時は起動しない
-2. 手動配置では`__CONTEXT_DICTIONARY_ROOT__`を実pathへ置換し、projectをtrustしてから次を実行する
+2. 手動配置では`__CONTEXT_DICTIONARY_ROOT__`と`__AGENT_LSP_TS_ROOT__`を各repositoryの実pathへ置換し、agent-lsp-tsで`npm install`・`npm run build`を済ませ、projectをtrustしてから次を実行する
    - `setup-agent`利用時は不要
 
 ```text
