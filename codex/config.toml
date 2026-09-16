@@ -89,6 +89,25 @@ disabled_tools = [
   "rename_symbol",
 ]
 
+[mcp_servers.tsgo-lsp]
+command = "bash"
+args = [
+  ".codex/hooks/shell/mcp-protected.sh", "node",
+  "__AGENT_LSP_TS_ROOT__/dist/cli.js",
+  "--workspace", ".",
+  "--timeout-ms", "10000",
+]
+startup_timeout_sec = 20
+default_tools_approval_mode = "approve"
+enabled_tools = [
+  "hover",
+  "definition",
+  "references",
+  "implementation",
+  "inspect_symbol",
+  "diagnostics",
+]
+
 [mcp_servers.context-dictionary]
 command = "bash"
 args = [".codex/hooks/shell/mcp-protected.sh", "__CONTEXT_DICTIONARY_ROOT__/node_modules/.bin/tsx", "__CONTEXT_DICTIONARY_ROOT__/src/mcp/stdio.ts"]
