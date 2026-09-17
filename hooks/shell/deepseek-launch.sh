@@ -6,10 +6,10 @@ set -eu
 SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P)
 if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
   command -v zsh >/dev/null || { printf '%s\n' 'DEEPSEEK_API_KEY is not configured.' >&2; exit 1; }
-  # -f prevents automatic rc output from corrupting MCP stdout. Load the user's
-  # interactive rc once, privately, then pass the environment to the OS fence.
-  exec zsh -ifc '
-    source "${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+  # Never start an interactive shell under the CLI: its terminal job control
+  # can stop a background MCP process. Keep rc reads away from MCP stdin too.
+  exec zsh -fc '
+    source "${ZDOTDIR:-$HOME}/.zshrc" </dev/null >/dev/null 2>&1 || true
     unsetopt xtrace
     if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
       print -u2 "DEEPSEEK_API_KEY is not configured in the environment or .zshrc."
