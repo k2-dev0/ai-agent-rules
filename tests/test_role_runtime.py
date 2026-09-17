@@ -25,11 +25,8 @@ from workflow_evidence import prepared_arguments
 
 REPO = Path(__file__).resolve().parents[1]
 ROLES = {
-    "difficulty-evaluator": ("gpt-6-astra", "medium"),
-    "code-reviewer": ("gpt-5.6-sol", "high"),
-    "deep-reviewer": ("gpt-6-astra", "xhigh"),
+    "code-reviewer": ("gpt-6-astra", "xhigh"),
     "design-reviewer": ("gpt-6-astra", "xhigh"),
-    "nesting-reviewer": ("gpt-5.6-luna", "max"),
 }
 
 def toml(value):
@@ -80,9 +77,8 @@ class RoleRuntime(unittest.TestCase):
                 subprocess.run(['git','add','--','value.py'],cwd=root,check=True,capture_output=True)
                 source.write_text(source.read_text() + '# unstaged work\n')
                 expected_worktree = source.read_bytes()
-            prepared_role = role in ('difficulty-evaluator', 'code-reviewer', 'deep-reviewer')
-            brief = (dict(repository=str(root), implementation_policy='Change double to return zero for negative inputs.')
-                     if role == 'difficulty-evaluator' else dict(repository=str(root), review_base=head, review_head=head, requirements='Review double for its specified behavior.'))
+            prepared_role = role == 'code-reviewer'
+            brief = dict(repository=str(root), review_base=head, review_head=head, requirements='Review double for its specified behavior.')
             requests = []
             preparation_errors = []
             parent_requests = 0
@@ -135,15 +131,13 @@ class RoleRuntime(unittest.TestCase):
                             item = dict(type="function_call", id="spawn", call_id="spawn", namespace="collaboration", name="spawn_agent", arguments=json.dumps(args))
                     elif is_parent and parent_requests == (2 + int(probe_permissions) + int(prepared_role)):
                         item = dict(type="function_call", id="wait", call_id="wait", namespace="collaboration", name="wait_agent", arguments='{"timeout_ms":10000}')
-                    elif is_parent and probe_switch and role == 'difficulty-evaluator' and parent_requests == (3 + int(probe_permissions) + int(prepared_role)):
-                        item = dict(type='function_call', id='switch', call_id='switch', namespace='functions', name='switch_model', arguments=json.dumps(dict(model='gpt-5.6-luna', config=dict(effort='max'))))
+                    elif is_parent and probe_switch and role == 'code-reviewer' and parent_requests == (3 + int(probe_permissions) + int(prepared_role)):
+                        item = dict(type='function_call', id='switch', call_id='switch', namespace='functions', name='switch_model', arguments=json.dumps(dict(model='gpt-6-astra', config=dict(effort='xhigh'))))
                     elif not is_parent and child_requests_count == 1 and probe_permissions:
                         item = dict(type="function_call", id="child-write", call_id="child-write", namespace="functions", name="exec_command", arguments=json.dumps(dict(cmd="touch " + shlex.quote(str(root / "child-write")), workdir=str(root))))
                     else:
                         result = 'Fixture transport complete.'
-                        if not is_parent and role == 'difficulty-evaluator':
-                            result = json.dumps(dict(score=1, reason='Transport fixture, not a real evaluation.'))
-                        elif not is_parent and role in ('code-reviewer', 'deep-reviewer'):
+                        if not is_parent and role == 'code-reviewer':
                             proofs = list((root / '.codex/tmp').glob('independent-review.*.json'))
                             if proofs:
                                 data = json.loads(proofs[0].read_text())
@@ -270,8 +264,8 @@ class RoleRuntime(unittest.TestCase):
                             snapshots = [e['file_hashes'] for e in events if e['input'].get('hook_event_name') == 'PostToolUse' and 'file_hashes' in e]
                             self.assertTrue(snapshots, 'the real PostToolUse observer must capture file hashes')
                             self.assertEqual(snapshots[-1], {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in ('value.py','test_value.py')})
-                        if role == 'difficulty-evaluator':
-                            self.assertEqual(data['result']['score'], 1)
+                        if role == 'code-reviewer':
+                            self.assertEqual(data['phase'], 'complete')
                             if probe_switch:
                                 # switch_model is supplied by the ChatGPT-backed
                                 # runtime, not this local simulated provider. Its
@@ -280,7 +274,7 @@ class RoleRuntime(unittest.TestCase):
                                 switch_outputs = [x for r in parent_requests_after for x in r['input'] if x.get('type') == 'function_call_output' and x.get('call_id') == 'switch']
                                 self.assertTrue(any('unsupported call: switch_model' in str(x) for x in switch_outputs), switch_outputs)
                                 self.assertEqual((parent_requests_after[-1]['model'], parent_requests_after[-1]['reasoning']['effort']), ('gpt-5.6-sol','high'))
-                        if role in ('code-reviewer','deep-reviewer'):
+                        if role == 'code-reviewer':
                             proof = json.loads(next((root / '.codex/tmp').glob('independent-review.*.json')).read_text())
                             self.assertEqual(proof['result']['status'], 'reviewed')
                         result = dict(role=child["agentRole"], model=child_request["model"], effort=child_request["reasoning"]["effort"], hook_events=len(events), contracts_delivered=True)
@@ -323,18 +317,18 @@ class RoleRuntime(unittest.TestCase):
         self.assertTrue((REPO/'skills/SUBAGENT_RULES.md').is_file())
 
     def test_untrusted_project_does_not_load_roles_or_hooks(self):
-        self.run_fixture('difficulty-evaluator', trusted=False)
+        self.run_fixture('code-reviewer', trusted=False)
 
     def test_unsupported_switch_does_not_change_the_model(self):
-        self.run_fixture('difficulty-evaluator', probe_switch=True)
+        self.run_fixture('code-reviewer', probe_switch=True)
 
     def test_failed_emit_does_not_spawn_from_internal_state(self):
-        self.run_fixture('difficulty-evaluator', fail_emit=True)
+        self.run_fixture('code-reviewer', fail_emit=True)
 
     def test_validated_unstage_runs_through_the_real_policy(self):
         for command in ('git restore --staged .', 'git restore --staged --source=HEAD -- value.py'):
             with self.subTest(command=command):
-                print(self.run_fixture('difficulty-evaluator', unstage=command), flush=True)
+                print(self.run_fixture('code-reviewer', unstage=command), flush=True)
 
 if __name__ == "__main__":
     import sys
@@ -342,6 +336,6 @@ if __name__ == "__main__":
         # This extra diagnostic intentionally fails when the runtime inherits
         # workspace-write despite a role's read-only declaration. It is NOT
         # counted as successful role registration or silently skipped.
-        RoleRuntime().run_fixture('difficulty-evaluator', probe_permissions=True)
+        RoleRuntime().run_fixture('code-reviewer', probe_permissions=True)
     else:
         unittest.main()
