@@ -24,7 +24,13 @@ class AgentInput(unittest.TestCase):
         path.write_text(path.read_text().replace("[agent_name]", "codex"))
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
         self.state = self.root / ".codex/tmp/agent-input.TEST.json"
-        self.brief = {"repository": str(self.root), "implementation_policy": "Change double to return zero for negative inputs."}
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.root, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=self.root, check=True)
+        (self.root / ".gitignore").write_text(".codex/\n.agents/\n")
+        subprocess.run(["git", "add", ".gitignore"], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "baseline"], cwd=self.root, check=True)
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
+        self.brief = {"repository": str(self.root), "review_base": head, "review_head": head, "requirements": "Check value conversion."}
 
     def call(self, name, event="PreToolUse", **kwargs):
         command = ["bash", str(self.hooks / ("agent-input.sh" if name == "agent-input.py" else name))]
@@ -32,7 +38,7 @@ class AgentInput(unittest.TestCase):
                               text=True, capture_output=True, cwd=self.root)
 
     def prepare(self, brief=None):
-        command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "difficulty-evaluator", json.dumps(self.brief if brief is None else brief)])
+        command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "code-reviewer", json.dumps(self.brief if brief is None else brief)])
         response = self.call("agent-input.py", tool_name="Bash", tool_input={"command": command})
         self.assertEqual(response.returncode, 0, response.stderr)
         output = json.loads(response.stdout)["hookSpecificOutput"]
@@ -41,7 +47,10 @@ class AgentInput(unittest.TestCase):
         return json.loads(emitted.stdout)
 
     def launch(self, inputs):
-        return self.call("require-implementer.sh", tool_name="collaborationspawn_agent", tool_input=inputs)
+        guard = self.call("require-implementer.sh", tool_name="collaborationspawn_agent", tool_input=inputs)
+        if guard.stdout:
+            return guard
+        return self.call("independent-review.sh", tool_name="collaborationspawn_agent", tool_input=inputs)
 
     def denied(self, response):
         self.assertEqual(response.returncode, 0, response.stderr)
@@ -52,48 +61,48 @@ class AgentInput(unittest.TestCase):
         self.assertEqual(json.loads(inputs["message"]), self.brief)
         inputs["message"] = "gAAAAA_opaque_transport_fixture_not_plaintext"
         self.assertEqual(self.launch(inputs).stdout, "")
-        started = self.call("load-operation-context.sh", "SubagentStart", agent_type="difficulty-evaluator", agent_id="child")
+        started = self.call("load-operation-context.sh", "SubagentStart", agent_type="code-reviewer", agent_id="child")
         context = json.loads(started.stdout)["hookSpecificOutput"]["additionalContext"]
-        self.assertIn(json.dumps(self.brief, ensure_ascii=False), context)
+        self.assertIn(self.brief["requirements"], context)
         self.assertNotIn(inputs["message"], context)
         self.assertIn("子の共通制約", context)
-        self.assertIn("実装難度の独立評価", context)
+        self.assertIn("読み取り専用の独立コードレビュー", context)
         self.assertEqual(json.loads(self.state.read_text())["child_id"], "child")
         self.denied(self.launch(inputs))
-        result = {"score": 2, "reason": "Local behavior change with a boundary test."}
-        self.call("agent-input.py", "SubagentStop", agent_type="difficulty-evaluator", agent_id="other", last_assistant_message=json.dumps(result))
+        result = {"status": "incomplete"}
+        self.call("agent-input.py", "SubagentStop", agent_type="code-reviewer", agent_id="other", last_assistant_message=json.dumps(result))
         self.assertNotIn("result", json.loads(self.state.read_text()))
-        self.call("agent-input.py", "SubagentStop", agent_type="difficulty-evaluator", agent_id="child", last_assistant_message=json.dumps(result))
-        self.assertEqual(json.loads(self.state.read_text())["result"], result)
+        self.call("agent-input.py", "SubagentStop", agent_type="code-reviewer", agent_id="child", last_assistant_message=json.dumps(result))
+        self.assertEqual(json.loads(self.state.read_text())["phase"], "complete")
         self.denied(self.launch(inputs))
 
     def test_missing_preparation_role_spoof_and_changed_token_fail(self):
-        inputs = {"agent_type": "difficulty-evaluator", "task_name": "difficulty", "fork_turns": "none", "message": "opaque"}
+        inputs = {"agent_type": "code-reviewer", "task_name": "review", "fork_turns": "none", "message": "opaque"}
         self.denied(self.launch(inputs))
         prepared = self.prepare()
-        self.denied(self.launch(dict(prepared, message=json.dumps(dict(self.brief, implementation_policy="Different request")))))
+        self.denied(self.launch(dict(prepared, message=json.dumps(dict(self.brief, requirements="Different request")))))
         prepared["message"] = "opaque"
         for changes in ({"agent_type": "default"}, {"agent_type": None}, {"task_name": "different"}, {"fork_turns": "all"}):
             self.denied(self.launch(dict(prepared, **changes)))
 
     def test_invalid_json_shape_repository_and_length_fail_before_launch(self):
         for raw in ("not json", "[]", json.dumps(dict(self.brief, extra=True)), json.dumps(dict(self.brief, repository="/elsewhere")),
-                    json.dumps(dict(self.brief, implementation_policy="x" * 4001)),
-                    '{"repository":"x","repository":"y","implementation_policy":"p"}'):
-            command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "difficulty-evaluator", raw])
+                    json.dumps(dict(self.brief, requirements=" ")),
+                    '{"repository":"x","repository":"y","requirements":"p"}'):
+            command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "code-reviewer", raw])
             self.denied(self.call("agent-input.py", tool_name="Bash", tool_input={"command": command}))
-        valid = dict(self.brief, implementation_policy="日" * 4000)
+        valid = dict(self.brief, requirements="日" * 4000)
         self.assertEqual(json.loads(self.prepare(valid)["message"]), valid)
 
     def test_without_preparation_hook_script_fails(self):
-        result = subprocess.run(["python3", str(self.hooks / "agent-input.py"), "prepare", "difficulty-evaluator", json.dumps(self.brief)],
+        result = subprocess.run(["python3", str(self.hooks / "agent-input.py"), "prepare", "code-reviewer", json.dumps(self.brief)],
                                 cwd=self.root, text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.state.exists())
 
     def test_prepare_json_is_data_not_a_shell_operation(self):
-        brief = dict(self.brief, implementation_policy='Add denial tests for rm .env ; mkdir .codex/tmp ; sed -i yarn.lock')
-        command = shlex.join(['python3', '.codex/hooks/shell/agent-input.py', 'prepare', 'difficulty-evaluator', json.dumps(brief)])
+        brief = dict(self.brief, requirements='Add denial tests for rm .env ; mkdir .codex/tmp ; sed -i yarn.lock')
+        command = shlex.join(['python3', '.codex/hooks/shell/agent-input.py', 'prepare', 'code-reviewer', json.dumps(brief)])
         for hook in ('protect-git.sh', 'protect-config.sh', 'protect-env.sh', 'protect-locks.sh'):
             response = self.call(hook, tool_name='Bash', tool_input={'command': command})
             self.assertEqual(response.returncode, 0, response.stderr)
@@ -102,7 +111,7 @@ class AgentInput(unittest.TestCase):
 
     def test_preparation_normalization_cannot_hide_real_operations(self):
         for command in ('rm .codex/agent-input.py',
-                        'python3 .codex/hooks/shell/agent-input.py prepare difficulty-evaluator "invalid" > .codex/config.toml',
+                        'python3 .codex/hooks/shell/agent-input.py prepare code-reviewer "invalid" > .codex/config.toml',
                         'bash .codex/hooks/shell/outside.sh "rm .codex/agent-input.py"'):
             self.denied(self.call('protect-config.sh', tool_name='Bash', tool_input={'command': command}))
         helper = self.hooks / 'agent-input.py'
@@ -119,7 +128,7 @@ class AgentInput(unittest.TestCase):
                 self.state.symlink_to(sentinel)
             else:
                 os.link(sentinel, self.state)
-            command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "difficulty-evaluator", json.dumps(self.brief)])
+            command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "code-reviewer", json.dumps(self.brief)])
             self.denied(self.call("agent-input.py", tool_name="Bash", tool_input={"command": command}))
             self.assertEqual(sentinel.read_text(), "unchanged")
             self.state.unlink()
