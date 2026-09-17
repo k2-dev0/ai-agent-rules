@@ -1,6 +1,14 @@
 # Context配信検証
 
-## 2026-09-16: 暗号化輸送と実行経路の修正
+## 2026-09-17: CodexのDeepSeek委譲への移行
+
+Codexは難度評価・deep-reviewer・nesting-reviewerを廃止し、code-reviewerとdesign-reviewerをAstra / xhighへ統一した。主担当modelは固定せず、機械的変更は現在値を維持する。Claudeの配布は従来動作を維持する。
+
+`test_role_runtime.py`の7件をsandbox外のローカル模擬APIと実CLIで実行し、両roleのmodel/effort要求・native metadata・配布契約・レビュー受理、未信頼・準備失敗・未対応切替・index復元を確認した。実モデルの判断精度を確認した結果ではない。
+
+`test_deepseek_worker.py`は模擬MCP結果で変更前HEAD、非同期予約、親の編集・commit・子起動拒否、結果の所有者・task・call照合、旧wait拒否、取消、状態path alias拒否を検査する。実bridgeは別タスクで開発中のため、DSHとの接続・privacy・継続・停止は未検証。旧difficulty/workflowの実モデルprobeは現動線の根拠に使わない。
+
+## 旧版: 2026-09-16の暗号化輸送と実行経路の修正
 
 アプリ内蔵Codex 0.154.0-alpha.6.2で、正しい2キーJSONを渡してもPreToolUseには暗号化されたmessageが届き、旧hookが子の開始前に拒否することを再現した。検証済み入力を固定し、生成された起動引数・native role・実child IDと結び付けてSubagentStartから渡す方式へ変更した。JSONのキー・型・4000文字制限、レビューのSHA・要求hash・結果照合は維持する。
 
