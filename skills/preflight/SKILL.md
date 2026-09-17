@@ -9,7 +9,7 @@ user-invocable: false
 
 ファイル、Git、DB、外部サービス、依存関係を変更せず、結果は会話内へ返す。ユーザーへ直接質問しない。
 
-調査・要件判断は[agent_name]が行い、サブエージェントへ調査を委任しない。確認済み事実は`path:line`を付け、推論・未確認と区別する。
+Codexは[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)でrepositoryの読み取り調査を依頼し、親が要件判断する。Claudeはメインが調査・要件判断を行う。確認済み事実は`path:line`を付け、推論・未確認と区別する。
 
 ## 手順
 
