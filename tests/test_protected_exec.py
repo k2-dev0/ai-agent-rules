@@ -142,8 +142,7 @@ class ProtectedExec(unittest.TestCase):
                           'else: protected = False\n'
                           'print(json.dumps({"argv": sys.argv[1:], "input": sys.stdin.read(), "agent": os.environ.get("CONTEXT_AGENT"), "protected": protected}))\n')
         context = self.parent / "context dictionary"
-        agent_lsp = self.parent / "agent-lsp-ts"
-        for program in (fake_bin / "node", fake_bin / "npx", context / "node_modules/.bin/tsx"):
+        for program in (fake_bin / "npx", context / "node_modules/.bin/tsx"):
             program.parent.mkdir(parents=True, exist_ok=True)
             program.write_text("#!/bin/sh\nexec python3 " + shlex.quote(str(driver)) + ' "$@"\n')
             program.chmod(0o755)
@@ -153,14 +152,14 @@ class ProtectedExec(unittest.TestCase):
             else:
                 source = (REPO / "codex/config.toml").read_text()
                 configs = {}
-                for name in ("chrome-devtools", "tsgo-lsp", "context-dictionary"):
+                for name in ("chrome-devtools", "context-dictionary"):
                     section = source.split("[mcp_servers." + name + "]\n", 1)[1].split("\n[", 1)[0]
                     # These shipped fields are basic strings/lists; strict TOML
                     # parsing is independently exercised by verify-all's CLI.
                     configs[name] = dict(command=ast.literal_eval(re.search(r'^command = (.+)$', section, re.M)[1]), args=ast.literal_eval(re.search(r'^args = (\[.*?\])\n', section, re.M | re.S)[1]))
             for name, config in configs.items():
                 with self.subTest(agent=agent, server=name):
-                    args = [a.replace("__CONTEXT_DICTIONARY_ROOT__", str(context)).replace("__AGENT_LSP_TS_ROOT__", str(agent_lsp)) for a in config["args"]]
+                    args = [a.replace("__CONTEXT_DICTIONARY_ROOT__", str(context)) for a in config["args"]]
                     self.assertEqual(config["command"], "bash")
                     self.assertEqual(args[0], f".{agent}/hooks/shell/mcp-protected.sh")
                     environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"], CONTEXT_AGENT=agent)
