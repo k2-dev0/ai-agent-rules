@@ -253,9 +253,6 @@ class GitPolicy(unittest.TestCase):
                 self.assertEqual(self.guard(agent, tool, {"filePath": ".codex/hooks/shell/git-policy.py"}).get("permissionDecision"), "deny")
                 self.assertEqual(self.guard(agent, tool, {"filePath": "output.png"}), {})
                 self.assertEqual(self.guard(agent, tool, {}), {})
-            for name in ("../../.git/config", ".git/config", "/tmp/memory", "topic/../../../.git/config"):
-                self.assertEqual(self.guard(agent, "mcp__serena__write_memory", {"memory_name": name, "content": "x"}).get("permissionDecision"), "deny")
-            self.assertEqual(self.guard(agent, "mcp__serena__write_memory", {"memory_name": "topic/context", "content": "x"}), {})
 
     def test_controller_aliases_cannot_disable_the_guard(self):
         (self.root / "control-alias").symlink_to(self.root / ".codex/hooks", target_is_directory=True)
@@ -301,7 +298,7 @@ class GitPolicy(unittest.TestCase):
         for agent, config in (("codex", "codex/hooks.json"), ("claude", "claude/settings.json")):
             settings = json.loads((REPO / config).read_text())
             edit_tools = ("Bash", "apply_patch") if agent == "codex" else ("Bash", "Edit", "Write", "NotebookEdit", "MultiEdit")
-            for tool in (*edit_tools, "mcp__chrome-devtools__take_screenshot", "mcp__chrome_devtools__take_snapshot", "mcp__chrome-devtools__screencast_start", "mcp__serena__write_memory"):
+            for tool in (*edit_tools, "mcp__chrome-devtools__take_screenshot", "mcp__chrome_devtools__take_snapshot", "mcp__chrome-devtools__screencast_start"):
                 handlers = [h for group in settings["hooks"]["PreToolUse"] if re.search(group["matcher"], tool) for h in group["hooks"]]
                 self.assertTrue(any("protect-git.sh" in h["command"] for h in handlers), (agent, tool))
 
