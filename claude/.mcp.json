@@ -1,20 +1,5 @@
 {
   "mcpServers": {
-    "serena": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        ".claude/hooks/shell/mcp-protected.sh",
-        "uvx",
-        "--from",
-        "git+https://github.com/oraios/serena@29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2",
-        "serena",
-        "start-mcp-server",
-        "--context",
-        "claude-code",
-        "--project-from-cwd"
-      ]
-    },
     "chrome-devtools": {
       "type": "stdio",
       "command": "bash",
