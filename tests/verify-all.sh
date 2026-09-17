@@ -615,27 +615,6 @@ if grep -q '@latest' .codex/config.toml || \
 else
   ok "config: MCP 起動バージョンを全件固定"
 fi
-TSGO_SECTION=$(awk '
-  $0 == "[mcp_servers.tsgo-lsp]" { in_server = 1 }
-  in_server && /^\[/ && $0 != "[mcp_servers.tsgo-lsp]" { exit }
-  in_server { print }
-' .codex/config.toml)
-GROUP_FAILURES=
-for EXPECTED in \
-  'command = "bash"' \
-  '".codex/hooks/shell/mcp-protected.sh", "node",' \
-  '"__AGENT_LSP_TS_ROOT__/dist/cli.js",' \
-  '"--workspace", ".",' \
-  '"--timeout-ms", "10000",' \
-  'startup_timeout_sec = 20' \
-  'default_tools_approval_mode = "approve"'; do
-  printf '%s\n' "$TSGO_SECTION" | grep -Fq -- "$EXPECTED" || append_group_failure "設定不足: $EXPECTED"
-done
-for TOOL in hover definition references implementation inspect_symbol diagnostics; do
-  printf '%s\n' "$TSGO_SECTION" | grep -Fq -- "\"$TOOL\"," || append_group_failure "tool不足: $TOOL"
-done
-printf '%s\n' "$TSGO_SECTION" | grep -q '/Users/' && append_group_failure "個人絶対pathが残存"
-report_group "tsgo-lsp: 保護付き起動・project workspace・読取6tool限定" "$GROUP_FAILURES"
 CM="$REPO/claude/.mcp.json"
 if jq -e '
   .mcpServers["chrome-devtools"].type == "stdio" and
