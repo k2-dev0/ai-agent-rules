@@ -1,10 +1,11 @@
 # メインモデルの選択
 
+Claude用。Codexは[作業分担](WORKFLOW_ROUTING.md)を使い、難度評価を起動しない。
+
 変更を伴う依頼だけに使う。説明・調査だけなら現在モデルで行い、ユーザー指定があれば評価せず指定を使う。
 
 1. 現在モデルで調査し、変更範囲・整合性条件・検証方法を含む実装方針を確定する
 2. テストを含む最初の編集前に[子の起動手順](SUBAGENT_RULES.md)を読み、`difficulty-evaluator`へ`{"repository":"<絶対path>","implementation_policy":"<実装方針>"}`だけを渡す
-   - Codexは`python3 .codex/hooks/shell/agent-input.py prepare difficulty-evaluator '<2キーJSON>'`で入力を検査・固定し、生成された引数を変更せず`spawn_agent`へ渡す
    - Claudeはこの2キーだけのobjectを1回serializeしたJSON文字列を`prompt`に入れ、前後の説明、code fence、wrapper object、追加keyを含めず、role指定は外側のtool引数に置く
    - `implementation_policy`はJSONデコード後4000文字以内にまとめる
    - 新規実装や実装がないrepositoryでは、作成するcomponent、観測可能な入力・出力・error、状態・外部境界、検証方法を含める
