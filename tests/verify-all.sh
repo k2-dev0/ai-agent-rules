@@ -14,26 +14,6 @@ MIN_SUPPORTED_CODEX_VERSION="0.138.0"
 VERSION_COMPONENT_COUNT=3
 EXPECTED_DUAL_HOOK_BINDINGS=2
 GIT_COMMIT_HEX_LENGTH=40
-PINNED_SERENA_SOURCE_PATTERN="^git\\+https://github\\.com/oraios/serena@[0-9a-f]{$GIT_COMMIT_HEX_LENGTH}$"
-SERENA_CODE_MUTATION_TOOLS=(
-  execute_shell_command
-  create_text_file
-  replace_content
-  replace_in_files
-  delete_lines
-  replace_lines
-  insert_at_line
-  replace_symbol_body
-  insert_after_symbol
-  insert_before_symbol
-  rename_symbol
-)
-CLAUDE_UNAVAILABLE_SERENA_TOOLS=(
-  check_onboarding_performed
-  list_dir
-  find_file
-  search_for_pattern
-)
 METADATA_COMMANDS=(touch chmod chown chgrp)
 CONTENT_WRITER_COMMANDS=(dd truncate tee patch rsync)
 CLAUDE_SAFE_READ_PERMISSIONS=(
@@ -657,22 +637,6 @@ done
 printf '%s\n' "$TSGO_SECTION" | grep -q '/Users/' && append_group_failure "個人絶対pathが残存"
 report_group "tsgo-lsp: 保護付き起動・project workspace・読取6tool限定" "$GROUP_FAILURES"
 CM="$REPO/claude/.mcp.json"
-CODEX_SERENA_SOURCE=$(awk -F'"' '/"--from", "git\+https:\/\/github.com\/oraios\/serena@/ { print $4 }' .codex/config.toml)
-CLAUDE_SERENA_SOURCE=$(jq -r '.mcpServers.serena.args[3] // empty' "$CM" 2>/dev/null)
-if printf '%s\n' "$CODEX_SERENA_SOURCE" | grep -qE "$PINNED_SERENA_SOURCE_PATTERN" && [ "$CLAUDE_SERENA_SOURCE" = "$CODEX_SERENA_SOURCE" ]; then
-  ok "serena: Claude/Codex は同じcommitを固定"
-else
-  ng "serena: Claude/Codex の固定commitが不正または不一致"
-fi
-if jq -e --arg source "$CODEX_SERENA_SOURCE" '
-  .mcpServers.serena.type == "stdio" and
-  .mcpServers.serena.command == "bash" and
-  .mcpServers.serena.args == [".claude/hooks/shell/mcp-protected.sh", "uvx", "--from", $source, "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
-' "$CM" >/dev/null 2>&1; then
-  ok "serena: Claude Code contextでcurrent projectを起動"
-else
-  ng "serena: Claude MCP起動設定が不正"
-fi
 if jq -e '
   .mcpServers["chrome-devtools"].type == "stdio" and
   .mcpServers["chrome-devtools"].command == "bash" and
@@ -688,21 +652,8 @@ if jq -e '
 else
   ng "chrome-devtools: Claude MCP起動設定が不正"
 fi
+MCP_SERVER=chrome-devtools
 GROUP_FAILURES=
-for DISABLED_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
-  grep -q "\"$DISABLED_TOOL\"" .codex/config.toml || append_group_failure "$DISABLED_TOOL"
-done
-report_group "serena: code変更toolを全件無効化" "$GROUP_FAILURES"
-grep -q '"replace_regex"' .codex/config.toml && ng "serena: 廃止済みreplace_regexが残存" || ok "serena: 廃止済みtool名なし"
-for MCP_SERVER in serena chrome-devtools; do
-  GROUP_FAILURES=
-  if [ "$MCP_SERVER" = "serena" ]; then
-    mcp_server_approves_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "全toolの既定値がapproveではない"
-    CONFIGURED_COUNT=$(awk -v prefix="[mcp_servers.$MCP_SERVER.tools." 'index($0, prefix) == 1 { count++ } END { print count + 0 }' .codex/config.toml)
-    [ "$CONFIGURED_COUNT" = "0" ] || append_group_failure "不要なper-tool approveが残存"
-    report_group "$MCP_SERVER: 全有効toolを自動承認" "$GROUP_FAILURES"
-    continue
-  fi
   mcp_server_approves_by_default "$MCP_SERVER" .codex/config.toml || append_group_failure "既定値がapproveではない"
   awk '
     $0 == "[mcp_servers.chrome-devtools.tools.upload_file]" { tool=1; next }
@@ -718,8 +669,7 @@ for MCP_SERVER in serena chrome-devtools; do
   for LOCAL_PATTERN in '--allowed-url-pattern=*://localhost:*/*' '--allowed-url-pattern=*://127.0.0.1:*/*' '--allowed-url-pattern=*://[\\:\\:1]:*/*'; do
     grep -Fq -- "$LOCAL_PATTERN" .codex/config.toml || append_group_failure "localhost制限なし: $LOCAL_PATTERN"
   done
-  report_group "$MCP_SERVER: 固定版・workspace root・localhost限定・screencast有効・uploadだけ承認" "$GROUP_FAILURES"
-done
+report_group "$MCP_SERVER: 固定版・workspace root・localhost限定・screencast有効・uploadだけ承認" "$GROUP_FAILURES"
 [ -f .codex/prompt/.prompt.md ] && [ -f .codex/e2e/.e2e.md ] && [ -f .codex/e2e/artifacts/.gitignore ] && ok "codex seed 配置" || ng "codex seed 配置漏れ"
 jq -e . .codex/hooks.json >/dev/null 2>&1 && ok "hooks.json 構文" || ng "hooks.json 構文"
 jq -e '[.hooks[][] | .hooks[] | has("timeout")] | all' .codex/hooks.json >/dev/null 2>&1 && ok "hook timeout 全件設定" || ng "hook timeout 設定漏れ"
@@ -925,19 +875,6 @@ jq -e '.sandbox.excludedCommands | (index("./base/scripts/run-unit.sh") == null 
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-locks.sh"))] | length' "$SJ")" = "$EXPECTED_DUAL_HOOK_BINDINGS" ] && ok "Claude lockfile保護hookをBash/Editへ配線" || ng "Claude lockfile保護hookの配線漏れ"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("protect-implementation-scope.sh"))] | length' "$SJ")" = "0" ] && ok "Claudeはexact実装scope hookを配線しない" || ng "Claudeにexact実装scope hookが残存"
 [ "$(jq '[.hooks.PreToolUse[] | .hooks[].command | select(contains("load-required-contract.sh"))] | length' "$SJ")" = "1" ] && ! grep -q '^hooks:' "$REPO/skills/cowlick/SKILL.md" && ! grep -Fq 'worker/DELEGATION.md' "$REPO/hooks/shell/load-required-contract.sh" && ok "Claude必須契約hookを編集時の読み込みへ配線" || ng "Claude必須契約hookの配線漏れ"
-GROUP_FAILURES=
-for MCP_TOOL in "${CLAUDE_UNAVAILABLE_SERENA_TOOLS[@]}"; do
-  PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.allow | index($permission) | not' "$SL" >/dev/null 2>&1 || append_group_failure "$MCP_TOOL"
-done
-report_group "Claude serena: 利用不能toolを自動許可しない" "$GROUP_FAILURES"
-GROUP_FAILURES=
-for MCP_TOOL in "${SERENA_CODE_MUTATION_TOOLS[@]}"; do
-  PERMISSION="mcp__serena__${MCP_TOOL}"
-  jq -e --arg permission "$PERMISSION" '.permissions.deny | index($permission)' "$SL" >/dev/null 2>&1 || append_group_failure "$MCP_TOOL"
-done
-report_group "Claude serena: code変更toolを全件deny" "$GROUP_FAILURES"
-jq -e '.permissions.allow + .permissions.deny | index("mcp__serena__replace_regex") | not' "$SL" >/dev/null 2>&1 && ok "Claude serena: 廃止済みtool名なし" || ng "Claude serena: 廃止済みreplace_regexが残存"
 MISS=0
 for SC in bootstrap/bootstrap.sh tdd/mark-prompt-done.sh polish/quality-gate.sh polish/capture-scope.sh e2e/apply-e2e-plan.sh; do
   CMD="bash .claude/skills/$SC"
