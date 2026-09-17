@@ -117,40 +117,46 @@ class ContextDelivery(unittest.TestCase):
                     outputs = configured("PreToolUse", "READ_PARENT", tool_name="Read", tool_input={"file_path": str(skilldir / name)})
                     self.assertFalse(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs))
                     self.assertTrue((skilldir / name).read_text().strip())
-                difficulty_input = {
-                    role_key: "difficulty-evaluator", "fork_turns": "none",
-                    input_key: json.dumps({"repository": str(root), "implementation_policy": "Implement value conversion."}),
-                }
-                parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)
-                parent_text = metric("difficulty_parent", parent)
-                self.assertEqual(parent_text, [])
-                self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)), [])
-                malformed = dict(difficulty_input, **{input_key: "please evaluate this task"})
-                rejected = configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=malformed)
-                self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in rejected))
-                self.assertEqual(visible(configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=difficulty_input)), [])
-                launch_tools = ("Agent", "spawn_agent", "collaboration.spawn_agent", "functions.spawn_agent", "collaborationspawn_agent") if agent == "codex" else ("Agent",)
-                for launch_tool in launch_tools:
-                    for role_fields in ({}, {"agent_role": None}, {"agent_role": "difficulty-evaluator"}, {role_key: "default"}):
-                        untyped = dict(task_name="difficulty_review", nickname="difficulty-evaluator", message="Act as difficulty-evaluator", fork_turns="none", **role_fields)
-                        outputs = configured("PreToolUse", "UNTYPED", tool_name=launch_tool, tool_input=untyped)
-                        self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), (agent, launch_tool, untyped))
-                        self.assertFalse(any("実装難度の独立評価" in t for t in visible(outputs)))
                 if agent == "codex":
-                    for tool in ("collaboration.followup_task", "collaboration.resume_agent", "spawn_agents_on_csv", "send_input", "functions.send_input", "send_message", "collaboration.send_message", "collaborationsend_message", "send_message_to_agent"):
-                        outputs = configured("PreToolUse", "REUSE", tool_name=tool, tool_input={"target": "old-child", "message": "try again"})
-                        self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), tool)
-                    self.assertEqual(configured("PreToolUse", "UNRELATED_MESSAGE", tool_name="mcp__chat__send_message", tool_input={"message": "An explicitly requested app message"}), [])
-                child_text = metric("difficulty_child", configured(
-                    "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="difficulty", agent_type="difficulty-evaluator",
-                ))
-                self.assertEqual(len(child_text), 1)
-                self.assertIn("実装難度の独立評価", child_text[0])
-                self.assertIn((skilldir / "CHILD_RULES.md").read_text(), child_text[0])
-                self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
-                self.assertNotIn("サブエージェント", child_text[0])
-                self.assertNotIn("メインモデルの選択", child_text[0])
-                configured("SubagentStop", "FLOW", agent_id="difficulty", agent_type="difficulty-evaluator", last_assistant_message='{"score":2,"reason":"Local change."}')
+                    for removed in ("difficulty-evaluator", "deep-reviewer", "nesting-reviewer"):
+                        rejected = configured("PreToolUse", "REMOVED", tool_name=native_tool,
+                                              tool_input={role_key: removed, "fork_turns": "none", input_key: "{}"})
+                        self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in rejected))
+                else:
+                    difficulty_input = {
+                        role_key: "difficulty-evaluator", "fork_turns": "none",
+                        input_key: json.dumps({"repository": str(root), "implementation_policy": "Implement value conversion."}),
+                    }
+                    parent = configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)
+                    parent_text = metric("difficulty_parent", parent)
+                    self.assertEqual(parent_text, [])
+                    self.assertEqual(visible(configured("PreToolUse", "FLOW", event_cwd=flow_cwd, tool_name=native_tool, tool_input=difficulty_input)), [])
+                    malformed = dict(difficulty_input, **{input_key: "please evaluate this task"})
+                    rejected = configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=malformed)
+                    self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in rejected))
+                    self.assertEqual(visible(configured("PreToolUse", "BAD_DIFFICULTY", tool_name=native_tool, tool_input=difficulty_input)), [])
+                    launch_tools = ("Agent", "spawn_agent", "collaboration.spawn_agent", "functions.spawn_agent", "collaborationspawn_agent") if agent == "codex" else ("Agent",)
+                    for launch_tool in launch_tools:
+                        for role_fields in ({}, {"agent_role": None}, {"agent_role": "difficulty-evaluator"}, {role_key: "default"}):
+                            untyped = dict(task_name="difficulty_review", nickname="difficulty-evaluator", message="Act as difficulty-evaluator", fork_turns="none", **role_fields)
+                            outputs = configured("PreToolUse", "UNTYPED", tool_name=launch_tool, tool_input=untyped)
+                            self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), (agent, launch_tool, untyped))
+                            self.assertFalse(any("実装難度の独立評価" in t for t in visible(outputs)))
+                    if agent == "codex":
+                        for tool in ("collaboration.followup_task", "collaboration.resume_agent", "spawn_agents_on_csv", "send_input", "functions.send_input", "send_message", "collaboration.send_message", "collaborationsend_message", "send_message_to_agent"):
+                            outputs = configured("PreToolUse", "REUSE", tool_name=tool, tool_input={"target": "old-child", "message": "try again"})
+                            self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in outputs), tool)
+                        self.assertEqual(configured("PreToolUse", "UNRELATED_MESSAGE", tool_name="mcp__chat__send_message", tool_input={"message": "An explicitly requested app message"}), [])
+                    child_text = metric("difficulty_child", configured(
+                        "SubagentStart", "FLOW", event_cwd=flow_cwd, agent_id="difficulty", agent_type="difficulty-evaluator",
+                    ))
+                    self.assertEqual(len(child_text), 1)
+                    self.assertIn("実装難度の独立評価", child_text[0])
+                    self.assertIn((skilldir / "CHILD_RULES.md").read_text(), child_text[0])
+                    self.assertNotIn("WRONG_PRODUCT_CONTEXT", child_text[0])
+                    self.assertNotIn("サブエージェント", child_text[0])
+                    self.assertNotIn("メインモデルの選択", child_text[0])
+                    configured("SubagentStop", "FLOW", agent_id="difficulty", agent_type="difficulty-evaluator", last_assistant_message='{"score":2,"reason":"Local change."}')
 
                 review_brief = {
                     "repository": str(root), "review_base": head, "review_head": head,
@@ -197,11 +203,11 @@ class ContextDelivery(unittest.TestCase):
                 self.assertIn('重大度基準がありません', unavailable[0])
                 severity.with_suffix('.missing').rename(severity)
 
-                contract = skilldir / "DIFFICULTY_CONTRACT.md"
+                contract = skilldir / "CODE_REVIEW_CONTRACT.md"
                 missing = contract.with_suffix(".missing")
                 contract.rename(missing)
                 unavailable = visible(configured(
-                    "SubagentStart", "MISSING", agent_id="missing", agent_type="difficulty-evaluator",
+                    "SubagentStart", "MISSING", agent_id="missing", agent_type="code-reviewer",
                 ))
                 self.assertEqual(len(unavailable), 1)
                 self.assertIn("成功扱いせず失敗", unavailable[0])
