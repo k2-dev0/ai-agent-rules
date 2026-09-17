@@ -68,7 +68,7 @@ case "$EVENT" in
     ;;
   PreToolUse)
     case "$TOOL" in
-      Bash)
+      Bash|mcp__deepseek-worker__start_task|mcp__deepseek_worker__start_task|mcp__deepseek-worker__continue_task|mcp__deepseek_worker__continue_task)
         # A shell script may edit without using Edit/apply_patch. Capture before
         # any shell execution; recording a base is not a review requirement or
         # evidence that the command changed a file.
@@ -76,6 +76,11 @@ case "$EVENT" in
           BASE=$(head) || exit 0
           save "$(jq -cn --arg base "$BASE" '{base:$base,generation:0,paths:[]}')"
         fi
+        case "$TOOL" in
+          mcp__deepseek*)
+            DATA=$(cat "$STATE")
+            save "$(printf '%s' "$DATA" | jq 'del(.result, .pending) | .generation = ((.generation // 0) + 1)')" ;;
+        esac
         ;;
       Edit|Write|MultiEdit|NotebookEdit|apply_patch)
         PATHS=$(hook_file_paths)
