@@ -290,18 +290,6 @@ def inspect(payload, outside_payload=False):
             check_path(inputs["filePath"], cwd, protected)
             check_controller(inputs["filePath"], cwd)
         return
-    if tool == "mcp__serena__write_memory":
-        names = [inputs[k] for k in ("memory_name", "memory_file_name") if k in inputs]
-        if not names:
-            raise Denied("memoryの保存先を確認できません。")
-        for name in names:
-            if not isinstance(name, str) or not name or name.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", name) or any(part.casefold() in ("..", ".git") for part in name.replace("\\", "/").split("/")):
-                raise Denied("memory名から保存領域や.gitへ移動することは禁止です。")
-            if not name.startswith("global/"):
-                destination = str(Path(".serena/memories") / (name + ".md"))
-                check_path(destination, cwd, protected)
-                check_controller(destination, cwd)
-        return
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"):
         if tool == "apply_patch":
             patch = inputs.get("command") if isinstance(inputs, dict) else inputs
