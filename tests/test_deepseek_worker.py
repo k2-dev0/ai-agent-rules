@@ -143,7 +143,7 @@ class Worker(unittest.TestCase):
         root_settings = config.split("[", 1)[0]
         self.assertNotRegex(root_settings, r"(?m)^model(?:_reasoning_effort)?\s*=")
         section = config.split("[mcp_servers.deepseek-worker]", 1)[1].split("\n[", 1)[0]
-        self.assertIn('args = [".codex/hooks/shell/mcp-protected.sh", "deepseek-bridge"]', section)
+        self.assertIn('args = [".codex/hooks/shell/deepseek-launch.sh", "deepseek-bridge"]', section)
         self.assertIn('env_vars = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"]', section)
         self.assertIn('tool_timeout_sec = 75', section)
         self.assertIn('enabled_tools = ["start_task", "wait_task", "continue_task", "abort_task"]', section)
@@ -157,6 +157,38 @@ class Worker(unittest.TestCase):
         self.git("symbolic-ref", "HEAD", "refs/heads/unborn")
         self.denied(self.call(brief="implement"))
         self.assertFalse(self.state.exists())
+
+    def test_cleanup_failure_never_releases_parent_writer(self):
+        self.call(brief="implement")
+        self.post()
+        self.call("wait_task", task_id="task-1")
+        result = {"task_id": "task-1", "status": "failed",
+                  "error": {"class": "abort_error", "message": "Runtime cleanup failed"}}
+        output = self.call("wait_task", event="PostToolUse", task_id="task-1",
+                           result={"structuredContent": result})
+        self.assertFalse(output[0]["continue"])
+        self.assertTrue(json.loads(self.state.read_text())["busy"])
+        for action, inputs in (("Bash", {"command": "git add code.txt"}),
+                               ("apply_patch", {"command": "patch"}),
+                               ("spawn_agent", {"agent_type": "code-reviewer"}),
+                               ("start_task", {"brief": "second"})):
+            self.denied(self.call(action, **inputs))
+
+    def test_failed_requires_a_known_non_cleanup_error(self):
+        self.call(brief="implement")
+        self.post()
+        for error in (None, {}, {"class": "unknown_error"}):
+            self.call("wait_task", task_id="task-1")
+            result = {"task_id": "task-1", "status": "failed", "error": error}
+            output = self.call("wait_task", event="PostToolUse", task_id="task-1",
+                               result={"content": [{"type": "text", "text": json.dumps(result)}]})
+            self.assertFalse(output[0]["continue"])
+            self.assertTrue(json.loads(self.state.read_text())["busy"])
+        self.call("wait_task", task_id="task-1")
+        result["error"] = {"class": "authentication_error", "message": "Invalid API key"}
+        self.assertEqual(self.call("wait_task", event="PostToolUse", task_id="task-1",
+                                  result={"structuredContent": result}), [])
+        self.assertFalse(json.loads(self.state.read_text())["busy"])
 
 
 if __name__ == "__main__":
