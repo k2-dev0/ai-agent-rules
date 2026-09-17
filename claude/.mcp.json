@@ -26,6 +26,16 @@
       "env": {
         "CONTEXT_AGENT": "claude"
       }
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        ".claude/hooks/shell/mcp-protected.sh",
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@3.2.5"
+      ]
     }
   }
 }
