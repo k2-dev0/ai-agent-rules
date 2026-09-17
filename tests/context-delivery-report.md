@@ -1,5 +1,13 @@
 # Context配信検証
 
+## 2026-09-17追加: 実bridgeとの統合
+
+実bridgeとDSH 0.1.5rc1を配布の起動script・Git保護wrapper・非同期hookへ接続し、ローカル模擬APIで編集・unittest・Git書き込み拒否・同session継続・401・実shell取消を確認した。回収失敗のfault injectionでは、`failed + abort_error`を受けた親のwriter制限が維持されることを確認した。
+
+Macのsetuid `/bin/ps`問題はbridge側のlibproc互換処理で解消し、保護wrapperは維持した。API keyは環境変数を優先し、未設定時は`.zshrc`を出力抑止して読み込む。値をTOML・引数・logへ書かない。
+
+ユーザーの設定したkeyで、固定短文の公式API疎通（HTTP 200、10 tokens）と、保護付き実MCP/DSH経路の`deepseek-flash` / `max`疎通（期待JSON、completed）が成功した。後者は空の一時repositoryだけを使い、ユーザーコードを送っていない。長時間開発の品質・provider側の保存方針はこの結果に含めない。
+
 ## 2026-09-17: CodexのDeepSeek委譲への移行
 
 Codexは難度評価・deep-reviewer・nesting-reviewerを廃止し、code-reviewerとdesign-reviewerをAstra / xhighへ統一した。主担当modelは固定せず、機械的変更は現在値を維持する。Claudeの配布は従来動作を維持する。
