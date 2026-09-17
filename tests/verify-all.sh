@@ -248,6 +248,12 @@ else
   ng "DeepSeek非同期hookの保護が不正"
   cat "$S/deepseek-worker.out"
 fi
+if python3 "$SUITE/test_deepseek_launch.py" > "$S/deepseek-launch.out" 2>&1; then
+  ok "DeepSeek環境変数・zshrcの読込とsecret/rc出力の遮断を検証"
+else
+  ng "DeepSeek起動時の環境変数読込が不正"
+  cat "$S/deepseek-launch.out"
+fi
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
