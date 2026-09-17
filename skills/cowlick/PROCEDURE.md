@@ -2,6 +2,8 @@
 
 開始時に[判断基準](../IMPLEMENTATION_RULES.md)・該当規約と[設計書形式](DESIGN_FORMAT.md)の未読分を読む。
 
+Codexは[作業分担](../WORKFLOW_ROUTING.md)の設計工程に従う。追加のrepository調査だけDeepSeekへ渡し、設計判断と設計書更新は親が行う。
+
 | 条件 | 返却 |
 |---|---|
 | 同じ要件revisionの`preflight_ready`なし、対象変更、重大な未回答 | `preflight_required` |
