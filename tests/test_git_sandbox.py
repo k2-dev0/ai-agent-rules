@@ -25,6 +25,12 @@ class GitSandbox(unittest.TestCase):
             (root / ".git/HEAD").write_text("ref: refs/heads/main\n")
             (root / ".codex").mkdir()
             shutil.copyfile(REPO / "codex/config.toml", root / ".codex/config.toml")
+            (root / ".codex/prompt").mkdir()
+            prompt = root / ".codex/prompt/branch-example-prompt.md"
+            prompt.write_text("original")
+            (root / ".codex/e2e").mkdir()
+            e2e = root / ".codex/e2e/.e2e.md"
+            e2e.write_text("original")
             (root / ".claude/hooks/shell").mkdir(parents=True)
             controller = root / ".claude/hooks/shell/guard.sh"
             controller.write_text("unchanged")
@@ -51,15 +57,17 @@ try:
         (root / "hardlink").write_text("changed")
     elif op == "controller": (root / ".claude/hooks/shell/guard.sh").write_text("disabled")
     elif op == "review-state": (root / ".claude/tmp/independent-review.TEST.json").write_text("forged")
+    elif op == "prompt": (root / ".codex/prompt/branch-example-prompt.md").write_text("updated")
+    elif op == "e2e": (root / ".codex/e2e/.e2e.md").write_text("updated")
     elif op == "ordinary": (root / "ordinary").write_text("allowed")
     else: raise ValueError(op)
 except PermissionError:
-    sys.exit(0 if op != "ordinary" else 2)
+    sys.exit(2 if op in ("ordinary", "prompt", "e2e") else 0)
 except OSError as error:
-    if error.errno in (1, 13, 16, 30): sys.exit(0 if op != "ordinary" else 2)
+    if error.errno in (1, 13, 16, 30): sys.exit(2 if op in ("ordinary", "prompt", "e2e") else 0)
     raise
 else:
-    sys.exit(0 if op == "ordinary" else 3)
+    sys.exit(0 if op in ("ordinary", "prompt", "e2e") else 3)
 ''')
             # Pass the actual permission entries explicitly: sandbox's profile
             # resolver does not prove trusted project config loading.
@@ -82,7 +90,7 @@ else:
                     return "{" + ",".join(json.dumps(k) + "=" + inline(v) for k, v in value.items()) + "}"
                 return json.dumps(value)
             base = [cli, "sandbox", "-C", str(root), "-P", "distributed", "-c", "permissions=" + inline(policy)]
-            for operation in ("ordinary", "write", "copy", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink", "controller", "review-state"):
+            for operation in ("ordinary", "prompt", "e2e", "write", "copy", "symlink", "delete", "new", "rename-git", "rename-parent", "hardlink", "controller", "review-state"):
                 with self.subTest(operation=operation):
                     result = subprocess.run([*base, "--", sys.executable, str(program), str(root), operation], capture_output=True, text=True, timeout=30)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -91,6 +99,10 @@ else:
                     self.assertEqual(controller.read_text(), "unchanged")
                     self.assertEqual(state.read_text(), "unchanged")
                     self.assertFalse((root / ".git/new").exists())
+                    if operation == "prompt":
+                        self.assertEqual(prompt.read_text(), "updated")
+                    if operation == "e2e":
+                        self.assertEqual(e2e.read_text(), "updated")
 
 
 if __name__ == "__main__":
