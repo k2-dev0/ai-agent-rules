@@ -38,9 +38,14 @@ for agent in claude codex; do
   check grep -Fq '方針が変わる場合だけ' "$model_selection"
   check grep -Fq '対応する`PreModelSwitch`がない環境だけ' "$model_selection"
   check test -s "$target/$skill_root/DIFFICULTY_CONTRACT.md"
-  if [ "$agent" = codex ]; then difficulty_agent="$target/.codex/agents/difficulty-evaluator.toml"; else difficulty_agent="$target/.claude/agents/difficulty-evaluator.md"; fi
-  check grep -Fq '短い理由または入力エラーを返す' "$difficulty_agent"
-  check grep -Fq 'difficulty contract unavailable' "$difficulty_agent"
+  if [ "$agent" = claude ]; then
+    difficulty_agent="$target/.claude/agents/difficulty-evaluator.md"
+    check grep -Fq '短い理由または入力エラーを返す' "$difficulty_agent"
+    check grep -Fq 'difficulty contract unavailable' "$difficulty_agent"
+  else
+    check test ! -e "$target/.codex/agents/difficulty-evaluator.toml"
+    check test -s "$target/$skill_root/WORKFLOW_ROUTING.md"
+  fi
   check grep -Fq '成功時は`{"score":<1〜10の整数>,"reason":"<理由>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
   check grep -Fq 'evaluation input must be valid JSON' "$target/$skill_root/DIFFICULTY_CONTRACT.md"
@@ -262,8 +267,8 @@ for mode in edit commit; do
   fi
 done
 
-# ネスト検出役は実装workflow内でも新規起動できるが、権限・設定の上書きは拒否する。
-for agent in claude codex; do
+# Claudeのネスト検出役は従来の専用roleを維持する。
+for agent in claude; do
   cd "$TMP/$agent project"
   if [ "$agent" = codex ]; then
     role_key=agent_type
@@ -311,7 +316,7 @@ for agent in claude codex; do
   export CLAUDE_PROJECT_DIR=$PWD
   command="bash .$agent/hooks/shell/require-implementer.sh"
   if [ "$agent" = codex ]; then
-    roles='code-reviewer deep-reviewer design-reviewer difficulty-evaluator'
+    roles='code-reviewer design-reviewer'
     role_key=agent_type
     extension=toml
     contract=.agents/skills/CODE_REVIEW_CONTRACT.md
@@ -329,7 +334,7 @@ for agent in claude codex; do
     effort=high
     case "$agent:$role" in
       *:difficulty-evaluator) effort=medium ;;
-      codex:deep-reviewer|codex:design-reviewer) effort=xhigh ;;
+      codex:*) effort=xhigh ;;
     esac
     if [ "$role" = difficulty-evaluator ]; then
       if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
@@ -444,7 +449,7 @@ for tool_name in spawn_agent collaboration.spawn_agent functions.spawn_agent col
   input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{agent_type:"default",fork_turns:"none"}}')
   check implementer_denied "$input" '専用roleだけ'
 done
-for role in nesting-reviewer; do
+for role in code-reviewer; do
   input=$(jq -cn --arg cwd "$PWD" --arg role "$role" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:"spawn_agent",tool_input:{agent_type:$role,fork_turns:"none"}}')
   check test -z "$(printf '%s' "$input" | bash -c "$command")"
   for field in model reasoning_effort effort config model_provider; do
