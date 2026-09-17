@@ -147,42 +147,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex", default="codex")
     parser.add_argument("--timeout", type=int, default=240)
-    parser.add_argument("--case", choices=("difficulty", "workflow", "source-review"), default="difficulty")
+    parser.add_argument("--case", choices=("source-review",), default="source-review")
     args = parser.parse_args()
     output = Path(tempfile.mkdtemp(prefix="agent-workflow-live-")).resolve()
     root = prepare(output)
-    initial_head = subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
     print(str(output), flush=True)
-    prompt = (
-        "This is an isolated integration test. Do not edit files, commit, run tests, or use external services. "
-        "Read .agents/skills/MODEL_SELECTION.md and .agents/skills/SUBAGENT_RULES.md. "
-        "Use a fresh native difficulty-evaluator with only repository and implementation_policy in its JSON input. "
-        "The policy is: Change double in value.py to return zero for negative numeric inputs and preserve doubling for nonnegative inputs. "
-        "Wait for its final result, then report that result verbatim. Do not choose a model or implement the change in this test. "
-        "If the first launch is rejected, report the exact error and do not retry."
-    )
-    if args.case == 'workflow':
-        prompt = (
-            "Use tdd to change double in value.py to return zero for negative numeric inputs while preserving doubling for zero and positive inputs. "
-            "This is an isolated fixture; modify only value.py and test_value.py. Do not access other repositories or external services. "
-            "The selected test scenarios are already approved: negative input returns zero, zero returns zero, positive input is doubled. "
-            "Retain test_positive and add separate test_negative and test_zero unittest methods for these scenarios. "
-            "The existing test command is python3 -m unittest -v. No separate typecheck or lint command is configured; do not invent them. "
-            "Follow MODEL_SELECTION before the first edit, including real difficulty evaluation and any required model/effort switch. "
-            "Demonstrate Red before implementation and Green afterward. Commit each changed file separately. "
-            "Complete the native independent code review required by the distributed procedure and inspect its recorded result. "
-            "If any required boundary fails, report the exact error instead of replacing the reviewer or declaring completion."
-        )
     if args.case == 'source-review':
         base, head = source_review_fixture(root)
         brief = dict(repository=str(root),review_base=base,review_head=head,requirements=(
-            "Fix native dedicated-agent input interoperability without replacing native roles with generic agents. "
-            "Preserve strict two-field evaluation JSON, its 4000 decoded-character limit, review input validation, "
+            "Migrate Codex to DeepSeek repository work and Astra design/review while preserving mechanical changes on the current parent model. "
+            "Remove Codex difficulty routing and preserve fixed-commit review input validation, "
             "actual child identity binding, independent review results and .git protection. "
             "Keep model instructions sufficient for correct workflows. Tests must exercise real hooks and not mistake "
             "component or simulated success for a completed live workflow. Do not modify distribution targets or user settings."))
         prompt = ("Review only. Read .agents/skills/SUBAGENT_RULES.md and .agents/skills/INDEPENDENT_REVIEW.md, "
-                  "then use a fresh native deep-reviewer for the following fixed source change. Do not review it yourself, "
+                  "then use a fresh native code-reviewer for the following fixed source change. Do not review it yourself, "
                   "edit, commit, or run tests. Wait for the reviewer and report its final result and whether the recorded result was accepted. "
                   + json.dumps(brief))
     command = [args.codex, "exec", "--ignore-user-config", "--json", "--dangerously-bypass-hook-trust",
@@ -191,7 +170,7 @@ def main():
                "-c", "log_dir=" + toml(str(output / "logs")),
                "-c", 'approval_policy="never"', "-c", 'web_search="disabled"',
                "-c", "features.apps=false", "-c", "features.plugins=false",
-               "-m", "gpt-5.6-sol", "-c", 'model_reasoning_effort="high"', "-C", str(root), prompt]
+               "-m", "gpt-6-astra", "-c", 'model_reasoning_effort="xhigh"', "-C", str(root), prompt]
     with (output / "runtime.jsonl").open("w") as stdout, (output / "stderr.log").open("w") as stderr:
         process = subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
         try:
@@ -209,13 +188,9 @@ def main():
     starts = {e['input'].get('agent_id') for e in events if e['input'].get('hook_event_name') == 'SubagentStart'}
     stops = {e['input'].get('agent_id') for e in events if e['input'].get('hook_event_name') == 'SubagentStop'}
     proofs = [json.loads(p.read_text()) for p in (root / '.codex/tmp').glob('independent-review.*.json')]
-    runtime = [json.loads(line) for line in (output / 'runtime.jsonl').read_text().splitlines() if line.strip()]
     clean = subprocess.check_output(['git','status','--porcelain','--untracked-files=all'],cwd=root,text=True).strip() == ''
     head = subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
-    commits = subprocess.check_output(['git','log','--reverse','--format=%H',initial_head+'..'+head],cwd=root,text=True).splitlines()
-    commit_paths = [subprocess.check_output(['git','show','--format=','--name-only',commit],cwd=root,text=True).splitlines() for commit in commits]
-    file_hashes = {name: hashlib.sha256((root/name).read_bytes()).hexdigest() for name in ('value.py','test_value.py')}
-    evidence = verify(events, runtime, proofs, root, head, commit_paths, args.case, clean, allow_native_downgrade=True, file_hashes=file_hashes)
+    evidence = verify(events, proofs, head, clean)
     summary = {"case":args.case,"exit_code":code, "events":len(events), "starts":len(starts), "stops":len(stops),
                **evidence}
     (output / "summary.json").write_text(json.dumps(summary, indent=2))
