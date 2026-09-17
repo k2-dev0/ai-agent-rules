@@ -12,15 +12,15 @@ Claudeの既存動線は維持する。共通文書内の難度評価・メイ�
 
 ### DeepSeek bridgeの接続
 
-別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。`DEEPSEEK_API_KEY`、必要な場合だけ`DEEPSEEK_BASE_URL`を起動環境から渡す。秘密を配布TOMLへ書かない。配置先repository rootで`mcp-protected.sh`から起動する。主担当modelは設定で固定しない。
+別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。絶対pathをMCPのargsへ指定してもよい。`deepseek-launch.sh`は設定済みの`DEEPSEEK_API_KEY`を優先し、未設定ならzshの`.zshrc`を読み込む。キー値とrcの出力はMCPの標準出力・logへ出さず、環境変数として渡す。必要な場合だけ`DEEPSEEK_BASE_URL`を設定する。配置先repository rootで`mcp-protected.sh`へ引き継ぎ、主担当modelは固定しない。
 
 公開契約は`start_task(brief,title?)`、`wait_task(task_id,timeout_ms)`、`continue_task(task_id,message)`、`abort_task(task_id)`。返却の`task_id`と`status`（running/completed/needs_decision/failed/aborted/interrupted）をhookが照合する。MCP timeoutは75秒、waitは最大60秒。起動が成功しても実装・privacy・DSH停止の検証済みとは扱わない。
 
-DSH version固定、sdk-minimal、model/effort、privacy設定・送信検査、session保存と取消はbridge側で実施する。この配布元では4 toolの契約とhook接続をfixtureで検証する。実bridgeのschema照合、同一session継続・取消、保護付き起動はbridge完成後に実機確認する。
+DSH version固定、sdk-minimal、model/effort、privacy設定・送信検査、session保存と取消はbridge側で実施する。この配布元では4 toolの契約とhook接続をfixtureで検証する。`tests/probe_deepseek_bridge.py --bridge-root <bridge path>`をbridgeのPythonでsandbox外実行すると、実MCP/DSH・模擬API・配布hookを通して編集・test・Git保護・session継続・取消・回収失敗を検証できる。実API課金・model品質はこのprobeの対象外。
 
 ### 非同期workerの保護
 
-`deepseek-worker.sh`はworker起動前に予約し、実行中は親のshell・編集・Git操作・native子起動を拒否する。所有するCodex session、tool call、task IDと結果を照合し、停止を示す結果で予約を解放する。旧wait結果、別taskの結果、timeout・不正応答では解放しない。`independent-review.sh`はworker開始前のHEADを記録し、continue時も古いレビュー証跡を失効させる。
+`deepseek-worker.sh`はworker起動前に予約し、実行中は親のshell・編集・Git操作・native子起動を拒否する。所有するCodex session、tool call、task IDと結果を照合し、停止を示す結果で予約を解放する。`failed`でも`abort_error`・未知error・error欠落なら停止未確認として解放しない。旧wait結果、別taskの結果、timeout・不正応答でも解放しない。`independent-review.sh`はworker開始前のHEADを記録し、continue時も古いレビュー証跡を失効させる。
 
 起動結果不明やCodex終了で予約が残ったら、親から状態fileを書き換えて続行しない。ユーザーが該当bridge・DSHと子processの停止を確認し、実差分を確認した後に、配置先`.codex/tmp/deepseek-worker.json`を退避して新しいCodexタスクを開始する。停止未確認でtime-to-liveやSessionEndから自動解放しない。
 
