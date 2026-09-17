@@ -4,14 +4,14 @@
 
 ## 開始時の可用性確認
 
-子を必要とするworkflowでは、シナリオ等の採用・実行承認を求める前に、今回必要な専用roleを現在の起動toolで指定できるか確認する。Codexは`agent_type`欄と利用可能role、Claudeは`subagent_type`と専用定義を確認し、task名やmessageの役割宣言で代用しない。これは起動機能の確認だけであり、難度の採点は実装方針確定後に行う。
+子を必要とするworkflowでは、シナリオ等の採用・実行承認を求める前に、今回必要な専用roleを現在の起動toolで指定できるか確認する。Codexは`agent_type`欄と利用可能role、Claudeは`subagent_type`と専用定義を確認し、task名やmessageの役割宣言で代用しない。Codexの調査・実装は別のDeepSeek MCP経路であり、この子起動では代替しない。
 
 Codexは定義ファイルの存在だけで登録済みと扱わない。指定欄・roleがなければ、対象projectの信頼状態と設定の読込結果を先に確認する。未信頼ではskillsだけが読まれ、設定・hook・role登録が無効になる場合がある。ユーザーへ対象projectの信頼登録と新しいタスクでの再確認を依頼し、信頼登録を自動で行わない。設定が有効でも指定できなければ、起動機能の不足を報告する。
 
 ## 起動・待機
 
-- 子の用途は実装方針確定後の難易度調査（`difficulty-evaluator`）、独立コードレビュー（`code-reviewer` / `deep-reviewer`）、設計監査（`design-reviewer`）、ネスト候補抽出（`nesting-reviewer`）
-  - 方針決定のための一般調査・実装・修正はメインが行う
+- Codexの子は独立コードレビュー（`code-reviewer`）と設計監査（`design-reviewer`）だけ；どちらもAstra / xhigh；調査・実装・ネスト候補抽出は[DeepSeek](DEEPSEEK_WORKFLOW.md)へ渡す
+- Claudeの子は難易度調査（`difficulty-evaluator`）、独立コードレビュー（`code-reviewer`）、設計監査（`design-reviewer`）、ネスト候補抽出（`nesting-reviewer`）；方針決定のための一般調査・実装・修正はメインが行う
 - 子は1体ずつ新規起動し、サブエージェントの完了までメインの作業を止め、完了確認後に次へ進む
 - 現在の環境の専用roleの定義と起動toolを確認してから起動する
   - `agent_role`が空の汎用子、`task_name`やnicknameだけの子を専用roleの代用にしない
@@ -20,7 +20,7 @@ Codexは定義ファイルの存在だけで登録済みと扱わない。指定
 - Codexは`agent_type`と`fork_context: false`または`fork_turns: "none"`、Claudeは`subagent_type`でroleを指定する
 - 各roleの入力契約に従ってbriefを渡す
   - コード・規約は正本を参照させる
-  - Codexの難度評価・独立コードレビューは各起動手順の`agent-input.py prepare`を使い、生成されたtask名は検証済み入力の識別子であって専用roleの代用ではない
+  - Codexの独立コードレビューは`agent-input.py prepare`を使い、生成されたtask名は検証済み入力の識別子であって専用roleの代用ではない
 - 起動前の入力拒否は内容を訂正して同じtool・専用roleで新規起動する
   - 手順注入による未実行は案内に従って再試行する
   - 輸送messageの解析拒否を方針の長さ・内容の問題と決め付けて再試行せず、入力準備hookの未発火、role不一致、契約・検証済み入力の注入失敗は利用不能として報告する
