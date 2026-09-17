@@ -15,7 +15,7 @@ import stat
 import subprocess
 import sys
 
-ROLES = {"difficulty-evaluator", "code-reviewer", "deep-reviewer"}
+ROLES = {"code-reviewer"}
 HERE = Path(__file__).resolve().parent
 
 
@@ -37,20 +37,17 @@ def nonempty(value):
 def validate(brief, role, root):
     if not isinstance(brief, dict):
         raise ValueError("agent input must be a JSON object")
-    keys = {"repository", "implementation_policy"} if role == "difficulty-evaluator" else {
-        "repository", "review_base", "review_head", "requirements"}
+    if role not in ROLES:
+        raise ValueError("unsupported native role")
+    keys = {"repository", "review_base", "review_head", "requirements"}
     if set(brief) != keys:
         raise ValueError("agent input must contain only " + ", ".join(sorted(keys)))
     if brief["repository"] != str(root):
         raise ValueError("repository is incorrect")
     if not all(nonempty(v) for v in brief.values()):
         raise ValueError("agent input fields must be non-empty strings")
-    if role == "difficulty-evaluator":
-        if len(brief["implementation_policy"]) > 4000:
-            raise ValueError("implementation_policy exceeds 4000 characters")
-    else:
-        if not all(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", brief[k]) for k in ("review_base", "review_head")):
-            raise ValueError("review_base and review_head must be full commit SHAs")
+    if not all(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", brief[k]) for k in ("review_base", "review_head")):
+        raise ValueError("review_base and review_head must be full commit SHAs")
     return brief
 
 
@@ -225,12 +222,6 @@ def main(args):
             if data.get("phase") != "bound" or data.get("child_id") != event.get("agent_id") or data.get("role") != event.get("agent_type"):
                 return
             data["phase"] = "complete"
-            try:
-                result = decode(event.get("last_assistant_message", ""))
-            except (ValueError, TypeError):
-                result = None
-            if data["role"] == "difficulty-evaluator" and isinstance(result, dict) and set(result) == {"score", "reason"} and type(result["score"]) is int and 1 <= result["score"] <= 10 and nonempty(result["reason"]):
-                data["result"] = result
             state.save(data)
         return
     raise ValueError("unknown agent-input operation")
