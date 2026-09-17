@@ -37,24 +37,24 @@ hooks = true
 
 [agents]
 max_threads = 1
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
+default_subagent_model = "gpt-6-astra"
+default_subagent_reasoning_effort = "xhigh"
 
 # roleの登録を明示し、定義ファイルの自動検出には依存しない。内容は各ファイルを正本とする。
-[agents.difficulty-evaluator]
-config_file = "agents/difficulty-evaluator.toml"
-
 [agents.code-reviewer]
 config_file = "agents/code-reviewer.toml"
-
-[agents.deep-reviewer]
-config_file = "agents/deep-reviewer.toml"
 
 [agents.design-reviewer]
 config_file = "agents/design-reviewer.toml"
 
-[agents.nesting-reviewer]
-config_file = "agents/nesting-reviewer.toml"
+[mcp_servers.deepseek-worker]
+command = "bash"
+args = [".codex/hooks/shell/mcp-protected.sh", "deepseek-bridge"]
+env_vars = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"]
+startup_timeout_sec = 20
+tool_timeout_sec = 75
+enabled_tools = ["start_task", "wait_task", "continue_task", "abort_task"]
+default_tools_approval_mode = "approve"
 
 [mcp_servers.chrome-devtools]
 command = "bash"
