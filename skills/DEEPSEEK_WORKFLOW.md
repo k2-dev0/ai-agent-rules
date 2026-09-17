@@ -4,14 +4,16 @@ Codexから`deepseek-worker` MCPの`start_task`・`wait_task`・`continue_task`�
 
 ## 依頼
 
-初回briefはDeepSeek workerへの依頼と明記し、目的、調査のみ／編集可、受入条件、対象と変更禁止箇所、検証方法、必要な規約pathを含める。全会話・コード全文・秘密を転送せず、正本のpathを渡す。調査のみではfile・Git・外部状態を変更しない。先行するshell process・reviewerが完了してから起動する。
+初回briefはDeepSeek workerへの依頼と明記し、目的、調査のみ／編集可、対象、受入条件、必要な規約pathだけを渡す。変更禁止箇所・検証方法はtask固有の指定がある場合だけ加える。全会話・コード全文・秘密を転送せず、正本のpathを渡す。調査のみではfile・Git・外部状態を変更しない。先行するshell process・reviewerが完了してから起動する。
 
 調査結果は確認済み事実の`path:line`、関連test・検証command、推論・未確認、必要な設計判断を求める。実装は確定した設計・シナリオだけ渡し、新しい判断は`needs_decision`で親へ返させる。実行中は親が編集・Git変更・reviewer起動をしない。
 
 1. `start_task({"brief":"...","title":"..."})`で返されたtask ID・session IDを保持する
-2. `wait_task({"task_id":"...","timeout_ms":60000})`で完了・判断待ち・失敗を受け取る；runningは失敗ではなく、短周期pollをしない
+2. `wait_task({"task_id":"...","timeout_ms":60000})`で完了・判断待ち・失敗を受け取る；`running`は未終了だけを示し、正常動作・進捗の証拠にしない
 3. `completed`／`needs_decision`で同じ実装方針を続ける場合だけ`continue_task({"task_id":"...","message":"差分指示"})`を使う
 4. 目的・設計の変更、failed／aborted／interrupted後は実差分を確認し、必要なら残作業でfresh taskを作る；旧taskの実行停止を確認できるまでは編集・新規起動しない
+
+各`running`応答の`last_activity_at`・`phase`・`progress`等、bridgeが返す実活動の指標を前回値と比較する。60秒待機を2回終えても実活動を確認できない、またはbridgeが活動を観測できない場合は停滞と扱い、同じ待機を繰り返さず`abort_task`で停止・回収する。停止結果と観測できなかった項目を一度だけ報告する。ユーザーが待機継続を明示した場合を除き、同じ`running`の実況を繰り返さない。
 
 変更要求が実行中に届いたら、旧指示を止める必要がある場合は`abort_task`を呼び、停止確認後に差分を照合する。取消受付・timeoutを停止完了とみなさず、worktreeを自動復元しない。
 
