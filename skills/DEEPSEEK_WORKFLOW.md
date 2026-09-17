@@ -13,7 +13,7 @@ Codexから`deepseek-worker` MCPの`start_task`・`wait_task`・`continue_task`�
 3. `completed`／`needs_decision`で同じ実装方針を続ける場合だけ`continue_task({"task_id":"...","message":"差分指示"})`を使う
 4. 目的・設計の変更、failed／aborted／interrupted後は実差分を確認し、必要なら残作業でfresh taskを作る；旧taskの実行停止を確認できるまでは編集・新規起動しない
 
-各`running`応答の`last_activity_at`・`phase`・`progress`等、bridgeが返す実活動の指標を前回値と比較する。60秒待機を2回終えても実活動を確認できない、またはbridgeが活動を観測できない場合は停滞と扱い、同じ待機を繰り返さず`abort_task`で停止・回収する。停止結果と観測できなかった項目を一度だけ報告する。ユーザーが待機継続を明示した場合を除き、同じ`running`の実況を繰り返さない。
+各`running`応答の`last_activity_at`・`phase`・`progress`等、bridgeが返す実活動の指標を前回値と比較する。実活動を観測できる状態で60秒待機を3回終えても指標が更新されなければ停滞と扱い、同じ待機を繰り返さず`abort_task`で停止・回収する。bridgeが実活動を観測できない場合は3回で自動待機を止め、正常・停滞を判定不能と一度だけ報告して停止するかをユーザーへ確認する。ユーザーが待機継続を明示した場合を除き、同じ`running`の実況を繰り返さない。
 
 変更要求が実行中に届いたら、旧指示を止める必要がある場合は`abort_task`を呼び、停止確認後に差分を照合する。取消受付・timeoutを停止完了とみなさず、worktreeを自動復元しない。
 
