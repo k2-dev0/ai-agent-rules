@@ -2,6 +2,30 @@
 
 Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
+## Codexの動線
+
+repository調査・実装・test・通常修正は別repositoryの`deepseek-bridge`へ渡す。親は要件、設計、指摘採否、Git、報告を担当する。機械的rename・typo等は現在モデルのまま処理し、設計または再指摘箇所の直接修正に入る時だけAstra / xhighを使う。難度採点とLuna/Solへの振り分けは行わない。
+
+設計を伴う変更とTDDは、DeepSeek調査→親の設計→DeepSeek実装・検証→親のcommit→freshなAstra / xhigh `code-reviewer`の順。独立設計監査は`design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astraへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
+
+Claudeの既存動線は維持する。共通文書内の難度評価・メイン実装・nesting-reviewerはClaude用であり、Codexへ適用しない。
+
+### DeepSeek bridgeの接続
+
+別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。`DEEPSEEK_API_KEY`、必要な場合だけ`DEEPSEEK_BASE_URL`を起動環境から渡す。秘密を配布TOMLへ書かない。配置先repository rootで`mcp-protected.sh`から起動する。主担当modelは設定で固定しない。
+
+公開契約は`start_task(brief,title?)`、`wait_task(task_id,timeout_ms)`、`continue_task(task_id,message)`、`abort_task(task_id)`。返却の`task_id`と`status`（running/completed/needs_decision/failed/aborted/interrupted）をhookが照合する。MCP timeoutは75秒、waitは最大60秒。起動が成功しても実装・privacy・DSH停止の検証済みとは扱わない。
+
+DSH version固定、sdk-minimal、model/effort、privacy設定・送信検査、session保存と取消はbridge側で実施する。この配布元では4 toolの契約とhook接続をfixtureで検証する。実bridgeのschema照合、同一session継続・取消、保護付き起動はbridge完成後に実機確認する。
+
+### 非同期workerの保護
+
+`deepseek-worker.sh`はworker起動前に予約し、実行中は親のshell・編集・Git操作・native子起動を拒否する。所有するCodex session、tool call、task IDと結果を照合し、停止を示す結果で予約を解放する。旧wait結果、別taskの結果、timeout・不正応答では解放しない。`independent-review.sh`はworker開始前のHEADを記録し、continue時も古いレビュー証跡を失効させる。
+
+起動結果不明やCodex終了で予約が残ったら、親から状態fileを書き換えて続行しない。ユーザーが該当bridge・DSHと子processの停止を確認し、実差分を確認した後に、配置先`.codex/tmp/deepseek-worker.json`を退避して新しいCodexタスクを開始する。停止未確認でtime-to-liveやSessionEndから自動解放しない。
+
+この保護は配布hookを通るtoolに限定される。外部editor、未対応tool、開始済みのshell processの継続はOS-levelの排他では防がない。workflowでは先行process・reviewerを完了してからworkerを起動する。再指摘の意味上の同一箇所判定と採否は親が行い、機械判定済みとは扱わない。
+
 ## 配置
 
 `AGENTS.md`、`claude/`、`codex/`、`hooks/`、`rules/`、`skills/`、`prompt/`、`e2e/`を配布する。`SOURCE_REPOSITORY.md`、`tests/`、配布元のローカル`.claude/`・`.codex/`は配布しない。
@@ -63,6 +87,8 @@ $bootstrap codex
 
 更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
+Codex更新では旧`.codex/agents/difficulty-evaluator.toml`・`deep-reviewer.toml`・`nesting-reviewer.toml`と登録を除去する。Claude側の同名資産と共通のClaude向け文書は保持する。bridge未完成・未導入の配置先ではworker作業を開始せず、親実装へ自動代替しない。
+
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
 
 Codexのrole定義は`codex/config.toml`の`[agents.<role>].config_file`から登録する。定義ファイルの配置やtask名だけを専用roleの適用と扱わない。シナリオ承認前の確認は[子の起動手順](skills/SUBAGENT_RULES.md#開始時の可用性確認)に従う。
@@ -84,9 +110,11 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 
 | 正本 | 読む時点・責務 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | 変更前のモデル選択・適用確認への入口 |
+| [AGENTS.md](AGENTS.md) | Codex/worker/Claudeの作業分担への入口 |
+| [WORKFLOW_ROUTING.md](skills/WORKFLOW_ROUTING.md) | Codexの機械的変更・設計・レビューの動線と必要時だけのAstra切替 |
+| [DEEPSEEK_WORKFLOW.md](skills/DEEPSEEK_WORKFLOW.md) | DeepSeekへの依頼、継続・待機・停止、workerの担当 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 調査後・方針決定前の共通判断、規約・作業対象とGit状態への入口 |
-| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | 最初の編集前に親が読む。評価入力・採用モデル・適用確認・失敗・再評価 |
+| [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | Claudeの編集前評価・採用モデル・適用確認 |
 | [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 起動入力を組み立てる前に親が読む。role・完了待ち・入力訂正・利用不能時の行動 |
 | [CHILD_RULES.md](skills/CHILD_RULES.md)と各role契約 | 子の開始時に子だけへ注入。調査範囲・実行制約・返却内容 |
 | [INDEPENDENT_REVIEW.md](skills/INDEPENDENT_REVIEW.md) | コードreviewerの入力を組み立てる前に親が読む。JSON入力と指摘対応 |
@@ -111,6 +139,7 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | 設計形式・子の共通制約と専用契約・role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
 | 検証済みの子入力・実child IDへの結合 | `agent-input.py`・`agent-input.sh`・`load-operation-context.sh` |
 | shellを含む変更前HEAD・起動済み独立レビューの証跡 | `independent-review.sh`・`safe-files.py` |
+| DeepSeek実行中の親操作制限・非同期結果の照合 | `deepseek-worker.sh`・`deepseek-worker.py`・`codex/hooks.json` |
 | Codexの待機時間補正 | `agent-wait.sh` |
 
 hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
@@ -142,7 +171,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 
 検証済み経路と適用外を区別する。上位設定や外部processの並行変更までrepositoryの設定だけで完全保護したとは扱わない。[権限profileの適用範囲](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)を参照する。
 
-親の手順は正本への参照で事前に読む。Codexの難度評価・独立コードレビューは`agent-input.py prepare`で入力を検査・固定し、生成された起動引数を使う。暗号化messageをJSONと誤認せず、SubagentStartで実child ID・roleと検証済み入力を結び付け、共通制約・専用契約とともに渡す。準備済み入力は評価・レビュー成功の証拠ではない。標準hook入力には現在modelはあるがeffortの適用確認は含まれないため、実際のモデル・effortの確認と利用不能時の判断は親の手順に残す。
+親の手順は正本への参照で事前に読む。Codexの独立コードレビューは`agent-input.py prepare`で入力を検査・固定し、生成された起動引数を使う。暗号化messageをJSONと誤認せず、SubagentStartで実child ID・roleと検証済み入力を結び付け、共通制約・専用契約とともに渡す。準備済み入力はレビュー成功の証拠ではない。標準hook入力には現在modelはあるがeffortの適用確認は含まれないため、必要工程での実際のモデル・effort確認は親の手順に残す。
 
 ## 文書の編集
 
@@ -156,7 +185,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 bash tests/verify-all.sh
 ```
 
-Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書配信・親の手順参照・入力訂正・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分け、実モデルが評価→切替→編集→レビューを完走した保証にはしない。
+Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書配信・親の手順参照・入力訂正・固定script・専用role入力・Git境界を検査する。Codex CLIがあればstrict config・execpolicyも確認する。文書の静的検査は動作保証とは分け、実モデルがworker調査→設計→実装→レビューを完走した保証にはしない。
 
 `python3 tests/test_git_policy.py`は両配布のGit guardへ入力し、許可された読み取りと外部helperの抑止をfixtureで実行する。`python3 tests/test_git_sandbox.py`はインストール済みCodexのOS sandboxで、隔離した.gitへの書き込み・コピー・リンク・親directory移動を試す。後者はsandboxを二重起動できない環境では外側の実行承認が必要。通常suiteの成功だけではOS境界の検証済みとはしない。
 
@@ -166,7 +195,7 @@ Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書�
 
 `python3 tests/test_role_runtime.py`はsandbox外で実行し、一時Codex領域・local模擬API・実CLIで入力準備→native起動→配布hook→子契約→結果受理を通し、app-serverで`agentRole`／`agent_role`を照合する。要求されたmodel・effort、未信頼project、未対応の切替を成功にしないことも検査する。外部モデルの評価は行わない。`--probe-permissions`は子の実書き込みも試す追加診断で、role登録の成功をOS read-onlyの成功とは扱わない。
 
-`python3 tests/probe_agent_workflow.py --case workflow`は認証済みCodexで難度評価・Red/Green・個別commit・独立レビュー受理を通す実モデル検査。CLIの切替不能時の降格継続と、Batonの実モデル切替検査を区別して記録する。hook未発火・子未開始・不正結果・レビュー未受理・Red/Green欠落は失敗とし、通常suiteや模擬応答の成功で代替しない。
+`python3 tests/probe_agent_workflow.py --case source-review`は認証済みCodexで配布元差分の独立Astraレビューと結果受理を検査する。旧difficulty/workflow probeは廃止。workerを含む実動作はbridge完成後の接続検証とし、通常suiteや模擬応答の成功で代替しない。`test_deepseek_worker.py`は起動前baseline・writer予約・結果照合・旧wait拒否を配布hookで検証する。
 
 skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
