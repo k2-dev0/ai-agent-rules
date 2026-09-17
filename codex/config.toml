@@ -9,6 +9,8 @@ extends = ":workspace"
 
 [permissions.distributed.filesystem.":workspace_roots"]
 ".git" = "read"
+".codex/e2e" = "write"
+".codex/prompt" = "write"
 ".codex/hooks" = "read"
 ".codex/agents" = "read"
 ".codex/config.toml" = "read"
