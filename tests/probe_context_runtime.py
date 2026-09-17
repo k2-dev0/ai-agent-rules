@@ -60,7 +60,7 @@ def prepare(engine, case, output):
 from pathlib import Path
 raw = sys.stdin.read()
 payload = json.loads(raw)
-result = subprocess.run(["bash", sys.argv[1]], input=raw, text=True, capture_output=True)
+result = subprocess.run((["python3", sys.argv[1]] if sys.argv[1].endswith(".py") else ["bash", sys.argv[1]]), input=raw, text=True, capture_output=True)
 record = {"hook": Path(sys.argv[1]).name, "input": payload,
           "stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
 fd = os.open(sys.argv[2], os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o600)
@@ -75,7 +75,7 @@ sys.exit(result.returncode)
     for groups in settings["hooks"].values():
         for group in groups:
             for hook in group["hooks"]:
-                name = re.search(r"shell/([\w-]+\.sh)", hook["command"]).group(1)
+                name = re.search(r"shell/([\w-]+\.(?:sh|py))", hook["command"]).group(1)
                 hook["command"] = " ".join(map(shlex.quote, (
                     sys.executable, str(wrapper), str(product / "hooks/shell" / name),
                     str(output / "hook-events.jsonl"),
