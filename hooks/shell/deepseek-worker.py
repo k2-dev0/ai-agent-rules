@@ -13,6 +13,9 @@ HERE = Path(__file__).resolve().parent
 WORKER = re.compile(r"^mcp__deepseek[-_]worker__(start_task|continue_task|wait_task|abort_task)$")
 EXCLUSIVE = re.compile(r"^(Bash|exec_command|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$")
 TERMINAL = {"completed", "needs_decision", "failed", "aborted", "interrupted"}
+STOPPED_ERRORS = {"configuration_error", "privacy_configuration_error", "authentication_error",
+                  "transport_error", "harness_start_error", "harness_protocol_error",
+                  "model_error", "task_contract_error", "internal_error"}
 
 
 def regular(fd):
@@ -37,6 +40,11 @@ def response(value):
         raise ValueError("worker task identity is missing")
     if value.get("status") not in TERMINAL | {"running"}:
         raise ValueError("worker status is unknown")
+    error = value.get("error")
+    if isinstance(error, dict) and error.get("class") == "abort_error":
+        raise ValueError("worker cleanup failed; execution stop is unconfirmed")
+    if value["status"] == "failed" and (not isinstance(error, dict) or error.get("class") not in STOPPED_ERRORS):
+        raise ValueError("worker failure does not confirm execution stopped")
     return value
 
 
