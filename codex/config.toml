@@ -64,31 +64,6 @@ default_tools_approval_mode = "approve"
 [mcp_servers.chrome-devtools.tools.upload_file]
 approval_mode = "prompt"
 
-[mcp_servers.serena]
-command = "bash"
-args = [
-  ".codex/hooks/shell/mcp-protected.sh", "uvx",
-  "--from", "git+https://github.com/oraios/serena@29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2",
-  "serena", "start-mcp-server",
-  "--context", "codex",
-  "--project-from-cwd",
-]
-startup_timeout_sec = 30
-default_tools_approval_mode = "approve"
-disabled_tools = [
-  "execute_shell_command",
-  "create_text_file",
-  "replace_content",
-  "replace_in_files",
-  "delete_lines",
-  "replace_lines",
-  "insert_at_line",
-  "replace_symbol_body",
-  "insert_after_symbol",
-  "insert_before_symbol",
-  "rename_symbol",
-]
-
 [mcp_servers.tsgo-lsp]
 command = "bash"
 args = [
