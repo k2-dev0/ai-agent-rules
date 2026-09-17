@@ -89,7 +89,7 @@
         ]
       },
       {
-        "matcher": "^mcp__(chrome[-_]devtools__(take_screenshot|take_snapshot|screencast_start)|serena__write_memory)$",
+        "matcher": "^mcp__chrome[-_]devtools__(take_screenshot|take_snapshot|screencast_start)$",
         "hooks": [
           {
             "type": "command",
