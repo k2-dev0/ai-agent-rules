@@ -1,5 +1,7 @@
 ## 入力
 
+Codexの調査・整形・診断・検証は[DeepSeek](../DEEPSEEK_WORKFLOW.md)へ渡す。親はpath一覧の固定・scope script・Git・結果照合を担当し、worker返却後に行う。以下の検証対象・順序・保証は両環境共通。
+
 開始時にモードを選び、途中で変更しない。
 
 | モード | 対象・保証 |
@@ -52,7 +54,7 @@ package単位の検査は各1回。設定競合で一意に選べない、tool�
 | linterが自動修正 | formatter・lintを再確認して続行 |
 | `scope-related`な型・構文・lint・Prisma・build error | `FIX_FLOW.md`に従って修正・必要な検証・commit後、同じ対象pathでpolishを再実行 |
 | `unrelated`・`uncertain` | 対象外fileを変更せず分類を報告して続行 |
-| `unwind`の修正 | メインが修正・検証・commit後、同じ対象pathでpolishを再実行 |
+| `unwind`の修正 | `FIX_FLOW.md`の担当が修正・検証し、親がcommit後、同じ対象pathでpolishを再実行 |
 | tool未導入・設定競合・実行不能 | `not run`を報告して続行 |
 
 コードの判断を伴う修正後は、全品質ゲートを再実行する。
