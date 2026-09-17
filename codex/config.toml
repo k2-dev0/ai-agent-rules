@@ -76,3 +76,9 @@ approval_mode = "approve"
 
 [mcp_servers.context-dictionary.tools.get]
 approval_mode = "approve"
+
+[mcp_servers.context7]
+command = "bash"
+args = [".codex/hooks/shell/mcp-protected.sh", "npx", "-y", "@upstash/context7-mcp@3.2.5"]
+startup_timeout_sec = 20
+default_tools_approval_mode = "approve"
