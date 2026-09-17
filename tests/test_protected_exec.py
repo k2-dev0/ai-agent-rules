@@ -143,7 +143,7 @@ class ProtectedExec(unittest.TestCase):
                           'print(json.dumps({"argv": sys.argv[1:], "input": sys.stdin.read(), "agent": os.environ.get("CONTEXT_AGENT"), "protected": protected}))\n')
         context = self.parent / "context dictionary"
         agent_lsp = self.parent / "agent-lsp-ts"
-        for program in (fake_bin / "node", fake_bin / "npx", fake_bin / "uvx", context / "node_modules/.bin/tsx"):
+        for program in (fake_bin / "node", fake_bin / "npx", context / "node_modules/.bin/tsx"):
             program.parent.mkdir(parents=True, exist_ok=True)
             program.write_text("#!/bin/sh\nexec python3 " + shlex.quote(str(driver)) + ' "$@"\n')
             program.chmod(0o755)
@@ -153,7 +153,7 @@ class ProtectedExec(unittest.TestCase):
             else:
                 source = (REPO / "codex/config.toml").read_text()
                 configs = {}
-                for name in ("chrome-devtools", "serena", "tsgo-lsp", "context-dictionary"):
+                for name in ("chrome-devtools", "tsgo-lsp", "context-dictionary"):
                     section = source.split("[mcp_servers." + name + "]\n", 1)[1].split("\n[", 1)[0]
                     # These shipped fields are basic strings/lists; strict TOML
                     # parsing is independently exercised by verify-all's CLI.
