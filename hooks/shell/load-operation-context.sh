@@ -21,6 +21,9 @@ skill_file() {
 }
 
 ROLE=$(hook_child_role)
+if [ "$HOOK_AGENT" = codex ]; then
+  case "$ROLE" in code-reviewer|design-reviewer) ;; *) exit 0 ;; esac
+fi
 case "$ROLE" in
   difficulty-evaluator) RELATIVE=DIFFICULTY_CONTRACT.md ;;
   code-reviewer|deep-reviewer) RELATIVE=CODE_REVIEW_CONTRACT.md ;;
@@ -48,7 +51,7 @@ case "$ROLE" in
 esac
 INPUT=
 case "$HOOK_AGENT:$ROLE" in
-  codex:difficulty-evaluator|codex:code-reviewer|codex:deep-reviewer)
+  codex:code-reviewer)
     INPUT=$(printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/agent-input.py" bind) || {
       hook_review_context '検証済みの入力を実際の専用子へ結び付けられません。調査せず{"error":"validated agent input unavailable"}を返してください。'
       exit 0
