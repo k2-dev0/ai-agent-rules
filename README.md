@@ -58,7 +58,7 @@ $bootstrap codex
    - hook変更時も再レビューする
    - 未trustではskillsが読まれてもproject-local設定・hook・role登録は適用されない
    - role更新後は新しいタスクで、起動toolの`agent_type`と必要な専用roleが公開されていることを確認する
-4. Claudeはproject rootの`.mcp.json`にあるSerena・chrome-devtools・context-dictionaryを承認する
+4. Claudeはproject rootの`.mcp.json`にあるchrome-devtools・context-dictionaryを承認する
    - 両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する
 
 更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
@@ -133,7 +133,7 @@ hookは設定を読み込んだtrusted projectと対応toolで有効。project�
 | 子のrole・model・effortと共通制約の配信 | roleファイルのsandbox設定の実効性はruntime依存。Codex 0.154.0のnative起動で親のworkspace-write継承を確認したため、子をOSでread-onlyに強制済みとは扱わない。編集・test実行・調査範囲・外部通信の制約は子の共通契約に残す |
 | reviewer入力・対象SHA・tracked状態・SubagentStopの結果形式、shell後に古くなった結果の失効 | reviewの必要性、指摘の妥当性・採否、関連するignored / untracked資産。形式検査は内容の自動生成ではない |
 | polishのpath列挙・一致・追跡・clean検査 | script実行の省略は防がない。directの完全性はscope-unverified |
-| 直接tool入力の.git path・Git引数、Chromeの保存先・Serenaのmemory名を検査 | 文字列検査は任意script内部の保証ではない。scriptと子processの書き込みはOS保護で止める |
+| 直接tool入力の.git path・Git引数、Chromeの保存先を検査 | 文字列検査は任意script内部の保証ではない。scriptと子processの書き込みはOS保護で止める |
 | 固定scriptはリンクを拒否し、親directoryを開いてからfileを置換。一時領域も外部commandの起動前に検査 | 外部processによるdirectory移動など、同時のfilesystem変更すべてを制御するものではない |
 | 初期化前の例外はbootstrapの正規argvだけ | task名・文章・file pathへのbootstrap名の混入では解除しない |
 | sandbox内の.git制限と、保護付き境界外入口・配布stdio MCP内のOS制限 | 上位設定の既存allowによる直接の外部実行、別のMCP／未対応tool、既存外部serviceへ処理を委ねる経路はこの入口を通らない |
