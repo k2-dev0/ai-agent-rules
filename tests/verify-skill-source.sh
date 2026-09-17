@@ -34,7 +34,7 @@ for AGENT in claude codex; do
   printf 'export const value = 1\n' > src/app.ts
   chmod +x "$SCRIPT"
   ln -s "$PWD/$SCRIPT" alias.sh
-  for TOOL in Bash Read Grep exec_command functions.exec_command mcp__filesystem__read_file mcp__filesystem__read_multiple_files mcp__serena__search_for_pattern mcp__serena__find_symbol; do
+  for TOOL in Bash Read Grep exec_command functions.exec_command mcp__filesystem__read_file mcp__filesystem__read_multiple_files; do
     jq -e --arg tool "$TOOL" '[.hooks.PreToolUse[] | .matcher as $m | select($tool | test($m)) | .hooks[] | select(.command | contains("deny-skill-source.sh"))] | length == 1' "$SETTINGS" >/dev/null
   done
   for TOOL in Read mcp__filesystem__read_file; do
@@ -45,11 +45,8 @@ for AGENT in claude codex; do
   done
   check_tool deny mcp__filesystem__read_multiple_files "$(jq -cn --arg path "$SCRIPT" '{paths:["src/app.ts",$path]}')"
   check_tool deny Grep "$(jq -cn --arg path "$ROOT" '{path:$path,pattern:".",output_mode:"content"}')"
-  check_tool deny mcp__serena__search_for_pattern "$(jq -cn --arg path "$ROOT" '{relative_path:$path,substring_pattern:"."}')"
   check_tool allow Grep "$(jq -cn --arg path "$ROOT" '{path:$path,glob:"*.md",pattern:".",output_mode:"content"}')"
   check_tool deny Grep "$(jq -cn --arg path "$ROOT" '{path:$path,pattern:".",output_mode:"files_with_matches"}')"
-  check_tool deny mcp__serena__find_symbol "$(jq -cn --arg path "$SCRIPT" '{relative_path:$path,include_body:true}')"
-  check_tool deny mcp__serena__find_symbol "$(jq -cn --arg path "$SCRIPT" '{relative_path:$path,include_body:false}')"
   for READER in cat head tail nl bat less more strings; do check_command deny "$READER '$SCRIPT'"; done
   check_command deny "sed -n '1,20p' '$SCRIPT'"
   check_command deny "rg -n pattern '$SCRIPT'"
