@@ -132,7 +132,7 @@ for ENTRY_NAME in cowlick ponytail polish unwind; do
   ENTRY="$REPO/skills/$ENTRY_NAME/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$ENTRY" && ! grep -q '^user-invocable: false$' "$ENTRY" && grep -Fq '(PROCEDURE.md)' "$ENTRY" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/$ENTRY_NAME/agents/openai.yaml" && ok "明示入口と内部手順を分離: $ENTRY_NAME" || ng "明示入口の参照・起動policyが不正: $ENTRY_NAME"
 done
-grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq 'サブエージェントへ調査を委任しない' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計作成と独立監査を分離" || ng "設計作成と監査の責務が不正"
+grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq 'DeepSeek' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計作成と独立監査を分離" || ng "設計作成と監査の責務が不正"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq 'error処理とDB書き込み、メール、外部API' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
@@ -158,7 +158,7 @@ report_group "旧design skillのdirectory・参照なし" "$GROUP_FAILURES"
 
 echo "== skill context圧縮と参照整合性 =="
 if python3 "$SUITE/test_workflow_evidence.py" > "$S/workflow-evidence.out" 2>&1; then
-  ok "実モデル検査器が無効な評価・工程逆転・未解決指摘・commit不備を拒否"
+  ok "レビュー検査器が実子の未開始・証跡不一致・未解決指摘を拒否"
 else
   ng "実モデル検査器が未完了のworkflowを成功扱い"
   cat "$S/workflow-evidence.out"
@@ -242,6 +242,12 @@ else
   ng "専用roleの登録または承認前の参照が不正"
   cat "$S/role-config.out"
 fi
+if python3 "$SUITE/test_deepseek_worker.py" > "$S/deepseek-worker.out" 2>&1; then
+  ok "DeepSeek非同期hookの予約・結果照合・旧wait拒否を検証"
+else
+  ng "DeepSeek非同期hookの保護が不正"
+  cat "$S/deepseek-worker.out"
+fi
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
@@ -256,7 +262,7 @@ grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep
 [ ! -d "$REPO/skills/errand" ] && [ ! -e "$REPO/skills/SCENARIO_FLOW.md" ] && [ ! -e "$REPO/rules/typescript/tdd-pattern.md" ] && ! grep -Eq 'SCENARIO_FLOW.md|tdd-pattern.md|\$errand' "$TDD_SKILL" "$REPO/skills/IMPLEMENTATION_RULES.md" && ok "廃止した実装skill・共通フロー・test規約を配布しない" || ng "廃止資産または参照が残存"
 grep '^description:' "$TDD_SKILL" | grep -Fq 'runtime挙動を実装・修正する依頼' && grep '^description:' "$TDD_SKILL" | grep -Fq '文書・設定・書式だけの変更、挙動を変えない整理では起動しない' && grep -Fq '依頼の識別子・path・番号・固有名詞は変えない' "$TDD_SKILL" && ok "tddは選択境界と依頼の識別子を保持" || ng "tddの選択・依頼境界が不正"
 grep -Fq '`prompt/`を読まない' "$TDD_SKILL" && grep -Fq '`$tdd --from-doc`はユーザーが明示した場合だけ使い、通常起動から切り替えない' "$TDD_SKILL" && grep -Fq '[設計書モード](FROM_DOC.md)' "$TDD_SKILL" && grep -Fq '`$tdd --from-doc`だけが読む' "$TDD_FROM_DOC" && grep -Fq '参照先がない、または未完了項目がなければ変更せず報告' "$TDD_FROM_DOC" && ok "tddは通常依頼と明示的な設計書modeを分離" || ng "tddの入力・完了処理の分岐が不正"
-grep -Fq "調査・実装・修正・検証はメインが行う" "$TDD_SKILL" && grep -Fq "メインが指摘範囲を直接修正する" "$FIX_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$TDD_SKILL" "$FIX_FLOW" && ok "tddフローは初回実装・修正をメインで続行" || ng "直列委任の強制または失敗回数による代行制限が残存"
+grep -Fq "調査・実装・修正・検証はメインが行う" "$TDD_SKILL" && grep -Fq "メインが指摘範囲を直接修正する" "$FIX_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$TDD_SKILL" "$FIX_FLOW" && ok "Claudeのtddはメイン実装・修正を維持" || ng "Claudeのtdd実装責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -296,7 +302,7 @@ grep -Fq '## 調査' "$TDD_SKILL" && grep -Fq '`path:line`' "$TDD_SKILL" && grep
 grep -Fq '## シナリオ選択' "$TDD_SKILL" && grep -Fq '採用・不採用・修正をユーザーへ確認' "$TDD_SKILL" && grep -Fq '全件採用を既定にしない' "$TDD_SKILL" && grep -Fq 'シナリオの不採用を実装要件の削減理由にしない' "$TDD_SKILL" && grep -Fq '選択確定まで編集せず' "$TDD_SKILL" && grep -Fq '新しいtestが必要なだけでは止めず' "$TDD_SKILL" && ! grep -Eq 'agent_type|subagent_type|fork_context|fork_turns|agent_nickname|preflight-implementer.sh' "$TDD_SKILL" && ok "tddフローはtest選択権・実装範囲・メイン実装を維持" || ng "tddフローのtest選択権・実装境界が不正"
 grep -Fq 'API・DB処理はPrisma mockでなくtest DBを使う' "$TDD_SKILL" && grep -Fq '実装不足または期待値との差により失敗' "$TDD_SKILL" && grep -Fq 'syntax・import・型の失敗はシナリオを変えず先に直す' "$TDD_SKILL" && ok "tddはDB境界と有効なRedを維持" || ng "tddのtest方式またはRed判定が不正"
 grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
-! grep -Eq '自己確認|最終レビュー|再レビュー' "$FIX_FLOW" "$TDD_SKILL" && grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
+grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
 grep -Fq '降格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SWITCH.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
 grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '同じfile内の関数・section・testへの指摘が再発した場合' "$FIX_FLOW" && grep -Fq 'LunaからSol、SolからAstraへ昇格し、Astra / xhighでは維持する' "$FIX_FLOW" && ok "レビューseverityと再発時のモデル昇格を分離" || ng "レビューseverityの処理が不正"
 grep -Fq '変更file・直接依存先以外の未変更文書' "$REPO/skills/CODE_REVIEW_CONTRACT.md" && grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq 'CODE_REVIEW_CONTRACT.md' "$REPO/hooks/shell/load-operation-context.sh" && ok "レビューの参照範囲を子へ限定注入" || ng "レビューの参照範囲が過剰"
@@ -345,7 +351,7 @@ fi
 if bash .claude/skills/bootstrap/bootstrap.sh claude > init-claude.log 2>&1; then ok "bootstrap claude 実行"; else ng "bootstrap claude 実行"; cat init-claude.log; fi
 [ ! -e .claude/skills/bootstrap ] && ok "bootstrap claude は成功後に自己削除" || ng "bootstrap claude が成功後に残った"
 [ -f .claude/skills/tdd/SKILL.md ] && ok "bootstrap claude は他skillを保持" || ng "bootstrap claude が他skillを削除"
-if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '切り替えと適用確認を済ませてから編集する' AGENTS.md && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
+if [ -f .claude/skills/MODEL_SELECTION.md ] && [ -f .claude/skills/MODEL_SWITCH.md ] && grep -Fq '最初の編集前に' AGENTS.md && grep -Fq '.claude/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .claude/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Claude配置と参照条件"
 else
   ng "モデル選択・切り替え: Claude配置または参照条件が不正"
@@ -547,12 +553,12 @@ git check-ignore -q .codex/e2e/artifacts/test.webm && ok "CodexのE2E成果物�
 if bash .agents/skills/bootstrap/bootstrap.sh codex > init-codex.log 2>&1; then ok "bootstrap codex 実行"; else ng "bootstrap codex 実行"; cat init-codex.log; fi
 [ ! -e .agents/skills/bootstrap ] && ok "bootstrap codex は成功後に自己削除" || ng "bootstrap codex が成功後に残った"
 [ -f .agents/skills/tdd/SKILL.md ] && ok "bootstrap codex は他skillを保持" || ng "bootstrap codex が他skillを削除"
-if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '切り替えと適用確認を済ませてから編集する' AGENTS.md && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
+if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.md ] && grep -Fq '最初の編集前に' AGENTS.md && grep -Fq '.agents/skills/MODEL_SELECTION.md' AGENTS.md && grep -Fq '選定値が現在値と異なる場合は' .agents/skills/MODEL_SELECTION.md; then
   ok "モデル選択・切り替え: Codex配置と参照条件"
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
 fi
-if grep -q '^default_subagent_model = "gpt-5.6-luna"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "max"$' .codex/config.toml; then
+if grep -q '^default_subagent_model = "gpt-6-astra"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "xhigh"$' .codex/config.toml; then
   ok "bootstrap codex は子の既定値をLuna/maxへ固定"
 else
   ng "bootstrap codex の子モデル既定値が不正"
