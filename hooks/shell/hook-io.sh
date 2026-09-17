@@ -62,6 +62,9 @@ command -v jq >/dev/null 2>&1 || \
 # 呼び出し元ツールの名前を返す関数
 hook_tool_name() { echo "$HOOK_INPUT" | jq -r '.tool_name'; }
 
+# PostToolUseは既実行の副作用を戻さず、結果不明時に後続作業を止める。
+hook_post_stop() { jq -cn --arg reason "$1" '{continue:false,stopReason:$reason}'; }
+
 # native Agentのroleと親タスクの権限情報。nickname/task名はroleの代用にしない。
 hook_agent_type() {
   case "$HOOK_AGENT" in
