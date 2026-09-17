@@ -19,7 +19,7 @@
 
 編集前にHEADとユーザー由来の変更を確認・保持し、完了前に今回の変更・関連test・未解決事項を照合する。`git status --short --untracked-files=all`だけでなく、関連する既存fileは`git check-ignore -v -- <path>`、対象directory内の見落としは`git ls-files --others --ignored --exclude-standard -- <対象directory>`で確認する。
 
-ignored / untrackedはGit上の状態であり、要求や変更との無関係を意味しない。必要なfileがignoreされている、所有者が不明、ユーザーの変更と重なる場合は、上書き・別名への置換・検証対象からの除外をせず扱いを確認する。追跡対象の変更はcommitする。関連する管理外fileの扱いが未決定、または関連診断が未解決なら、tracked差分なしをタスク全体のclean・完了と報告しない。診断の帰属は[修正手順](FIX_FLOW.md#診断のscope帰属)で判断する。
+ignored / untrackedはGit上の状態であり、要求や変更との無関係を意味しない。必要なfileがignoreされている、所有者が不明、ユーザーの変更と重なる場合は、上書き・別名への置換・検証対象からの除外をせず扱いを確認する。追跡対象の変更は親がcommitする。DeepSeek workerはGit変更をせず親へ返す。関連する管理外fileの扱いが未決定、または関連診断が未解決なら、tracked差分なしをタスク全体のclean・完了と報告しない。診断の帰属は[修正手順](FIX_FLOW.md#診断のscope帰属)で判断する。
 
 ## 構造
 
