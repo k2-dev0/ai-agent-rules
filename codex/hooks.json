@@ -57,6 +57,16 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "^(Bash|exec_command|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$|^mcp__deepseek[-_]worker__(start_task|continue_task|wait_task|abort_task)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deepseek-worker.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "^apply_patch$",
         "hooks": [
           {
@@ -152,7 +162,7 @@
         ]
       },
       {
-        "matcher": "^(Bash|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$",
+        "matcher": "^(Bash|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$|^mcp__deepseek[-_]worker__(start_task|continue_task)$",
         "hooks": [
           {
             "type": "command",
@@ -172,6 +182,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__deepseek[-_]worker__(start_task|continue_task|wait_task|abort_task)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deepseek-worker.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
@@ -181,7 +203,7 @@
             "timeout": 5
           }
         ],
-        "matcher": "^(difficulty-evaluator|code-reviewer|deep-reviewer|design-reviewer|nesting-reviewer)$"
+        "matcher": "^(code-reviewer|design-reviewer)$"
       },
       {
         "hooks": [
@@ -191,12 +213,12 @@
             "timeout": 5
           }
         ],
-        "matcher": "^(code-reviewer|deep-reviewer)$"
+        "matcher": "^code-reviewer$"
       }
     ],
     "SubagentStop": [
       {
-        "matcher": "^(difficulty-evaluator|code-reviewer|deep-reviewer)$",
+        "matcher": "^code-reviewer$",
         "hooks": [
           {
             "type": "command",
@@ -213,7 +235,7 @@
             "timeout": 5
           }
         ],
-        "matcher": "^(code-reviewer|deep-reviewer)$"
+        "matcher": "^code-reviewer$"
       }
     ]
   }
