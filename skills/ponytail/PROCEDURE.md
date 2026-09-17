@@ -23,7 +23,7 @@
 - `ponytail_ready`：入力と同じ要件・設計revision、対象path・hash・HEAD、全監査結果または非該当理由、未解決事項なしを確認して呼出元へ返す
   - 欠落・条件不成立は`blocked`を返す
   - 全差分の自己レビューは行わない
-- `changes_requested`：メインが指摘の根拠を確認し、[メインモデル選択](../MODEL_SELECTION.md)に従う
+- `changes_requested`：メインが指摘の根拠を確認し、Codexは[作業分担](../WORKFLOW_ROUTING.md)の設計工程、Claudeは[メインモデル選択](../MODEL_SELECTION.md)に従う
   - 採用分は[cowlickの手順](../cowlick/PROCEDURE.md)を読み、現在の設計書・indexへ反映し、新revision・hashで新規レビューする
 - `consultation_required`：要件・公開挙動・受入済みtrade-offの変更は、選択肢・挙動差・推奨を呼出元へ返す
   - ユーザー判断を代行しない
