@@ -161,8 +161,10 @@ class ProtectedExec(unittest.TestCase):
                 with self.subTest(agent=agent, server=name):
                     args = [a.replace("__CONTEXT_DICTIONARY_ROOT__", str(context)) for a in config["args"]]
                     self.assertEqual(config["command"], "bash")
-                    self.assertEqual(args[0], f".{agent}/hooks/shell/mcp-protected.sh")
-                    environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"], CONTEXT_AGENT=agent)
+                    entry = "deepseek-launch.sh" if name == "deepseek-worker" else "mcp-protected.sh"
+                    self.assertEqual(args[0], f".{agent}/hooks/shell/{entry}")
+                    environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"], CONTEXT_AGENT=agent,
+                                       DEEPSEEK_API_KEY="test-launch-canary")
                     result = subprocess.run([config["command"], *args], cwd=self.root, env=environment, input="stdio request", text=True, capture_output=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     output = json.loads(result.stdout)
