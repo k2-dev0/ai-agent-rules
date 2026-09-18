@@ -4,9 +4,9 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
 ## Codexの動線
 
-repository調査・実装・test・通常修正は別repositoryの`deepseek-bridge`へ渡す。親は要件、設計、指摘採否、Git、報告を担当する。機械的rename・typo等は現在モデルのまま処理し、設計または再指摘箇所の直接修正に入る時だけAstra / xhighを使う。難度採点とLuna/Solへの振り分けは行わない。
+repository調査・原因診断は親が行い、実装・test・通常修正・検証は別repositoryの`deepseek-bridge`へ渡す。親は確認済み事実、要件、設計、指摘採否、Git、報告を保持する。機械的rename・typo等は現在モデルのまま処理し、設計または再指摘箇所の直接修正に入る時だけAstra / xhighを使う。難度採点とLuna/Solへの振り分けは行わない。
 
-設計を伴う変更とTDDは、DeepSeek調査→親の設計→DeepSeek実装・検証→親のcommit→freshなAstra / xhigh `code-reviewer`の順。独立設計監査は`design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astraへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
+設計を伴う変更とTDDは、親Astra / xhighの調査・設計→DeepSeek実装・検証→親のcommit→freshなAstra / xhigh `code-reviewer`の順。独立設計監査は`design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astraへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
 
 Claudeの既存動線は維持する。共通文書内の難度評価・メイン実装・nesting-reviewerはClaude用であり、Codexへ適用しない。
 
