@@ -10,7 +10,7 @@ Codexは定義ファイルの存在だけで登録済みと扱わない。指定
 
 ## 起動・待機
 
-- Codexの子は独立コードレビュー（`code-reviewer`）と設計監査（`design-reviewer`）だけ；どちらもAstra / xhigh；調査・ネスト候補抽出は親、実装は[DeepSeek](DEEPSEEK_WORKFLOW.md)が行う
+- Codexの子は独立コードレビュー（通常`code-reviewer`、critical検出後`code-reviewer-critical`）と設計監査（`design-reviewer`）だけ；選択条件・effortは[独立レビュー](INDEPENDENT_REVIEW.md)と[作業分担](WORKFLOW_ROUTING.md)に従う；調査・ネスト候補抽出は親、実装は[DeepSeek](DEEPSEEK_WORKFLOW.md)が行う
 - Claudeの子は難易度調査（`difficulty-evaluator`）、独立コードレビュー（`code-reviewer`）、設計監査（`design-reviewer`）、ネスト候補抽出（`nesting-reviewer`）；方針決定のための一般調査・実装・修正はメインが行う
 - 子は1体ずつ新規起動し、サブエージェントの完了までメインの作業を止め、完了確認後に次へ進む
 - 現在の環境の専用roleの定義と起動toolを確認してから起動する
