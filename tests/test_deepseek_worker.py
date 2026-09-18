@@ -145,7 +145,7 @@ class Worker(unittest.TestCase):
         section = config.split("[mcp_servers.deepseek-worker]", 1)[1].split("\n[", 1)[0]
         self.assertIn('args = [".codex/hooks/shell/deepseek-launch.sh", "deepseek-bridge"]', section)
         self.assertIn('env_vars = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"]', section)
-        self.assertIn('tool_timeout_sec = 75', section)
+        self.assertIn('tool_timeout_sec = 1300', section)
         self.assertIn('enabled_tools = ["start_task", "wait_task", "continue_task", "abort_task"]', section)
 
     def test_invalid_start_does_not_reserve_the_worktree(self):
