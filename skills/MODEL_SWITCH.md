@@ -1,6 +1,6 @@
 # メインモデルの切り替え
 
-Batonでは`PreModelSwitch`が元のモデルへ注入する。Codexの選定値は`WORKFLOW_ROUTING.md`の必要工程だけAstra / xhigh、Claudeは`MODEL_SELECTION.md`に従う。対応しない環境では選定値が現在のモデル・effortと異なる場合だけ読む。
+Batonでは`PreModelSwitch`が元のモデルへ注入する。Codexの選定値は`WORKFLOW_ROUTING.md`に従う、Claudeは`MODEL_SELECTION.md`に従う。対応しない環境では選定値が現在のモデル・effortと異なる場合だけ読む。
 
 `PRE_MODEL_SWITCH_CONTEXT`を含む失敗応答で受け取った場合、その応答は手順注入であり切替失敗ではない。同じ`switch_model`要求を一度だけ再試行する。
 
