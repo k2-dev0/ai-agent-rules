@@ -6,7 +6,7 @@ test・設定・文書・Prisma schema・生成物・vendor・依存物・未変
 
 検出契約は検出担当だけが読む。メインは返却された候補を確認し、3段以上を意味を保って2段以下へ減らす。
 
-Codexは[DeepSeek](../DEEPSEEK_WORKFLOW.md)へ対象pathと`NESTING_CONTRACT.md`を渡して候補を抽出させ、親が採否・縮退方針を判断する。修正・検証は`FIX_FLOW.md`の担当に渡し、Gitは親が行う。意味の確認・設計判断が必要なら`WORKFLOW_ROUTING.md`へ戻る。以下の専用子起動はClaudeだけに適用し、Codexの再検出は新しいDeepSeek taskで行う。
+Codexは親が対象pathから候補を抽出し、採否・縮退方針を判断する。修正・検証は`FIX_FLOW.md`の担当に渡し、Gitは親が行う。意味の確認・設計判断が必要なら`WORKFLOW_ROUTING.md`へ戻る。以下の専用子起動はClaudeだけに適用し、Codexの再検出も親が行う。
 
 ## 手順
 
