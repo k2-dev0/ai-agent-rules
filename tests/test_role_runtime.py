@@ -25,8 +25,9 @@ from workflow_evidence import prepared_arguments
 
 REPO = Path(__file__).resolve().parents[1]
 ROLES = {
-    "code-reviewer": ("gpt-6-astra", "xhigh"),
-    "design-reviewer": ("gpt-6-astra", "xhigh"),
+    "code-reviewer": ("gpt-6-astra", "high"),
+    "code-reviewer-critical": ("gpt-6-astra", "xhigh"),
+    "design-reviewer": ("gpt-6-astra", "high"),
 }
 
 def toml(value):
@@ -77,7 +78,7 @@ class RoleRuntime(unittest.TestCase):
                 subprocess.run(['git','add','--','value.py'],cwd=root,check=True,capture_output=True)
                 source.write_text(source.read_text() + '# unstaged work\n')
                 expected_worktree = source.read_bytes()
-            prepared_role = role == 'code-reviewer'
+            prepared_role = role in ('code-reviewer', 'code-reviewer-critical')
             brief = dict(repository=str(root), review_base=head, review_head=head, requirements='Review double for its specified behavior.')
             requests = []
             preparation_errors = []
@@ -131,13 +132,13 @@ class RoleRuntime(unittest.TestCase):
                             item = dict(type="function_call", id="spawn", call_id="spawn", namespace="collaboration", name="spawn_agent", arguments=json.dumps(args))
                     elif is_parent and parent_requests == (2 + int(probe_permissions) + int(prepared_role)):
                         item = dict(type="function_call", id="wait", call_id="wait", namespace="collaboration", name="wait_agent", arguments='{"timeout_ms":10000}')
-                    elif is_parent and probe_switch and role == 'code-reviewer' and parent_requests == (3 + int(probe_permissions) + int(prepared_role)):
+                    elif is_parent and probe_switch and role in ('code-reviewer', 'code-reviewer-critical') and parent_requests == (3 + int(probe_permissions) + int(prepared_role)):
                         item = dict(type='function_call', id='switch', call_id='switch', namespace='functions', name='switch_model', arguments=json.dumps(dict(model='gpt-6-astra', config=dict(effort='xhigh'))))
                     elif not is_parent and child_requests_count == 1 and probe_permissions:
                         item = dict(type="function_call", id="child-write", call_id="child-write", namespace="functions", name="exec_command", arguments=json.dumps(dict(cmd="touch " + shlex.quote(str(root / "child-write")), workdir=str(root))))
                     else:
                         result = 'Fixture transport complete.'
-                        if not is_parent and role == 'code-reviewer':
+                        if not is_parent and role in ('code-reviewer', 'code-reviewer-critical'):
                             proofs = list((root / '.codex/tmp').glob('independent-review.*.json'))
                             if proofs:
                                 data = json.loads(proofs[0].read_text())
@@ -195,6 +196,7 @@ class RoleRuntime(unittest.TestCase):
                     self.assertEqual(state['phase'], 'prepared', 'a prepared state alone must not authorize a successful test')
                     return dict(emit_failed=True, child_started=False)
                 if trusted:
+                    self.assertEqual((requests[0]["model"], requests[0]["reasoning"]["effort"]), ("gpt-6-astra", "medium"))
                     self.assertFalse(preparation_errors, [preparation_errors, [x for request in requests for x in request.get('input', []) if x.get('type') == 'function_call_output' and x.get('call_id') == 'prepare']])
                 messages = queue.Queue()
                 with (root / "stderr.log").open("w") as stderr:
@@ -264,7 +266,7 @@ class RoleRuntime(unittest.TestCase):
                             snapshots = [e['file_hashes'] for e in events if e['input'].get('hook_event_name') == 'PostToolUse' and 'file_hashes' in e]
                             self.assertTrue(snapshots, 'the real PostToolUse observer must capture file hashes')
                             self.assertEqual(snapshots[-1], {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in ('value.py','test_value.py')})
-                        if role == 'code-reviewer':
+                        if role in ('code-reviewer', 'code-reviewer-critical'):
                             self.assertEqual(data['phase'], 'complete')
                             if probe_switch:
                                 # switch_model is supplied by the ChatGPT-backed
@@ -273,8 +275,8 @@ class RoleRuntime(unittest.TestCase):
                                 parent_requests_after = [r for r in requests if not json.loads(r.get('client_metadata',{}).get('x-codex-turn-metadata','{}')).get('parent_thread_id')]
                                 switch_outputs = [x for r in parent_requests_after for x in r['input'] if x.get('type') == 'function_call_output' and x.get('call_id') == 'switch']
                                 self.assertTrue(any('unsupported call: switch_model' in str(x) for x in switch_outputs), switch_outputs)
-                                self.assertEqual((parent_requests_after[-1]['model'], parent_requests_after[-1]['reasoning']['effort']), ('gpt-5.6-sol','high'))
-                        if role == 'code-reviewer':
+                                self.assertEqual((parent_requests_after[-1]['model'], parent_requests_after[-1]['reasoning']['effort']), ('gpt-6-astra','medium'))
+                        if role in ('code-reviewer', 'code-reviewer-critical'):
                             proof = json.loads(next((root / '.codex/tmp').glob('independent-review.*.json')).read_text())
                             self.assertEqual(proof['result']['status'], 'reviewed')
                         result = dict(role=child["agentRole"], model=child_request["model"], effort=child_request["reasoning"]["effort"], hook_events=len(events), contracts_delivered=True)
