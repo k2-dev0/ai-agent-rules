@@ -22,11 +22,11 @@ skill_file() {
 
 ROLE=$(hook_child_role)
 if [ "$HOOK_AGENT" = codex ]; then
-  case "$ROLE" in code-reviewer|design-reviewer) ;; *) exit 0 ;; esac
+  case "$ROLE" in code-reviewer|code-reviewer-critical|design-reviewer) ;; *) exit 0 ;; esac
 fi
 case "$ROLE" in
   difficulty-evaluator) RELATIVE=DIFFICULTY_CONTRACT.md ;;
-  code-reviewer|deep-reviewer) RELATIVE=CODE_REVIEW_CONTRACT.md ;;
+  code-reviewer|code-reviewer-critical|deep-reviewer) RELATIVE=CODE_REVIEW_CONTRACT.md ;;
   design-reviewer) RELATIVE=ponytail/REVIEW_CONTRACT.md ;;
   nesting-reviewer) RELATIVE=unwind/NESTING_CONTRACT.md ;;
   *) exit 0 ;;
@@ -41,7 +41,7 @@ COMMON=$(skill_file CHILD_RULES.md) || {
 }
 SEVERITY=
 case "$ROLE" in
-  code-reviewer|deep-reviewer)
+  code-reviewer|code-reviewer-critical|deep-reviewer)
     SEVERITY=$(skill_file REVIEW_SEVERITY.md) || {
       hook_review_context "レビューの重大度基準がありません。成功扱いせず失敗を返してください。"
       exit 0
@@ -51,7 +51,7 @@ case "$ROLE" in
 esac
 INPUT=
 case "$HOOK_AGENT:$ROLE" in
-  codex:code-reviewer)
+  codex:code-reviewer|codex:code-reviewer-critical)
     INPUT=$(printf '%s' "$HOOK_INPUT" | python3 "$(dirname "$0")/agent-input.py" bind) || {
       hook_review_context '検証済みの入力を実際の専用子へ結び付けられません。調査せず{"error":"validated agent input unavailable"}を返してください。'
       exit 0
