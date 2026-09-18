@@ -52,7 +52,7 @@ command = "bash"
 args = [".codex/hooks/shell/deepseek-launch.sh", "deepseek-bridge"]
 env_vars = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"]
 startup_timeout_sec = 20
-tool_timeout_sec = 75
+tool_timeout_sec = 1300
 enabled_tools = ["start_task", "wait_task", "continue_task", "abort_task"]
 default_tools_approval_mode = "approve"
 
