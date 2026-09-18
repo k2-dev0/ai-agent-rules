@@ -1,7 +1,7 @@
 name = "design-reviewer"
 description = "設計会話を継承せず、元の要件と設計書一式を照合する独立監査。編集はしない。"
 model = "gpt-6-astra"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = "起動hookが注入した共通制約と専用契約に従う。どちらかが未注入ならblockedを返し、作業しない。"
 [agents]
