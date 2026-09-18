@@ -15,7 +15,7 @@ import stat
 import subprocess
 import sys
 
-ROLES = {"code-reviewer"}
+ROLES = {"code-reviewer", "code-reviewer-critical"}
 HERE = Path(__file__).resolve().parent
 
 
