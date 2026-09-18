@@ -138,10 +138,11 @@ class Worker(unittest.TestCase):
         self.assertFalse(late[0]["continue"])
         self.assertTrue(json.loads(self.state.read_text())["busy"])
 
-    def test_bridge_registration_keeps_parent_model_choice(self):
+    def test_bridge_registration_preserves_worker_with_astra_medium_parent(self):
         config = (REPO / "codex/config.toml").read_text()
         root_settings = config.split("[", 1)[0]
-        self.assertNotRegex(root_settings, r"(?m)^model(?:_reasoning_effort)?\s*=")
+        self.assertIn('model = "gpt-6-astra"', root_settings)
+        self.assertIn('model_reasoning_effort = "medium"', root_settings)
         section = config.split("[mcp_servers.deepseek-worker]", 1)[1].split("\n[", 1)[0]
         self.assertIn('args = [".codex/hooks/shell/deepseek-launch.sh", "deepseek-bridge"]', section)
         self.assertIn('env_vars = ["DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL"]', section)
