@@ -9,7 +9,7 @@ user-invocable: false
 
 ファイル、Git、DB、外部サービス、依存関係を変更せず、結果は会話内へ返す。ユーザーへ直接質問しない。
 
-Codexは[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)でrepositoryの読み取り調査を依頼し、親が要件判断する。Claudeはメインが調査・要件判断を行う。確認済み事実は`path:line`を付け、推論・未確認と区別する。
+Codex・Claudeともメインがrepositoryの読み取り調査と要件判断を行う。確認済み事実は`path:line`を付け、推論・未確認と区別する。調査を実装workerへ渡さない。
 
 ## 手順
 
