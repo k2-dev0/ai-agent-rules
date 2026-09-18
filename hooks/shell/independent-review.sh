@@ -95,7 +95,7 @@ case "$EVENT" in
         ;;
       Agent|*spawn_agent)
         ROLE=$(hook_agent_type)
-        case "$ROLE" in code-reviewer|deep-reviewer) ;; *) exit 0 ;; esac
+        case "$ROLE" in code-reviewer|code-reviewer-critical|deep-reviewer) ;; *) exit 0 ;; esac
         case "$HOOK_AGENT:$TOOL" in
           codex:*spawn_agent)
             hook_agent_message_valid || hook_deny "native reviewerはmessageだけを使ってください。別fieldで入力照合を迂回できません。"
@@ -136,7 +136,7 @@ case "$EVENT" in
     ;;
   SubagentStart)
     ROLE=$(hook_child_role)
-    case "$ROLE" in code-reviewer|deep-reviewer) ;; *) exit 0 ;; esac
+    case "$ROLE" in code-reviewer|code-reviewer-critical|deep-reviewer) ;; *) exit 0 ;; esac
     [ "$(printf '%s' "$DATA" | jq -r '.pending.role')" = "$ROLE" ] || exit 0
     ID=$(hook_child_id)
     [ -n "$ID" ] || exit 0
