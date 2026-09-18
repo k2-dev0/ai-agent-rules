@@ -1,6 +1,6 @@
 # DeepSeek worker
 
-Codexから`deepseek-worker` MCPの`start_task`・`wait_task`・`continue_task`・`abort_task`を使う。bridge本体・DSH依存・privacy・session保存は別repository `deepseek-bridge`の責務。初期commitを比較元にでき、4 toolが利用可能であることを確認する。toolが未提供、起動失敗、契約不一致なら依存作業を止め、未接続と報告する。
+Codexから`deepseek-worker` MCPの`start_task`・`wait_task`・`continue_task`・`abort_task`を使う。bridge本体・DSH依存・privacy・session保存は別repository `deepseek-bridge`の責務。初期commitを比較元にでき、4 toolが利用可能であることを確認する。tool定義は初期表示から省略される場合があるため、初期表示だけで未提供と判断しない。`ALL_TOOLS`を`deepseek`で検索し、返された正確なtool名から4操作を解決する。4操作が実行時registryにない、起動失敗、契約不一致なら依存作業を止め、観測した検索結果・errorだけを報告する。
 
 ## 依頼
 
