@@ -82,7 +82,7 @@ async def scenario(bridge_root, endpoint, fail_cleanup=False):
             if fail_cleanup:
                 endpoint["mode"] = 401
                 task = await tool("start_task", brief="Exercise the cleanup failure boundary")
-                result = await tool("wait_task", expect_block=True, task_id=task["task_id"], timeout_ms=15000)
+                result = await tool("wait_task", expect_block=True, task_id=task["task_id"])
                 assert result["status"] == "failed" and result["error"]["class"] == "abort_error"
                 assert json.loads(fixture.state.read_text())["busy"]
                 fixture.denied(fixture.call("Bash", command="git add code.txt"))
@@ -101,7 +101,7 @@ async def scenario(bridge_root, endpoint, fail_cleanup=False):
                                    + "; printf forbidden > .git/worker-write-sentinel")
             task = await tool("start_task", brief="Run the bounded integration fixture")
             fixture.denied(fixture.call("apply_patch", command="patch"))
-            result = await tool("wait_task", task_id=task["task_id"], timeout_ms=20000)
+            result = await tool("wait_task", task_id=task["task_id"])
             assert result["status"] == "completed", result
             assert (fixture.root / "sample.py").read_text() == "VALUE = 42\n"
             assert not (fixture.root / ".git/worker-write-sentinel").exists()
@@ -112,10 +112,10 @@ async def scenario(bridge_root, endpoint, fail_cleanup=False):
             endpoint["mode"] = "ok"
             continued = await tool("continue_task", task_id=task["task_id"], message="Confirm the existing result")
             assert continued["session_id"] == task["session_id"]
-            assert (await tool("wait_task", task_id=task["task_id"], timeout_ms=15000))["status"] == "completed"
+            assert (await tool("wait_task", task_id=task["task_id"]))["status"] == "completed"
             endpoint["mode"] = 401
             task = await tool("start_task", brief="Exercise authentication failure")
-            result = await tool("wait_task", task_id=task["task_id"], timeout_ms=15000)
+            result = await tool("wait_task", task_id=task["task_id"])
             assert result["error"]["class"] == "authentication_error"
             assert not json.loads(fixture.state.read_text())["busy"]
             endpoint["mode"] = "slowtool"
