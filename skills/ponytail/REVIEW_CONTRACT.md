@@ -43,7 +43,7 @@
 | `minimalAlternative` | 境界・global/shared変更を増やさない案との要件充足・trade-off・失敗・運用負荷の比較 |
 | `counterexamples` | 数値・順序・選択規則の具体値・期待結果・根拠。等号、混在、同値、入力順、候補不足を該当分だけ確認 |
 | `limitsAndTests` | 性能・容量・並行性・精度・運用の上限、再検討する測定可能な条件、最小の実行可能なテスト |
-| `changesContract` | 設計書形式の必須sectionとChangesの実装情報を保持 |
+| `changesContract` | 設計書形式の必須sectionとChangesの振る舞い図・契約表を保持 |
 | `unresolved` | 未決定事項。ready時は空配列 |
 
 一つのfindingはIDを付けて一度だけ説明し、他fieldではIDを参照する。同じ要件・原因・判断・置換先を持つ要素は一行へまとめる。同じtopologyや根拠を別fieldで言い換えない。非該当fieldは理由付き`not_applicable`を一行で示す。
