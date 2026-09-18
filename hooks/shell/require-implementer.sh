@@ -16,12 +16,13 @@ ROLE=$(hook_agent_type)
 [ "$ROLE" != implementer ] || hook_deny "native子への実装委任は禁止です。CodexはDeepSeek MCP、Claudeはメインで実装してください。"
 if [ "$HOOK_AGENT" = codex ]; then
   case "$ROLE" in
-    code-reviewer|design-reviewer) ;;
-    *) hook_deny "Codexの子はcode-reviewer・design-reviewerの専用roleだけです。調査・ネスト候補抽出は親、実装はDeepSeek MCPを使ってください。" ;;
+    code-reviewer|code-reviewer-critical|design-reviewer) ;;
+    *) hook_deny "Codexの子はcode-reviewer・code-reviewer-critical・design-reviewerの専用roleだけです。調査・ネスト候補抽出は親、実装はDeepSeek MCPを使ってください。" ;;
   esac
 fi
+[ "$HOOK_AGENT:$ROLE" != claude:code-reviewer-critical ] || hook_deny "code-reviewer-criticalはCodex専用です。"
 case "$ROLE" in
-  difficulty-evaluator|code-reviewer|design-reviewer|nesting-reviewer) ;;
+  difficulty-evaluator|code-reviewer|code-reviewer-critical|design-reviewer|nesting-reviewer) ;;
   *) hook_deny "子は難易度調査・独立コードレビュー・設計監査・ネスト候補抽出の専用roleだけ起動できます。方針決定の調査・実装はメインで行ってください。" ;;
 esac
 REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "子のリポジトリを確認できません。"
@@ -29,13 +30,13 @@ SKILLS_ROOT=.claude/skills
 [ "$HOOK_AGENT" != codex ] || SKILLS_ROOT=.agents/skills
 [ -s "$REPOSITORY/$SKILLS_ROOT/CHILD_RULES.md" ] || hook_deny "子の共通制約がありません。"
 case "$ROLE" in
-  difficulty-evaluator|code-reviewer|design-reviewer)
+  difficulty-evaluator|code-reviewer|code-reviewer-critical|design-reviewer)
     hook_review_launch_valid "$ROLE" || hook_deny "reviewerは専用定義で新規起動してください。設定上書き・文脈継承は禁止です。"
     REPOSITORY=$(git -C "$(hook_cwd)" rev-parse --show-toplevel) || hook_deny "reviewerのリポジトリを確認できません。"
     EFFORT=high
     case "$HOOK_AGENT:$ROLE" in
       *:difficulty-evaluator) EFFORT=medium ;;
-      codex:*) EFFORT=xhigh ;;
+      codex:code-reviewer-critical) EFFORT=xhigh ;;
     esac
     if [ "$ROLE" = difficulty-evaluator ]; then
       BRIEF=
