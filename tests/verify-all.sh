@@ -254,6 +254,8 @@ else
   ng "DeepSeek起動時の環境変数読込が不正"
   cat "$S/deepseek-launch.out"
 fi
+DEEPSEEK_WORKFLOW="$REPO/skills/DEEPSEEK_WORKFLOW.md"
+grep -Fq '`ALL_TOOLS`' "$DEEPSEEK_WORKFLOW" && grep -Fq '初期表示だけで未提供と判断しない' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekの遅延公開toolを実行時registryで確認" || ng "DeepSeekの遅延公開tool確認手順が不足"
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
