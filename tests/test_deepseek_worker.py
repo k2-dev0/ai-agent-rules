@@ -191,6 +191,32 @@ class Worker(unittest.TestCase):
                                   result={"structuredContent": result}), [])
         self.assertFalse(json.loads(self.state.read_text())["busy"])
 
+    def test_timeout_releases_only_a_matched_confirmed_terminal_result(self):
+        self.call(brief="implement")
+        self.post()
+        self.call("wait_task", call_id="timeout-wait", task_id="task-1")
+        result = {"task_id": "task-1", "status": "failed",
+                  "error": {"class": "task_timeout_error"}}
+        for changes in ({"owner": "OTHER"}, {"call_id": "wrong"}, {"task_id": "wrong"}):
+            args = dict(call_id="timeout-wait", task_id="task-1")
+            args.update(changes)
+            output = self.call("wait_task", event="PostToolUse",
+                               result={"structuredContent": result}, **args)
+            self.assertFalse(output[0]["continue"])
+            self.assertTrue(json.loads(self.state.read_text())["busy"])
+        for changed in ({**result, "task_id": "wrong"}, {**result, "status": "running"},
+                        {**result, "error": {"class": "abort_error"}}, {"isError": True}):
+            self.call("wait_task", call_id="timeout-wait", task_id="task-1")
+            self.call("wait_task", event="PostToolUse", call_id="timeout-wait", task_id="task-1",
+                      result={"structuredContent": changed})
+            self.assertTrue(json.loads(self.state.read_text())["busy"])
+            self.denied(self.call("Bash", command="git status --short"))
+        self.call("wait_task", call_id="timeout-wait", task_id="task-1")
+        self.assertEqual(self.call("wait_task", event="PostToolUse", call_id="timeout-wait",
+                                  task_id="task-1", result={"structuredContent": result}), [])
+        self.assertFalse(json.loads(self.state.read_text())["busy"])
+        self.assertEqual(self.call("Bash", command="git status --short"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
