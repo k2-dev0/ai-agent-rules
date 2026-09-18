@@ -22,10 +22,9 @@
 <目的・利用者に見える結果を1〜2行>
 
 ## Changes
-```typescript
-// <対象ファイル>
-<構造化疑似コード>
-```
+<フロー図・状態遷移図・シーケンス図・決定表から主要なものを1つ>
+
+<図だけでは確定しない入出力・不変条件・error・副作用・dataの権威を契約表で補足>
 
 ## 対象ファイル
 - @<相対パス>
@@ -43,66 +42,60 @@
 
 ## Changes
 
-実装者が挙動を再設計せずコードへ変換できる密度で書く。
+実装方法ではなく、外部から確認できる振る舞いと実装が守る契約を書く。複雑さの中心に応じて次から主要表現を1つ選ぶ。
 
-| 書き方 | 対象 | 例 |
-|---|---|---|
-| 実名 | 既存symbol・schema field・file path | `customer_no`、`src/service.ts` |
-| 英語 | 予約語・演算子・構文・組み込み型/object、標準・外部library・framework API、method・property | `export`、`async`、`if`、`Promise`、`.map()` |
-| 日本語 | 新設する業務関数・引数・変数・型・結果field・error・処理 | `使用件数`、`保有件数超過` |
+| 複雑さの中心 | 表現 |
+|---|---|
+| 処理順・分岐 | Mermaid `flowchart` |
+| lifecycle・再試行・取消 | Mermaid `stateDiagram-v2` |
+| component・外部service間の通信順 | Mermaid `sequenceDiagram` |
+| 条件の組み合わせ | Markdownの決定表 |
 
-上の行を優先する。新設識別子の実装時の英語名は固定しない。配列は`[]`、objectは`{}`を宣言・参照の両方へ付ける（`候補一覧[].length`、`候補一覧[].slice(...)`、`利用結果{}`）。
+主要表現だけでは異なる種類の振る舞いを確定できない場合だけ2つ目を加える。file一覧、class構成、単一の直線処理は図にしない。
 
-### 構造化疑似コードの例
+### 契約表
 
-以下はSMS送信処理の抜粋（import・schema定義は省略）。既存の`defineHandler`・`prisma.user`・`sendSMS`・field名は維持する。実行用コードではなく記法の例。
+図または決定表にない該当項目だけを書く。非該当行、既存規約から一意に決まる実装、図と同じ内容は書かない。
 
-```typescript
-// front/transactions/v2/t67_01__hdb_karaden_soushin.ts
-export const t67_01__hdb_karaden_soushin = defineHandler(
-  XMLメール通知schema,
-  async 入力{} => {
-    try {
-      let 送信先電話番号 = 入力{}.data.to;
-      if (/^A/.test(送信先電話番号)) {
-        const 顧客{} = await prisma.user.findUnique({
-          where: { customer_no: 送信先電話番号 },
-          select: { contact_phone_number: true },
-        });
-        if (顧客{} === null) throw new Error("顧客不存在");
-        送信先電話番号 = 顧客{}.contact_phone_number;
-      }
-      if (!/^0[789]0\d{8}$/.test(送信先電話番号)) {
-        throw new Error("携帯電話番号不正");
-      }
-      await sendSMS({ tel: 送信先電話番号, txt: 入力{}.data.smsBody });
-    } catch {
-      const 通知結果{} = await sendMail({
-        from: SMTP_MAIL_FROM,
-        to: 入力{}.data.notificationEmail,
-        subject: `[SMS送信失敗]${入力{}.data.smsSubject}`,
-        text: "SMS送信処理に失敗しました",
-      });
-      if (通知結果{} === null) {
-        throw new InternalServerError({ message: "失敗通知を送信できませんでした" });
-      }
-    }
-  },
-);
+| 項目 | 残す情報 |
+|---|---|
+| 入力・出力 | nullを含む入力形状、条件付き必須、公開する正常結果・field |
+| 判定 | guardの優先順位、条件式、境界・等号、計算式、sort・tie-break |
+| 不変条件 | 認証・整合性・重複・競合・data lossを防ぐ条件 |
+| error | 発生条件、呼出元から区別する結果、既存dataの扱い |
+| 副作用 | DB書き込み・メール・外部APIの順序、await、部分失敗時の扱い |
+| dataの権威 | 判定に使う最新data、再取得・再検証・選択条件 |
+
+既存symbol・schema field・file path・外部契約名は実名で書く。新設するlocal変数・関数内構造・実装時の英語名は固定しない。
+
+### 例
+
+```mermaid
+flowchart TD
+  A[送信先を受け取る] --> B{顧客番号か}
+  B -->|yes| C[顧客の電話番号を取得]
+  C -->|存在しない| X[顧客不存在]
+  B -->|no| D[入力値を使用]
+  C -->|存在する| E{携帯電話番号として有効か}
+  D --> E
+  E -->|no| Y[電話番号不正]
+  E -->|yes| F[SMS送信]
+  F -->|失敗| G[失敗通知メール]
+  G -->|失敗| Z[内部error]
+  F -->|成功| H[完了]
 ```
 
-### 省略しない情報
-
-| 対象 | 省略しない情報 |
+| 項目 | 契約 |
 |---|---|
-| 関数 | export/local、同期/async、引数、guardの評価順、導出値と計算式、正常・errorの区別と返却field |
-| validation | nullを含む入力形状、条件付き必須、形式条件、client検証とserverの最新dataによる再検証 |
-| DB/API | 認証主体、`where`の全条件と日付境界、sort・tie-break、dataの権威、再取得・再検証・選択、公開field |
-| 副作用 | error処理とDB書き込み、メール、外部APIの順序・field mapping・await・失敗時処理 |
-| 共通要素 | 定数・配列の形、consumer、他の値から導出する関係 |
+| 判定 | `to`が`A`始まりなら`customer_no`で`prisma.user`を検索する。確定した電話番号は`^0[789]0\d{8}$`に一致必須 |
+| 副作用 | `sendSMS`失敗時だけ`sendMail`を実行し、通知も失敗した場合は`InternalServerError` |
 
-分岐・loopは構文で書く。「検証／取得／errorを返す」だけで済ませず条件を示す。同一処理はloopへまとめ、共通処理と対象固有の差を残す。
+### 書かない情報
 
-圧縮してよいのは重複説明と同一の外枠だけ。guard順・条件式・等号・計算式・sort・tie-break・返却field・状態遷移・副作用・dataの権威を文章一行へ畳まない。Summary・完了条件でChangesを言い直さない。
+- `const`・`let`・`await`・object組立てなどの実装構文
+- local変数名、関数内部のblock構造、新設symbolの実装時の英語名
+- 既存patternと参照ruleから一意に決まるAPI・frameworkの呼び出し方
+- 対象コードとtestから導出できる実装順
+- Summary・完了条件・図・契約表の間の言い換え
 
-対象file・参照ruleは正確な相対pathとする。
+図の簡略化のために、状態・event・guard・境界値・error・副作用・dataの権威を省略しない。対象file・参照ruleは正確な相対pathとする。
