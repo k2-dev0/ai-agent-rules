@@ -259,6 +259,7 @@ grep -Fq '`ALL_TOOLS`' "$DEEPSEEK_WORKFLOW" && grep -Fq '初期表示だけで�
 WORKFLOW_ROUTING="$REPO/skills/WORKFLOW_ROUTING.md"
 grep -Fq 'repository調査・原因診断・診断のscope分類は親が行い' "$WORKFLOW_ROUTING" && grep -Fq 'test作成・実装・通常修正・検証・整形は' "$WORKFLOW_ROUTING" && grep -Fq 'workerへ調査全体を再委任しない' "$WORKFLOW_ROUTING" && ok "Codex親が調査正本を保持" || ng "Codexの調査責務がDeepSeekから分離されていない"
 grep -Fq '実装または検証依頼' "$DEEPSEEK_WORKFLOW" && grep -Fq '未確認事実・診断のscope分類・原因調査・新しい設計判断' "$DEEPSEEK_WORKFLOW" && grep -Fq '`needs_decision`を返す' "$DEEPSEEK_WORKFLOW" && ! grep -Fq '調査のみ／編集可' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekは確定済み実装・検証だけを担当" || ng "DeepSeekへ調査判断を委任可能"
+grep -Fq '途中activityでは起床せず' "$DEEPSEEK_WORKFLOW" && grep -Fq 'timeout前に`running`が返る旧bridge' "$DEEPSEEK_WORKFLOW" && grep -Fq '即時pollを繰り返さず停止' "$DEEPSEEK_WORKFLOW" && ok "DeepSeek待機はterminalまたは60秒timeoutまでlong-poll" || ng "DeepSeek待機がactivityごとに再poll可能"
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
