@@ -8,7 +8,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 通常起動はユーザー依頼と確認済み事実を根拠とし、`prompt/`を読まない。scope名はASCII kebab-caseで決める。`$tdd --from-doc`はユーザーが明示した場合だけ使い、通常起動から切り替えない。明示された場合は最初に[設計書モード](FROM_DOC.md)を読む。
 
-Codexは[作業分担](../WORKFLOW_ROUTING.md)と[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)の未読分を読む。調査・test作成・実装・通常修正・検証はDeepSeek、設計・シナリオ選択・Gitは親が行う。Claudeの調査・実装・修正・検証はメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
+Codexは[作業分担](../WORKFLOW_ROUTING.md)と[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)の未読分を読む。調査・設計・シナリオ選択・診断分類・Gitは親、test作成・実装・通常修正・検証はDeepSeekが行う。Claudeの調査・実装・修正・検証はメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
 
 開始時に[子の起動可否](../SUBAGENT_RULES.md#開始時の可用性確認)を確認する。独立レビュー用roleと、CodexはDeepSeekの4 tool、Claudeはユーザーによるモデル指定がなければ難度評価用roleが必要。利用不能ならシナリオの承認を求めず報告する。
 
