@@ -132,7 +132,7 @@ for ENTRY_NAME in cowlick ponytail polish unwind; do
   ENTRY="$REPO/skills/$ENTRY_NAME/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$ENTRY" && ! grep -q '^user-invocable: false$' "$ENTRY" && grep -Fq '(PROCEDURE.md)' "$ENTRY" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/$ENTRY_NAME/agents/openai.yaml" && ok "明示入口と内部手順を分離: $ENTRY_NAME" || ng "明示入口の参照・起動policyが不正: $ENTRY_NAME"
 done
-grep -Fq 'preflight・cowlickの調査はメイン' "$MEETING_SKILL" && grep -Fq 'DeepSeek' "$PREFLIGHT_SKILL" "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計作成と独立監査を分離" || ng "設計作成と監査の責務が不正"
+grep -Fq '親Astra / xhighがpreflight・cowlickのrepository調査と設計を担当' "$MEETING_SKILL" && grep -Fq '調査を実装workerへ渡さない' "$PREFLIGHT_SKILL" && grep -Fq '追加のrepository調査・設計判断・設計書更新を親が行う' "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計調査・作成と独立監査を分離" || ng "設計調査・作成と監査の責務が不正"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq '振る舞いと実装が守る契約' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
@@ -256,6 +256,9 @@ else
 fi
 DEEPSEEK_WORKFLOW="$REPO/skills/DEEPSEEK_WORKFLOW.md"
 grep -Fq '`ALL_TOOLS`' "$DEEPSEEK_WORKFLOW" && grep -Fq '初期表示だけで未提供と判断しない' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekの遅延公開toolを実行時registryで確認" || ng "DeepSeekの遅延公開tool確認手順が不足"
+WORKFLOW_ROUTING="$REPO/skills/WORKFLOW_ROUTING.md"
+grep -Fq 'repository調査・原因診断・診断のscope分類は親が行い' "$WORKFLOW_ROUTING" && grep -Fq 'test作成・実装・通常修正・検証・整形は' "$WORKFLOW_ROUTING" && grep -Fq 'workerへ調査全体を再委任しない' "$WORKFLOW_ROUTING" && ok "Codex親が調査正本を保持" || ng "Codexの調査責務がDeepSeekから分離されていない"
+grep -Fq '実装または検証依頼' "$DEEPSEEK_WORKFLOW" && grep -Fq '未確認事実・診断のscope分類・原因調査・新しい設計判断' "$DEEPSEEK_WORKFLOW" && grep -Fq '`needs_decision`を返す' "$DEEPSEEK_WORKFLOW" && ! grep -Fq '調査のみ／編集可' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekは確定済み実装・検証だけを担当" || ng "DeepSeekへ調査判断を委任可能"
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
