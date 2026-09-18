@@ -504,19 +504,19 @@ for agent in claude codex; do
 done
 cd "$TMP/codex project"
 
-# 待機時間だけを書き換え、待機先・cursor等は保つ。補正でモデルの再試行を発生させない。
+# 完了待ちを1回へまとめ、待機先・cursor等は保つ。補正でモデルの再試行を発生させない。
 for tool_name in wait collaboration.wait collaborationwait wait_agent collaboration.wait_agent collaborationwait_agent; do
   matched=$(jq -r --arg name "$tool_name" '.hooks.PreToolUse[] | .matcher as $m | select($name | test($m)) | .hooks[].command | select(contains("agent-wait.sh"))' "$REPO/codex/hooks.json")
   check test -n "$matched"
-  for duration in null 10000 30000; do
+  for duration in null 10000 30000 60000 120000; do
     input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" --argjson duration "$duration" '{hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$tool,tool_input:{ids:["child-1"],cursor:"next"}} | if $duration == null then . else .tool_input.timeout_ms=$duration end')
     output=$(printf '%s' "$input" | bash .codex/hooks/shell/agent-wait.sh)
     check test "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = allow
-    expected=$(printf '%s' "$input" | jq -cS '.tool_input + {timeout_ms:60000}')
+    expected=$(printf '%s' "$input" | jq -cS '.tool_input + {timeout_ms:3600000}')
     actual=$(printf '%s' "$output" | jq -cS '.hookSpecificOutput.updatedInput')
     check test "$actual" = "$expected"
   done
-  for duration in 0 60000 120000 -1 '"invalid"'; do
+  for duration in 0 3600000 -1 '"invalid"'; do
     input=$(jq -cn --arg cwd "$PWD" --arg tool "$tool_name" --argjson duration "$duration" '{cwd:$cwd,tool_name:$tool,tool_input:{ids:["child-1"],timeout_ms:$duration}}')
     check test -z "$(printf '%s' "$input" | bash .codex/hooks/shell/agent-wait.sh)"
   done
