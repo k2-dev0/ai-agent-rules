@@ -6,10 +6,10 @@ Codexの親だけが読む。ユーザーのモデル指定を優先し、指定
 
 | 条件 | 親・レビュー |
 |---|---|
-| 説明・進捗確認 | 現在モデル。必要なrepository調査も親が行う |
-| 変更内容が一意で、挙動・公開契約・保存形式を変えない機械的変更 | 現在モデルで受付・差分範囲と検証結果の確認・Git・報告。独立レビューは要求された場合だけ |
-| 設計判断、挙動・公開契約の変更、TDD、設計書作成 | 主担当Astra / xhighが調査・設計・受入条件を確定。実装後は独立Astra reviewer |
-| レビューだけの依頼 | 親のモデルは維持し、専用Astra reviewerを起動 |
+| 説明・進捗確認 | Astra / medium。必要なrepository調査も親が行う |
+| 変更内容が一意で、挙動・公開契約・保存形式を変えない機械的変更 | Astra / mediumで受付・差分範囲と検証結果の確認・Git・報告。独立レビューは要求された場合だけ |
+| 設計判断、挙動・公開契約の変更、TDD、設計書作成 | 主担当Astra / mediumが調査・設計・受入条件を確定。実装後は独立Astra reviewer |
+| レビューだけの依頼 | 親Astra / mediumが専用Astra reviewerを起動 |
 
 private symbolのrename・typo・整形でも、外部consumer、動的参照、serialization、DB、設定keyへ影響するなら設計判断へ戻る。file数だけで分類しない。調査結果が不足する場合は親が追加調査する。
 
@@ -17,11 +17,11 @@ repository調査・原因診断・診断のscope分類は親が行い、確認�
 
 設計文書は親が編集する。production code・testの親による修正は[再指摘箇所への介入](FIX_FLOW.md#codexの修正担当)またはユーザーの明示指定に限る。bridge利用不能を理由に親実装・別runnerへ自動代替しない。
 
-## Astraが必要な工程
+## モデル・effort
 
-設計または再指摘箇所の直接修正に入る時だけ、主担当を`gpt-6-astra` / `xhigh`へ合わせる。難度採点・Luna/Sol選択・工程ごとの降格は行わない。単純なrenameのために確認・切替を要求しない。
+通常・調査・設計は主担当`gpt-6-astra` / `medium`。設計監査・実装レビューはAstra / high、実装レビューのcritical検出後は[独立レビュー](INDEPENDENT_REVIEW.md)に従いAstra / xhighへ上げる。再指摘箇所の直接修正は[修正担当](FIX_FLOW.md#codexの修正担当)に従う。難度採点・Luna/Sol選択は行わない。
 
-現在値が一致しなければ、先行tool・worker・reviewer・承認を完了し、次の応答で`switch_model({"model":"gpt-6-astra","config":{"effort":"xhigh"}})`だけを呼ぶ。Batonの`PreModelSwitch`がない環境では[切替手順](MODEL_SWITCH.md)の未読分を先に読む。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。利用不能なら依存する設計・直接修正を止めて報告する。
+現在値が担当工程の選定値と違えば[切替手順](MODEL_SWITCH.md)の未読分を読み、先行tool・worker・reviewer・承認の完了後に`switch_model`だけを呼ぶ。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。再指摘箇所の直接修正後はmediumへ戻す。
 
 ## 完了
 
