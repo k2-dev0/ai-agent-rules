@@ -37,8 +37,8 @@ class AgentInput(unittest.TestCase):
         return subprocess.run(command, input=json.dumps({"hook_event_name": event, "session_id": "TEST", "cwd": str(self.root), **kwargs}),
                               text=True, capture_output=True, cwd=self.root)
 
-    def prepare(self, brief=None):
-        command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", "code-reviewer", json.dumps(self.brief if brief is None else brief)])
+    def prepare(self, brief=None, role="code-reviewer"):
+        command = shlex.join(["python3", ".codex/hooks/shell/agent-input.py", "prepare", role, json.dumps(self.brief if brief is None else brief)])
         response = self.call("agent-input.py", tool_name="Bash", tool_input={"command": command})
         self.assertEqual(response.returncode, 0, response.stderr)
         output = json.loads(response.stdout)["hookSpecificOutput"]
@@ -75,6 +75,27 @@ class AgentInput(unittest.TestCase):
         self.call("agent-input.py", "SubagentStop", agent_type="code-reviewer", agent_id="child", last_assistant_message=json.dumps(result))
         self.assertEqual(json.loads(self.state.read_text())["phase"], "complete")
         self.denied(self.launch(inputs))
+
+    def test_critical_reviewer_delivers_contract_and_records_result(self):
+        role = "code-reviewer-critical"
+        inputs = self.prepare(role=role)
+        inputs["message"] = "opaque"
+        self.assertEqual(self.launch(inputs).stdout, "")
+        self.call("independent-review.sh", "SubagentStart", agent_type=role, agent_id="critical-child")
+        started = self.call("load-operation-context.sh", "SubagentStart", agent_type=role, agent_id="critical-child")
+        context = json.loads(started.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("読み取り専用の独立コードレビュー", context)
+        self.assertIn(self.brief["requirements"], context)
+        state_path = self.root / ".codex/tmp/independent-review.TEST.json"
+        pending = json.loads(state_path.read_text())["pending"]
+        report = dict(status="reviewed", review_base=self.brief["review_base"],
+                      review_head=self.brief["review_head"], request_id=pending["request_id"],
+                      unchecked=[], findings=[])
+        self.call("independent-review.sh", "SubagentStop", agent_type=role, agent_id="critical-child",
+                  last_assistant_message=json.dumps(report))
+        self.call("agent-input.py", "SubagentStop", agent_type=role, agent_id="critical-child")
+        self.assertEqual(json.loads(state_path.read_text())["result"], report)
+        self.assertEqual(json.loads(self.state.read_text())["phase"], "complete")
 
     def test_missing_preparation_role_spoof_and_changed_token_fail(self):
         inputs = {"agent_type": "code-reviewer", "task_name": "review", "fork_turns": "none", "message": "opaque"}
