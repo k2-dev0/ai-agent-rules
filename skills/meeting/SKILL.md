@@ -18,7 +18,7 @@ disable-model-invocation: true
 
 `$meeting` の明示呼び出しでだけ起動する。引数、なければ直前の会話から対象を決め、不明な場合だけ質問する。
 
-Codexは親Astra / xhighがpreflight・cowlickのrepository調査と設計を担当する。Claudeも同工程をメインが行う。ponytailの監査は履歴を継承しない専用子へ渡す。内部工程の選択・再実行は自分で行い、ユーザーにしか決められない事項を一件ずつ質問する。回答済みの事項は聞き直さない。
+Codexは親Astra / mediumがpreflight・cowlickのrepository調査と設計を担当する。Claudeも同工程をメインが行う。ponytailの監査は履歴を継承しない専用子へ渡す。内部工程の選択・再実行は自分で行い、ユーザーにしか決められない事項を一件ずつ質問する。回答済みの事項は聞き直さない。
 
 ## 手順
 
