@@ -15,7 +15,7 @@ EXCLUSIVE = re.compile(r"^(Bash|exec_command|apply_patch|Edit|Write|MultiEdit|No
 TERMINAL = {"completed", "needs_decision", "failed", "aborted", "interrupted"}
 STOPPED_ERRORS = {"configuration_error", "privacy_configuration_error", "authentication_error",
                   "transport_error", "harness_start_error", "harness_protocol_error",
-                  "model_error", "task_contract_error", "internal_error"}
+                  "model_error", "task_contract_error", "internal_error", "task_timeout_error"}
 
 
 def regular(fd):
