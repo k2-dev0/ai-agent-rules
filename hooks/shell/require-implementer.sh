@@ -17,7 +17,7 @@ ROLE=$(hook_agent_type)
 if [ "$HOOK_AGENT" = codex ]; then
   case "$ROLE" in
     code-reviewer|design-reviewer) ;;
-    *) hook_deny "Codexの子はcode-reviewer・design-reviewerの専用roleだけです。調査・実装・ネスト候補抽出はDeepSeek MCPを使ってください。" ;;
+    *) hook_deny "Codexの子はcode-reviewer・design-reviewerの専用roleだけです。調査・ネスト候補抽出は親、実装はDeepSeek MCPを使ってください。" ;;
   esac
 fi
 case "$ROLE" in
