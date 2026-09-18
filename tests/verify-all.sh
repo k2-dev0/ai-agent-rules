@@ -133,7 +133,7 @@ for ENTRY_NAME in cowlick ponytail polish unwind; do
   ENTRY="$REPO/skills/$ENTRY_NAME/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$ENTRY" && ! grep -q '^user-invocable: false$' "$ENTRY" && grep -Fq '(PROCEDURE.md)' "$ENTRY" && grep -q 'allow_implicit_invocation: false' "$REPO/skills/$ENTRY_NAME/agents/openai.yaml" && ok "明示入口と内部手順を分離: $ENTRY_NAME" || ng "明示入口の参照・起動policyが不正: $ENTRY_NAME"
 done
-grep -Fq '親Astra / xhighがpreflight・cowlickのrepository調査と設計を担当' "$MEETING_SKILL" && grep -Fq '調査を実装workerへ渡さない' "$PREFLIGHT_SKILL" && grep -Fq '追加のrepository調査・設計判断・設計書更新を親が行う' "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計調査・作成と独立監査を分離" || ng "設計調査・作成と監査の責務が不正"
+grep -Fq '親Astra / mediumがpreflight・cowlickのrepository調査と設計を担当' "$MEETING_SKILL" && grep -Fq '調査を実装workerへ渡さない' "$PREFLIGHT_SKILL" && grep -Fq '追加のrepository調査・設計判断・設計書更新を親が行う' "$COWLICK_SKILL" && grep -Fq '専用`design-reviewer`' "$PONYTAIL_SKILL" && ok "設計調査・作成と独立監査を分離" || ng "設計調査・作成と監査の責務が不正"
 grep -Fq '**明示要件**' "$PREFLIGHT_SKILL" && grep -Fq '**設計選択**' "$PREFLIGHT_SKILL" && grep -q '境界を新設しない基準案' "$PREFLIGHT_SKILL" && ok "preflightの要件由来・境界ゼロ契約" || ng "preflightの要件由来・境界ゼロ契約が不足"
 grep -q "設計書ごと削除" "$COWLICK_SKILL" && grep -Fq "IMPLEMENTATION_RULES.md" "$COWLICK_SKILL" && grep -q "基準案で満たせない明示要件" "$IMPLEMENTATION_RULES" && ok "cowlickの最小draft契約" || ng "cowlickの最小draft契約が不足"
 grep -Fq 'cowlick/DESIGN_FORMAT.md' "$REQUIRED_READING_HOOK" && grep -Fq 'Summary' "$COWLICK_FORMAT" && grep -Fq '## Changes' "$COWLICK_FORMAT" && grep -Fq '振る舞いと実装が守る契約' "$COWLICK_FORMAT" && ok "cowlickの設計書形式を必要時に強制注入" || ng "cowlickの設計書形式参照が不正"
@@ -572,8 +572,8 @@ if [ -f .agents/skills/MODEL_SELECTION.md ] && [ -f .agents/skills/MODEL_SWITCH.
 else
   ng "モデル選択・切り替え: Codex配置または参照条件が不正"
 fi
-if grep -q '^default_subagent_model = "gpt-6-astra"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "xhigh"$' .codex/config.toml; then
-  ok "bootstrap codex は子の既定値をLuna/maxへ固定"
+if grep -q '^model = "gpt-6-astra"$' .codex/config.toml && grep -q '^model_reasoning_effort = "medium"$' .codex/config.toml && grep -q '^default_subagent_model = "gpt-6-astra"$' .codex/config.toml && grep -q '^default_subagent_reasoning_effort = "high"$' .codex/config.toml; then
+  ok "bootstrap codex は子の既定値をAstra/highへ固定"
 else
   ng "bootstrap codex の子モデル既定値が不正"
 fi
