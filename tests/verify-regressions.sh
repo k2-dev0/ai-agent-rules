@@ -316,7 +316,7 @@ for agent in claude codex; do
   export CLAUDE_PROJECT_DIR=$PWD
   command="bash .$agent/hooks/shell/require-implementer.sh"
   if [ "$agent" = codex ]; then
-    roles='code-reviewer design-reviewer'
+    roles='code-reviewer code-reviewer-critical design-reviewer'
     role_key=agent_type
     extension=toml
     contract=.agents/skills/CODE_REVIEW_CONTRACT.md
@@ -334,7 +334,7 @@ for agent in claude codex; do
     effort=high
     case "$agent:$role" in
       *:difficulty-evaluator) effort=medium ;;
-      codex:*) effort=xhigh ;;
+      codex:code-reviewer-critical) effort=xhigh ;;
     esac
     if [ "$role" = difficulty-evaluator ]; then
       if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
