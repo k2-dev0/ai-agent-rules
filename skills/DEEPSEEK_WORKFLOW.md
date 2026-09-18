@@ -9,11 +9,11 @@ Codexから`deepseek-worker` MCPの`start_task`・`wait_task`・`continue_task`�
 親が確認済み事実、変更範囲、不変条件、関連test・検証commandを確定してから渡す。workerは対象と直接依存を実装に必要な範囲で読み、新しい調査、範囲拡張、設計判断が必要なら`needs_decision`で親へ返す。実行中は親が編集・Git変更・reviewer起動をしない。
 
 1. `start_task({"brief":"...","title":"..."})`で返されたtask ID・session IDを保持する
-2. `wait_task({"task_id":"...","timeout_ms":60000})`で完了・判断待ち・失敗を受け取る；`running`は未終了だけを示し、正常動作・進捗の証拠にしない
+2. `wait_task({"task_id":"...","timeout_ms":60000})`でterminal遷移または60秒timeoutを待つ；途中activityでは起床せず、`running`はtimeout時点のsnapshotであって正常動作・進捗の証拠にしない
 3. `completed`／`needs_decision`で同じ実装方針を続ける場合だけ`continue_task({"task_id":"...","message":"差分指示"})`を使う
 4. 目的・設計の変更、failed／aborted／interrupted後は実差分を確認し、必要なら残作業でfresh taskを作る；旧taskの実行停止を確認できるまでは編集・新規起動しない
 
-各`running`応答の`last_activity_at`・`phase`・`progress`等、bridgeが返す実活動の指標を前回値と比較する。実活動を観測できる状態で60秒待機を3回終えても指標が更新されなければ停滞と扱い、同じ待機を繰り返さず`abort_task`で停止・回収する。bridgeが実活動を観測できない場合は3回で自動待機を止め、正常・停滞を判定不能と一度だけ報告して停止するかをユーザーへ確認する。ユーザーが待機継続を明示した場合を除き、同じ`running`の実況を繰り返さない。
+各`running`応答の`last_activity_at`・`phase`・`progress`等、bridgeが返す実活動の指標を前回値と比較する。timeout前に`running`が返る旧bridgeまたは契約不一致を検出したら即時pollを繰り返さず停止して報告する。実活動を観測できる状態で60秒待機を3回終えても指標が更新されなければ停滞と扱い、`abort_task`で停止・回収する。bridgeが実活動を観測できない場合は3回で自動待機を止め、正常・停滞を判定不能と一度だけ報告して停止するかをユーザーへ確認する。ユーザーが待機継続を明示した場合を除き、同じ`running`の実況を繰り返さない。
 
 変更要求が実行中に届いたら、旧指示を止める必要がある場合は`abort_task`を呼び、停止確認後に差分を照合する。取消受付・timeoutを停止完了とみなさず、worktreeを自動復元しない。
 
