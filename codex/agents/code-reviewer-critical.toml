@@ -1,0 +1,8 @@
+name = "code-reviewer-critical"
+description = "実装会話を継承せず、critical検出後に固定commitの差分を要求と照合する独立レビュー。編集はしない。"
+model = "gpt-6-astra"
+model_reasoning_effort = "xhigh"
+sandbox_mode = "read-only"
+developer_instructions = "起動hookが注入した共通制約と専用契約に従う。どちらかが未注入ならincompleteを返し、作業しない。"
+[agents]
+enabled = false
