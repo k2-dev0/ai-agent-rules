@@ -1,6 +1,6 @@
 ## 入力
 
-Codexの調査・整形・診断・検証は[DeepSeek](../DEEPSEEK_WORKFLOW.md)へ渡す。親はpath一覧の固定・scope script・Git・結果照合を担当し、worker返却後に行う。以下の検証対象・順序・保証は両環境共通。
+Codexの親はpath一覧の固定・診断のscope分類と原因調査・Git・結果照合を担当し、整形・検証は[DeepSeek](../DEEPSEEK_WORKFLOW.md)へ渡す。workerが診断を返したら追加調査をさせず親が分類する。以下の検証対象・順序・保証は両環境共通。
 
 開始時にモードを選び、途中で変更しない。
 
