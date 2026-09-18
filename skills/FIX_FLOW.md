@@ -33,7 +33,7 @@ Codexは下の「Codexの修正担当」を使う。以下のモデル再評価�
 
 ## Codexの修正担当
 
-診断・成立指摘は通常DeepSeekへ渡す。新しい設計判断は親が[作業分担](WORKFLOW_ROUTING.md)に従って確定する。severityによる採否・ユーザー確認は`INDEPENDENT_REVIEW.md`に従い、修正対象に採用された指摘だけ処理する。
+親が診断のscope・原因、指摘の成立、必要な設計判断を[作業分担](WORKFLOW_ROUTING.md)に従って確定する。severityによる採否・ユーザー確認は`INDEPENDENT_REVIEW.md`に従い、修正対象に採用された指摘と確定した修正範囲だけDeepSeekへ渡す。
 
 直前の有効なレビューと修正後レビューを比較し、同じfile内の関数・section・testへの成立指摘が再発した箇所だけ、主担当Astra / xhighへ移管する。行番号・内容・severityの変化では別箇所にしない。同一レビュー内の複数指摘・同一HEADの再取得・却下・incompleteは2回と数えない。
 
