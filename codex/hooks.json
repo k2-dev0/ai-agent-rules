@@ -203,7 +203,7 @@
             "timeout": 5
           }
         ],
-        "matcher": "^(code-reviewer|design-reviewer)$"
+        "matcher": "^(code-reviewer|code-reviewer-critical|design-reviewer)$"
       },
       {
         "hooks": [
@@ -213,12 +213,12 @@
             "timeout": 5
           }
         ],
-        "matcher": "^code-reviewer$"
+        "matcher": "^(code-reviewer|code-reviewer-critical)$"
       }
     ],
     "SubagentStop": [
       {
-        "matcher": "^code-reviewer$",
+        "matcher": "^(code-reviewer|code-reviewer-critical)$",
         "hooks": [
           {
             "type": "command",
@@ -235,7 +235,7 @@
             "timeout": 5
           }
         ],
-        "matcher": "^code-reviewer$"
+        "matcher": "^(code-reviewer|code-reviewer-critical)$"
       }
     ]
   }
