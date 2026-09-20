@@ -48,6 +48,50 @@ def response(value):
     return value
 
 
+def rejected_start(value):
+    """Confirm a start_task input rejection that proves the runtime never began."""
+    def strict(text):
+        def pairs(items):
+            result = {}
+            for key, item in items:
+                if key in result:
+                    raise ValueError("duplicate key")
+                result[key] = item
+            return result
+
+        def constant(token):
+            raise ValueError("invalid constant")
+
+        return json.loads(text, object_pairs_hook=pairs, parse_constant=constant)
+
+    try:
+        if isinstance(value, str):
+            value = strict(value)
+        if not isinstance(value, dict) or value.get("isError") is not True:
+            return False
+        if set(value) - {"isError", "content", "_meta"}:
+            return False
+        if "_meta" in value and not isinstance(value["_meta"], dict):
+            return False
+        parts = value.get("content")
+        if not isinstance(parts, list) or len(parts) != 1:
+            return False
+        part = parts[0]
+        if not isinstance(part, dict) or set(part) - {"type", "text", "annotations", "_meta"}:
+            return False
+        if part.get("type") != "text" or not isinstance(part.get("text"), str):
+            return False
+        if any(not isinstance(part[key], dict) for key in ("annotations", "_meta") if key in part):
+            return False
+        payload = strict(part["text"])
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(payload, dict) or set(payload) != {"class", "message", "rejection", "execution_started"}:
+        return False
+    return (payload["class"] == "configuration_error" and payload["rejection"] == "input_validation"
+            and payload["execution_started"] is False and isinstance(payload["message"], str))
+
+
 def transition(data, event, action):
     owner = event.get("session_id")
     if not isinstance(owner, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", owner):
@@ -83,8 +127,14 @@ def transition(data, event, action):
     if data.get("owner") != owner:
         raise ValueError("worker result owner does not match")
     if action in ("start_task", "continue_task"):
-        if data.get("call_id") != event.get("tool_use_id"):
+        call_id = event.get("tool_use_id")
+        if data.get("call_id") != call_id:
             raise ValueError("worker result call does not match")
+        if (action == "start_task" and event.get("hook_event_name") == "PostToolUse"
+                and "task_id" in data and data["task_id"] is None
+                and isinstance(call_id, str) and call_id
+                and rejected_start(event.get("tool_response"))):
+            return {**data, "task_id": None, "busy": False, "observations": {}}
     else:
         if not data.get("task_id") or inputs.get("task_id") != data["task_id"]:
             raise ValueError("worker result cannot release an unidentified task")
