@@ -67,6 +67,20 @@ class Worker(unittest.TestCase):
     def denied(self, output):
         self.assertTrue(any(o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny" for o in output), output)
 
+    def start_error(self, text=None, omit=(), **changes):
+        payload = {"class": "configuration_error", "message": "The brief was rejected",
+                   "rejection": "input_validation", "execution_started": False}
+        payload.update(changes)
+        for key in omit:
+            payload.pop(key, None)
+        return {"isError": True,
+                "content": [{"type": "text", "text": json.dumps(payload) if text is None else text}]}
+
+    def assert_guard_held(self, output, before):
+        self.assertFalse(output[0]["continue"])
+        self.assertEqual(self.state.read_bytes(), before)
+        self.denied(self.call("Bash", command="git status --short"))
+
     def test_baseline_before_worker_and_exclusive_parent_until_completion(self):
         self.assertEqual(self.call(brief="Rename a private symbol"), [])
         self.assertEqual(json.loads(self.review.read_text())["base"], self.base)
@@ -216,6 +230,108 @@ class Worker(unittest.TestCase):
                                   task_id="task-1", result={"structuredContent": result}), [])
         self.assertFalse(json.loads(self.state.read_text())["busy"])
         self.assertEqual(self.call("Bash", command="git status --short"), [])
+
+    def test_confirmed_start_rejection_releases_the_pending_reservation(self):
+        self.call(brief="Implement the change")
+        self.denied(self.call("Bash", command="git status --short"))
+        marked = self.start_error()
+        marked["content"][0].update({"annotations": {"audience": ["assistant"]}, "_meta": {"trace": "local"}})
+        marked["_meta"] = {}
+        self.assertEqual(self.call(event="PostToolUse", result=marked), [])
+        data = json.loads(self.state.read_text())
+        self.assertFalse(data["busy"])
+        self.assertIsNone(data["task_id"])
+        self.assertEqual(data["observations"], {})
+        self.assertEqual(self.call("Bash", command="git status --short"), [])
+        self.assertEqual(self.call("start_task", brief="Second attempt"), [])
+        self.assertEqual(self.call(event="PostToolUse", result=json.dumps(self.start_error())), [])
+        self.assertFalse(json.loads(self.state.read_text())["busy"])
+        self.assertEqual(self.call("Bash", command="git status --short"), [])
+        self.assertEqual(self.call("start_task", brief="Third attempt"), [])
+        self.post()
+        self.assertEqual(self.post("wait_task", "completed", task_id="task-1"), [])
+        self.assertFalse(json.loads(self.state.read_text())["busy"])
+        self.assertEqual(self.call("Bash", command="git status --short"), [])
+
+    def test_only_a_matching_pending_start_rejection_can_release(self):
+        self.call(brief="implement")
+        pending = self.state.read_bytes()
+        cases = (
+            ("old_format", self.start_error(omit=("rejection", "execution_started"))),
+            ("transport_error", self.start_error(**{"class": "transport_error"})),
+            ("abort_error", self.start_error(**{"class": "abort_error"})),
+            ("missing_rejection", self.start_error(omit=("rejection",))),
+            ("missing_execution_started", self.start_error(omit=("execution_started",))),
+            ("extra_payload_field", self.start_error(task_id="task-1")),
+            ("non_string_message", self.start_error(message=1)),
+            ("string_false", self.start_error(execution_started="false")),
+            ("isError_one", {**self.start_error(), "isError": 1}),
+            ("isError_string_false", {**self.start_error(), "isError": "false"}),
+            ("extra_outer_key", {**self.start_error(), "extra": 1}),
+            ("structured_content", {**self.start_error(),
+                                    "structuredContent": {"task_id": "task-1", "status": "running"}}),
+            ("multiple_content", {"isError": True,
+                                  "content": self.start_error()["content"] + [{"type": "text", "text": "{}"}]}),
+            ("non_text", {"isError": True, "content": [{"type": "image", "data": "x"}]}),
+            ("text_not_string", {"isError": True, "content": [{"type": "text", "text": 1}]}),
+            ("invalid_json", self.start_error(text="not JSON")),
+            ("payload_not_object", self.start_error(text=json.dumps(["configuration_error"]))),
+            ("duplicate_payload_key", self.start_error(
+                text='{"class":"configuration_error","class":"transport_error","message":"m",'
+                     '"rejection":"input_validation","execution_started":false}')),
+            ("nan_constant", self.start_error(
+                text='{"class":"configuration_error","message":"m",'
+                     '"rejection":"input_validation","execution_started":NaN}')),
+            ("duplicate_outer_key", '{"isError":true,"isError":true,"content":'
+                                    + json.dumps(self.start_error()["content"]) + '}'),
+            ("response_not_object", ["isError"]),
+            ("part_extra_key", {**self.start_error(),
+                                "content": [{**self.start_error()["content"][0], "extra": "x"}]}),
+            ("part_meta_not_object", {**self.start_error(),
+                                      "content": [{**self.start_error()["content"][0], "_meta": None}]}),
+            ("part_annotations_not_object", {**self.start_error(),
+                                             "content": [{**self.start_error()["content"][0],
+                                                          "annotations": ["assistant"]}]}),
+            ("outer_meta_not_object", {**self.start_error(), "_meta": ["x"]}),
+        )
+        for label, result in cases:
+            with self.subTest(label):
+                self.assert_guard_held(self.call(event="PostToolUse", result=result), pending)
+        for label, kwargs in (("owner_mismatch", {"owner": "OTHER"}),
+                              ("call_mismatch", {"call_id": "other"}),
+                              ("missing_event_call_id", {"call_id": None})):
+            with self.subTest(label):
+                self.assert_guard_held(self.call(event="PostToolUse", result=self.start_error(), **kwargs), pending)
+        for label, state, kwargs in (
+                ("missing_task_id_key", {"busy": True, "owner": "TEST", "call_id": "call-1", "observations": {}},
+                 {"call_id": "call-1"}),
+                ("empty_call_id", {"busy": True, "owner": "TEST", "call_id": "", "task_id": None, "observations": {}},
+                 {"call_id": ""}),
+                ("missing_state_call_id", {"busy": True, "owner": "TEST", "task_id": None, "observations": {}},
+                 {"call_id": None})):
+            with self.subTest(label):
+                self.state.write_text(json.dumps(state))
+                before = self.state.read_bytes()
+                self.assert_guard_held(self.call(event="PostToolUse", result=self.start_error(), **kwargs), before)
+
+    def test_start_rejection_never_releases_other_actions_or_a_known_task(self):
+        self.call(brief="implement")
+        self.post()
+        before = self.state.read_bytes()
+        self.assert_guard_held(self.call(event="PostToolUse", call_id="call-1", result=self.start_error()), before)
+        self.post("wait_task", "completed", task_id="task-1")
+        self.call("continue_task", call_id="cont-1", task_id="task-1", message="Fix")
+        before = self.state.read_bytes()
+        self.assert_guard_held(self.call("continue_task", event="PostToolUse", call_id="cont-1",
+                                         task_id="task-1", result=self.start_error()), before)
+        self.call("wait_task", call_id="wait-1", task_id="task-1")
+        before = self.state.read_bytes()
+        self.assert_guard_held(self.call("wait_task", event="PostToolUse", call_id="wait-1",
+                                         task_id="task-1", result=self.start_error()), before)
+        self.call("abort_task", call_id="abort-1", task_id="task-1")
+        before = self.state.read_bytes()
+        self.assert_guard_held(self.call("abort_task", event="PostToolUse", call_id="abort-1",
+                                         task_id="task-1", result=self.start_error()), before)
 
 
 if __name__ == "__main__":
