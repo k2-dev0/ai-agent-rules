@@ -212,32 +212,3 @@
       name: '@kaikojima/dsh-main-policy'
       config:
         stateRoot: !!js "process.getBuiltinModule('node:path').join(process.env.DSH_HOME ?? process.getBuiltinModule('node:path').join(process.env.HOME ?? '.', '.dsh'), 'dsh-main-policy')"
-        thresholds:
-          notify: 100
-          estimate: 120
-          confirm: 140
-          normalStop: 150
-          externalStop: 180
-          deepseekLongStop: 195
-          absoluteStop: 200
-        prices:
-          deepseek-official/deepseek-flash:
-            input: 0.30
-            cacheRead: 0.006
-            cacheWrite: 0.30
-            output: 1.20
-          zai/glm-5.3:
-            input: 1.40
-            cacheRead: 0.26
-            cacheWrite: 1.40
-            output: 4.40
-          anthropic/claude-opus-5-5:
-            input: 4.00
-            cacheRead: 0.20
-            cacheWrite: 8.00
-            output: 20.00
-          openai/gpt-6-sol:
-            input: 4.40
-            cacheRead: 0.44
-            cacheWrite: 5.50
-            output: 16.50
