@@ -7,7 +7,7 @@ Batonでは`PreModelSwitch`が元のモデルへ注入する。Codexの選定値
 ## 手順
 
 - モデルまたは設定が現在と異なる場合だけ、専用ツール `switch_model({"model":"モデルID","config":{"effort":"思考量"}})` を直接呼ぶ
-  - 例：`switch_model({"model":"gpt-6-astra","config":{"effort":"xhigh"}})`
+  - 例：`switch_model({"model":"gpt-6-astra","config":{"effort":"medium"}})`
 - 先行するツール・コマンド・子エージェント・承認の結果をすべて受け取る
   - 次の応答では`switch_model`だけを呼び、他のツール呼び出しを含めない
   - 切り替えのために処理を打ち切らない
