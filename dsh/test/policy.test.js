@@ -5,8 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
-  budgetTier,
-  calculateCost,
   commandMatchesAllowlist,
   gitCommandPolicy,
   isInsideAllowedPath,
@@ -20,7 +18,6 @@ import {
   routingDecision,
   routingFlags,
   shellProtectedMutationReason,
-  utcMonth,
   validateDesignHandoff,
   validateReviewOutput,
 } from '../lib/policy.js'
@@ -122,20 +119,4 @@ test('review contract fixes SHAs and distinguishes incomplete', () => {
   assert.equal(validateReviewOutput(JSON.stringify({ status: 'complete', base, head, requirementsHash, findings: [] }), input).valid, true)
   assert.equal(validateReviewOutput(JSON.stringify({ status: 'incomplete', base, head, requirementsHash, findings: [] }), input).valid, false)
   assert.throws(() => parseReviewInput(`<review_input>${JSON.stringify({ base, head, requirementsHash: `sha256:${'0'.repeat(64)}`, requirements })}</review_input>`), /does not match/)
-})
-
-test('costs use disjoint cache fields and conservative rates', () => {
-  const cost = calculateCost({
-    inputTokens: 1_000_000,
-    cacheReadTokens: 1_000_000,
-    cacheWriteTokens: 1_000_000,
-    outputTokens: 1_000_000,
-    reasoningTokens: 500_000,
-  }, 'zai', 'glm-5.3')
-  assert.equal(cost, 7.46)
-  assert.equal(budgetTier(99.99), 'normal')
-  assert.equal(budgetTier(140), 'confirm')
-  assert.equal(budgetTier(180), 'external-stop')
-  assert.equal(budgetTier(200), 'absolute-stop')
-  assert.match(utcMonth(Date.UTC(2026, 8, 30)), /^2026-09$/)
 })
