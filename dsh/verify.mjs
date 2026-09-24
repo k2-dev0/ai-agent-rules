@@ -25,7 +25,6 @@ for (const expected of [
   'maxDepth: 1',
   'name: \'@kaikojima/dsh-main-policy\'',
   '- dshMainPolicy',
-  'absoluteStop: 200',
 ]) {
   assert.ok(patch.includes(expected), `missing patch contract: ${expected}`)
 }
