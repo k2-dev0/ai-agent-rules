@@ -334,7 +334,7 @@ for agent in claude codex; do
     effort=high
     case "$agent:$role" in
       *:difficulty-evaluator) effort=medium ;;
-      codex:code-reviewer-critical) effort=xhigh ;;
+      codex:code-reviewer|codex:code-reviewer-critical|codex:design-reviewer) effort=medium ;;
     esac
     if [ "$role" = difficulty-evaluator ]; then
       if [ "$agent" = codex ]; then contract=.agents/skills/DIFFICULTY_CONTRACT.md; else contract=.claude/skills/DIFFICULTY_CONTRACT.md; fi
