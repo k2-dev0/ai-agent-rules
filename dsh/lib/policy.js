@@ -26,7 +26,6 @@ export const EXTERNAL_TOOLS = Object.freeze({
     model: 'glm-5.3',
     effort: 'max',
     maxSteps: 4,
-    warningUsd: 3,
   }),
   external_opus_design: Object.freeze({
     flag: 'opusPlan',
@@ -34,7 +33,6 @@ export const EXTERNAL_TOOLS = Object.freeze({
     model: 'claude-opus-5-5',
     effort: 'high',
     maxSteps: 4,
-    warningUsd: 6,
   }),
   external_code: Object.freeze({
     flag: 'externalCode',
@@ -42,7 +40,6 @@ export const EXTERNAL_TOOLS = Object.freeze({
     model: 'glm-5.3',
     effort: 'high',
     maxSteps: 6,
-    warningUsd: 4,
   }),
   review_change: Object.freeze({
     flag: 'review',
@@ -50,7 +47,6 @@ export const EXTERNAL_TOOLS = Object.freeze({
     model: 'gpt-6-sol',
     effort: 'high',
     maxSteps: 2,
-    warningUsd: 1,
   }),
 })
 
@@ -74,46 +70,6 @@ export const DESIGN_HANDOFF_HEADINGS = Object.freeze([
   '## 受入条件',
   '## 未解決事項',
 ])
-
-export const DEFAULT_PRICES = Object.freeze({
-  // Peak DeepSeek rates. Off-peak savings deliberately do not weaken the cap.
-  'deepseek-official/deepseek-flash': Object.freeze({
-    input: 0.30,
-    cacheRead: 0.006,
-    cacheWrite: 0.30,
-    output: 1.20,
-  }),
-  'zai/glm-5.3': Object.freeze({
-    input: 1.40,
-    cacheRead: 0.26,
-    cacheWrite: 1.40,
-    output: 4.40,
-  }),
-  // One-hour cache writes are the conservative Anthropic cache-write rate.
-  'anthropic/claude-opus-5-5': Object.freeze({
-    input: 4.00,
-    cacheRead: 0.20,
-    cacheWrite: 8.00,
-    output: 20.00,
-  }),
-  // Long-context standard rates plus the 10% regional-processing premium.
-  'openai/gpt-6-sol': Object.freeze({
-    input: 4.40,
-    cacheRead: 0.44,
-    cacheWrite: 5.50,
-    output: 16.50,
-  }),
-})
-
-export const BUDGET_THRESHOLDS = Object.freeze({
-  notify: 100,
-  estimate: 120,
-  confirm: 140,
-  normalStop: 150,
-  externalStop: 180,
-  deepseekLongStop: 195,
-  absoluteStop: 200,
-})
 
 const PROTECTED_COMPONENTS = new Set([
   '.git',
@@ -196,7 +152,6 @@ export function routingFlags(text) {
     opusPlan,
     externalCode,
     review,
-    approveBudget: /(?:^|\s)\/approve-budget(?:\s|$)/.test(source),
     conflict: externalPlan && opusPlan,
   }
 }
@@ -477,37 +432,6 @@ export function routeFor(provider, model) {
     ?? (provider === 'deepseek-official' && model === 'deepseek-flash' ? 'main' : undefined)
 }
 
-export function calculateCost(usage, provider, model, prices = DEFAULT_PRICES) {
-  const price = prices[`${provider}/${model}`]
-  if (!price) throw new Error(`missing price for ${provider}/${model}`)
-  const count = (name) => {
-    const value = usage?.[name] ?? 0
-    if (!Number.isFinite(value) || value < 0) throw new Error(`invalid usage.${name}`)
-    return value
-  }
-  return (
-    count('inputTokens') * price.input
-    + count('cacheReadTokens') * price.cacheRead
-    + count('cacheWriteTokens') * price.cacheWrite
-    + count('outputTokens') * price.output
-  ) / 1_000_000
-}
-
-export function utcMonth(timestamp = Date.now()) {
-  return new Date(timestamp).toISOString().slice(0, 7)
-}
-
-export function budgetTier(total, thresholds = BUDGET_THRESHOLDS) {
-  if (total >= thresholds.absoluteStop) return 'absolute-stop'
-  if (total >= thresholds.deepseekLongStop) return 'deepseek-long-stop'
-  if (total >= thresholds.externalStop) return 'external-stop'
-  if (total >= thresholds.normalStop) return 'normal-stop'
-  if (total >= thresholds.confirm) return 'confirm'
-  if (total >= thresholds.estimate) return 'estimate'
-  if (total >= thresholds.notify) return 'notify'
-  return 'normal'
-}
-
 export function isInsideAllowedPath(target, cwd, allowedPaths, forbiddenPaths = []) {
   const canonical = canonicalTarget(target, cwd)
   const allowed = allowedPaths.some(path => sameOrInside(canonicalTarget(path, cwd), canonical))
@@ -546,7 +470,6 @@ export function defaultStatePaths(config, cwd) {
   const root = config?.stateRoot ? resolve(config.stateRoot) : resolve(cwd, '.dsh')
   return {
     root,
-    ledger: config?.ledgerPath ? resolve(config.ledgerPath) : join(root, 'usage-ledger.jsonl'),
     mutationLock: config?.mutationLockPath ? resolve(config.mutationLockPath) : join(root, 'mutation-lock.json'),
   }
 }
