@@ -1,8 +1,8 @@
 # プロジェクト配布用設定。<repo>/.codex/config.toml として配置する。
 # trusted projectでのみ読み込まれ、CLI overrideより低くprofile/user configより優先される。
 # sandbox内の単一通常commandは自動。境界外はGit保護付き入口で承認する。
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
 default_permissions = "distributed"
 approval_policy = "on-request"
 
@@ -40,7 +40,7 @@ hooks = true
 [agents]
 max_threads = 1
 default_subagent_model = "gpt-6-astra"
-default_subagent_reasoning_effort = "high"
+default_subagent_reasoning_effort = "medium"
 
 # roleの登録を明示し、定義ファイルの自動検出には依存しない。内容は各ファイルを正本とする。
 [agents.code-reviewer]
