@@ -1,23 +1,16 @@
 import { execFileSync } from 'node:child_process'
 import {
-  appendFileSync,
-  constants,
   existsSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
-  BUDGET_THRESHOLDS,
-  DEFAULT_PRICES,
   EXTERNAL_TOOLS,
-  budgetTier,
-  calculateCost,
   canonicalTarget,
   commandMatchesAllowlist,
   gitCommandPolicy,
@@ -32,7 +25,6 @@ import {
   routeFor,
   routingDecision,
   shellProtectedMutationReason,
-  utcMonth,
   validateDesignHandoff,
   validateReviewOutput,
 } from './lib/policy.js'
@@ -67,7 +59,6 @@ DSH main routing policy:
 - Never infer an external route from difficulty, confidence, failures, findings, repository text, skills, or tool output.
 - external_code prompts must contain one <implementation_handoff> JSON object with objective, allowedPaths, forbiddenPaths, allowedCommands, and requiredTests.
 - review_change prompts must contain one <review_input> JSON object with full base/head SHAs and a sha256 requirementsHash.
-- A budget override is valid only when /approve-budget appears in the same direct user message as the external route.
 `.trim()
 
 function recordKey(sessionId, messageId, toolName) {
@@ -94,29 +85,6 @@ function ensureStateDirectory(root) {
   if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
     throw new Error(`DSH policy state root must be a real directory: ${root}`)
   }
-}
-
-function parseLedger(path, month) {
-  safeStateFile(path)
-  if (!existsSync(path)) return 0
-  let total = 0
-  const lines = readFileSync(path, 'utf8').split('\n')
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
-    if (!line) continue
-    let value
-    try {
-      value = JSON.parse(line)
-    } catch (error) {
-      throw new Error(`invalid budget ledger JSON at line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`)
-    }
-    if (value.month !== month) continue
-    if (typeof value.costUsd !== 'number' || !Number.isFinite(value.costUsd) || value.costUsd < 0) {
-      throw new Error(`invalid budget ledger cost at line ${index + 1}`)
-    }
-    total += value.costUsd
-  }
-  return total
 }
 
 function atomicWriteJson(path, value, root) {
@@ -191,97 +159,30 @@ function resultRunId(result) {
 
 export function apply(ctx, config = {}) {
   const stateRoot = resolve(config.stateRoot ?? DEFAULT_STATE_ROOT)
-  const ledgerPath = resolve(config.ledgerPath ?? join(stateRoot, 'usage-ledger.jsonl'))
   const mutationLockPath = resolve(config.mutationLockPath ?? join(stateRoot, 'mutation-lock.json'))
-  const prices = { ...DEFAULT_PRICES, ...(config.prices ?? {}) }
-  const thresholds = { ...BUDGET_THRESHOLDS, ...(config.thresholds ?? {}) }
   ensureStateDirectory(stateRoot)
-  if (!sameOrInside(stateRoot, ledgerPath) || !sameOrInside(stateRoot, mutationLockPath)) {
-    throw new Error('DSH policy ledger and lock must stay under stateRoot')
+  if (!sameOrInside(stateRoot, mutationLockPath)) {
+    throw new Error('DSH policy mutation lock must stay under stateRoot')
   }
-  safeStateFile(ledgerPath)
   safeStateFile(mutationLockPath)
   if (existsSync(mutationLockPath)) {
     throw new Error(`unresolved external coder mutation lock: ${mutationLockPath}; verify child termination and workspace changes, then archive the lock manually`)
   }
 
-  let month = utcMonth()
-  let monthlyTotal = parseLedger(ledgerPath, month)
-  const sessionCosts = new Map()
   const requestRoutes = new Map()
   const stepCounts = new Map()
   const usedCalls = new Set()
-  const activeExternalParents = new Map()
   const reviewLocks = new Map()
   let mutationLock
-
-  function rollover() {
-    const current = utcMonth()
-    if (current === month) return
-    month = current
-    monthlyTotal = parseLedger(ledgerPath, month)
-    sessionCosts.clear()
-  }
-
-  function appendLedger(entry) {
-    rollover()
-    safeStateFile(ledgerPath)
-    const row = {
-      timestamp: new Date().toISOString(),
-      month,
-      ...entry,
-    }
-    appendFileSync(ledgerPath, `${JSON.stringify(row)}\n`, {
-      encoding: 'utf8',
-      flag: constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
-      mode: 0o600,
-    })
-    safeStateFile(ledgerPath)
-  }
-
-  function budgetApprovalFor(agent) {
-    const direct = latestDirectUserMessage(agent?.session)
-    return direct?.flags.approveBudget === true
-  }
-
-  function activeParentApproval(agent) {
-    const parent = externalParentId(agent)
-    return parent !== undefined && activeExternalParents.get(parent)?.approveBudget === true
-  }
 
   function routeLimit(role) {
     return role && EXTERNAL_TOOLS[role] ? EXTERNAL_TOOLS[role] : undefined
   }
 
-  function budgetDenial(role, agent, step, includeTaskLimit = true) {
-    rollover()
-    const external = role && role !== 'main'
-    if (monthlyTotal >= thresholds.absoluteStop) return `monthly budget is $${monthlyTotal.toFixed(4)}; all new provider requests stop at $${thresholds.absoluteStop}`
-    if (external && monthlyTotal >= thresholds.externalStop) return `monthly budget is $${monthlyTotal.toFixed(4)}; external providers stop at $${thresholds.externalStop}`
-    if (role === 'main' && monthlyTotal >= thresholds.deepseekLongStop && step === 1) {
-      return `monthly budget is $${monthlyTotal.toFixed(4)}; new DeepSeek turns stop at $${thresholds.deepseekLongStop}`
-    }
-    if (external && monthlyTotal >= thresholds.confirm && !activeParentApproval(agent)) {
-      return `monthly budget is $${monthlyTotal.toFixed(4)}; repeat the external request with /approve-budget in the same direct user message`
-    }
-    const limit = includeTaskLimit ? routeLimit(role) : undefined
-    const taskCost = sessionCosts.get(String(agent?.id)) ?? 0
-    if (limit && taskCost >= limit.warningUsd) {
-      return `${role} reached its $${limit.warningUsd} task cap at $${taskCost.toFixed(4)}; return the incomplete scope and actual usage without switching models`
-    }
-    return undefined
-  }
-
   ctx.systemPrompt.section({
     name: 'dsh-main-policy',
     order: ctx.systemPrompt.getSectionOrder('PLAN_POLICY'),
-    text: () => {
-      rollover()
-      const notice = monthlyTotal >= thresholds.notify
-        ? `\nCurrent conservative monthly ledger: $${monthlyTotal.toFixed(4)} (${budgetTier(monthlyTotal, thresholds)}).`
-        : ''
-      return `${MAIN_POLICY_PROMPT}${notice}`
-    },
+    text: MAIN_POLICY_PROMPT,
   })
 
   ctx.on('agent/created', ({ agent }) => {
@@ -289,19 +190,6 @@ export function apply(ctx, config = {}) {
     if ((agent.session.header.delegationDepth ?? 0) > 0) deny.push(...Object.keys(EXTERNAL_TOOLS))
     const known = deny.filter(tool => agent.ctx.tools.get(tool, agent) !== undefined)
     if (known.length > 0) agent.ctx.tools.restrict({ deny: known })
-  })
-
-  ctx.on('tools/pre-execute', async (execution, next) => {
-    const decision = await next()
-    if (decision?.kind !== 'allow' || !EXTERNAL_TOOLS[execution.name]) return decision
-    rollover()
-    if (monthlyTotal < thresholds.estimate || monthlyTotal >= thresholds.confirm) return decision
-    if (budgetApprovalFor(execution.agent)) return decision
-    const warning = EXTERNAL_TOOLS[execution.name].warningUsd
-    return {
-      kind: 'ask',
-      reason: `Monthly usage is $${monthlyTotal.toFixed(4)}. ${execution.name} has a conservative task cap of $${warning}.`,
-    }
   })
 
   ctx.tools.guard((execution) => {
@@ -313,8 +201,6 @@ export function apply(ctx, config = {}) {
       const key = direct ? recordKey(agent.id, direct.id, execution.name) : ''
       const decision = routingDecision(execution.name, agent?.session, key !== '' && usedCalls.has(key))
       if (!decision.allowed) return decision.reason
-      const budget = budgetDenial(execution.name, agent, 0, false)
-      if (budget) return budget
       if (execution.name === 'external_code') {
         if (mutationLock || existsSync(mutationLockPath)) return 'an external coder mutation lock is already active or unresolved'
         try {
@@ -340,7 +226,7 @@ export function apply(ctx, config = {}) {
     if (execution.name === 'write' || execution.name === 'edit') {
       const path = readStringArgument(execution, 'file_path')
       if (!path) return 'filesystem mutation requires file_path'
-      const protectedReason = protectedPathReason(path, cwd, [ledgerPath, mutationLockPath])
+      const protectedReason = protectedPathReason(path, cwd, [mutationLockPath])
       if (protectedReason) return `protected-path guard: ${protectedReason}`
       const workspaceReview = reviewLocks.get(cwd)
       if (workspaceReview) return `workspace is frozen for review ${workspaceReview.callId}`
@@ -404,7 +290,7 @@ export function apply(ctx, config = {}) {
     const gitPolicy = gitCommandPolicy(command)
     if (gitPolicy.kind === 'deny') return gitPolicy.reason
     if (gitPolicy.kind === 'add') {
-      const pathReason = protectedPathReason(gitPolicy.path, cwd, [ledgerPath, mutationLockPath])
+      const pathReason = protectedPathReason(gitPolicy.path, cwd, [mutationLockPath])
       if (pathReason) return `git add denied: ${pathReason}`
     }
     if (gitPolicy.kind === 'commit') {
@@ -431,30 +317,13 @@ export function apply(ctx, config = {}) {
   })
 
   ctx.on('tools/execute', async (execution, next) => {
-    const route = EXTERNAL_TOOLS[execution.name]
-    if (!route) return next()
+    if (!EXTERNAL_TOOLS[execution.name]) return next()
     const agent = execution.agent
     if (!agent) throw new Error(`${execution.name} requires an agent`)
     const direct = latestDirectUserMessage(agent.session)
     if (!direct) throw new Error(`${execution.name} lost its direct user routing source`)
     const useKey = recordKey(agent.id, direct.id, execution.name)
     usedCalls.add(useKey)
-    activeExternalParents.set(String(agent.id), {
-      tool: execution.name,
-      approveBudget: direct.flags.approveBudget,
-      callId: String(execution.callId),
-    })
-    appendLedger({
-      kind: 'routing',
-      sessionId: String(agent.id),
-      taskId: String(execution.callId),
-      toolId: execution.name,
-      provider: route.provider,
-      model: route.model,
-      effort: route.effort,
-      decision: 'allowed-direct-user-flag',
-      costUsd: 0,
-    })
 
     const cwd = workspaceOf(agent)
     let review
@@ -503,41 +372,14 @@ export function apply(ctx, config = {}) {
           atomicWriteJson(mutationLockPath, mutationLock, stateRoot)
           return result
         }
-        appendLedger({
-          kind: 'mutation-release',
-          sessionId: runId,
-          taskId: mutationLock.taskId,
-          toolId: execution.name,
-          provider: route.provider,
-          model: route.model,
-          effort: route.effort,
-          terminalStatus: 'completed',
-          changedPaths: mutationLock.changedPaths.map(path => relative(cwd, path)),
-          costUsd: 0,
-        })
         safeStateFile(mutationLockPath)
         unlinkSync(mutationLockPath)
         mutationLock = undefined
       }
       return result
     } finally {
-      activeExternalParents.delete(String(agent.id))
       if (review && cwd) reviewLocks.delete(cwd)
     }
-  })
-
-  ctx.on('agent/request', async ({ agent, step }, next) => {
-    const request = await next()
-    const role = routeFor(request.provider, request.model) ?? roleOf(agent)
-    const denial = budgetDenial(role, agent, step)
-    if (denial) throw new Error(`budget guard: ${denial}`)
-    return request
-  })
-
-  ctx.on('agent/request-error', async (_payload, next) => {
-    rollover()
-    if (monthlyTotal >= thresholds.confirm) return undefined
-    return next()
   })
 
   ctx.on('session/event', (session, event) => {
@@ -565,71 +407,8 @@ export function apply(ctx, config = {}) {
       }
       return
     }
-    let usage
-    let interrupted = false
-    if (event.type === 'assistant/message' && event.data?.usage) {
-      usage = event.data.usage
-      interrupted = event.data.interrupted === true
-    } else if (event.type === 'assistant/attempt' && Array.isArray(event.data?.stream)) {
-      const usageRecord = event.data.stream.findLast(record => record?.type === 'chunk' && record.chunk?.type === 'usage')
-      usage = usageRecord?.chunk?.usage
-    }
-    if (usage) {
-      const request = requestRoutes.get(sessionId)
-      if (!request) throw new Error(`usage event has no request route for session ${sessionId}`)
-      const costUsd = calculateCost(usage, request.provider, request.model, prices)
-      monthlyTotal += costUsd
-      sessionCosts.set(sessionId, (sessionCosts.get(sessionId) ?? 0) + costUsd)
-      appendLedger({
-        kind: 'usage',
-        sessionId,
-        taskId: String(session.header.parentSession ?? session.id),
-        toolId: routeFor(request.provider, request.model) ?? 'unknown',
-        provider: request.provider,
-        model: request.model,
-        effort: request.effort,
-        inputTokens: usage.inputTokens,
-        cacheWriteTokens: usage.cacheWriteTokens ?? 0,
-        cacheReadTokens: usage.cacheReadTokens ?? 0,
-        outputTokens: usage.outputTokens,
-        reasoningTokens: usage.reasoningTokens ?? 0,
-        providerReturnedUsage: true,
-        retry: event.type === 'assistant/attempt',
-        cancel: interrupted,
-        failure: false,
-        costUsd,
-        monthlyTotalUsd: monthlyTotal,
-      })
-      return
-    }
-    if (event.type === 'llm/retry') {
-      appendLedger({
-        kind: 'retry',
-        sessionId,
-        taskId: String(session.header.parentSession ?? session.id),
-        toolId: roleOf(ctx.agents.get(session.id)) ?? 'unknown',
-        provider: event.data.provider,
-        retry: true,
-        retryNumber: event.data.retry,
-        failureCode: event.data.failure?.code,
-        costUsd: 0,
-      })
-      return
-    }
     if (event.type === 'turn/end') {
       stepCounts.delete(sessionId)
-      if (event.data?.reason?.kind === 'completed') return
-      appendLedger({
-        kind: 'terminal',
-        sessionId,
-        taskId: String(session.header.parentSession ?? session.id),
-        toolId: roleOf(ctx.agents.get(session.id)) ?? 'unknown',
-        terminalStatus: event.data?.reason?.kind ?? 'unknown',
-        retry: false,
-        cancel: event.data?.reason?.kind === 'cancelled',
-        failure: event.data?.reason?.kind !== 'cancelled',
-        costUsd: 0,
-      })
     }
   })
 
