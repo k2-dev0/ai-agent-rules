@@ -155,7 +155,7 @@ def main():
     if args.case == 'source-review':
         base, head = source_review_fixture(root)
         brief = dict(repository=str(root),review_base=base,review_head=head,requirements=(
-            "Migrate Codex to DeepSeek repository work and Astra design/review while preserving mechanical changes on the current parent model. "
+            "Migrate Codex to DeepSeek repository work with a Sol/high parent and Astra/medium design and review. "
             "Remove Codex difficulty routing and preserve fixed-commit review input validation, "
             "actual child identity binding, independent review results and .git protection. "
             "Keep model instructions sufficient for correct workflows. Tests must exercise real hooks and not mistake "
@@ -170,7 +170,7 @@ def main():
                "-c", "log_dir=" + toml(str(output / "logs")),
                "-c", 'approval_policy="never"', "-c", 'web_search="disabled"',
                "-c", "features.apps=false", "-c", "features.plugins=false",
-               "-m", "gpt-6-astra", "-c", 'model_reasoning_effort="xhigh"', "-C", str(root), prompt]
+               "-m", "gpt-5.6-sol", "-c", 'model_reasoning_effort="high"', "-C", str(root), prompt]
     with (output / "runtime.jsonl").open("w") as stdout, (output / "stderr.log").open("w") as stderr:
         process = subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
         try:
