@@ -6,10 +6,10 @@ Codexの親だけが読む。ユーザーのモデル指定を優先し、指定
 
 | 条件 | 親・レビュー |
 |---|---|
-| 説明・進捗確認 | Astra / medium。必要なrepository調査も親が行う |
-| 変更内容が一意で、挙動・公開契約・保存形式を変えない機械的変更 | Astra / mediumで受付・差分範囲と検証結果の確認・Git・報告。独立レビューは要求された場合だけ |
-| 設計判断、挙動・公開契約の変更、TDD、設計書作成 | 主担当Astra / mediumが調査・設計・受入条件を確定。実装後は独立Astra reviewer |
-| レビューだけの依頼 | 親Astra / mediumが専用Astra reviewerを起動 |
+| 説明・進捗確認 | Sol / high。必要なrepository調査も親が行う |
+| 変更内容が一意で、挙動・公開契約・保存形式を変えない機械的変更 | Sol / highで受付・差分範囲と検証結果の確認・Git・報告。独立レビューは要求された場合だけ |
+| 設計判断、挙動・公開契約の変更、TDD、設計書作成 | 主担当Sol / highが調査・設計・受入条件を確定。実装後は独立Astra reviewer |
+| レビューだけの依頼 | 親Sol / highが専用Astra reviewerを起動 |
 
 private symbolのrename・typo・整形でも、外部consumer、動的参照、serialization、DB、設定keyへ影響するなら設計判断へ戻る。file数だけで分類しない。調査結果が不足する場合は親が追加調査する。
 
@@ -19,9 +19,9 @@ repository調査・原因診断・診断のscope分類は親が行い、確認�
 
 ## モデル・effort
 
-通常・調査・設計は主担当`gpt-6-astra` / `medium`。設計監査・実装レビューはAstra / high、実装レビューのcritical検出後は[独立レビュー](INDEPENDENT_REVIEW.md)に従いAstra / xhighへ上げる。再指摘箇所の直接修正は[修正担当](FIX_FLOW.md#codexの修正担当)に従う。難度採点・Luna/Sol選択は行わない。
+通常・調査・設計は主担当`gpt-5.6-sol` / `high`。設計監査・実装レビューは`gpt-6-astra` / `medium`とし、critical検出後もeffortを上げない。再指摘箇所の直接修正は[修正担当](FIX_FLOW.md#codexの修正担当)に従いAstra / mediumへ切り替える。難度採点によるモデル振り分けは行わない。
 
-現在値が担当工程の選定値と違えば[切替手順](MODEL_SWITCH.md)の未読分を読み、先行tool・worker・reviewer・承認の完了後に`switch_model`だけを呼ぶ。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。再指摘箇所の直接修正後はmediumへ戻す。
+現在値が担当工程の選定値と違えば[切替手順](MODEL_SWITCH.md)の未読分を読み、先行tool・worker・reviewer・承認の完了後に`switch_model`だけを呼ぶ。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。再指摘箇所の直接修正後はSol / highへ戻す。
 
 ## 完了
 
