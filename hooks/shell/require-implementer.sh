@@ -36,7 +36,7 @@ case "$ROLE" in
     EFFORT=high
     case "$HOOK_AGENT:$ROLE" in
       *:difficulty-evaluator) EFFORT=medium ;;
-      codex:code-reviewer-critical) EFFORT=xhigh ;;
+      codex:code-reviewer|codex:code-reviewer-critical|codex:design-reviewer) EFFORT=medium ;;
     esac
     if [ "$ROLE" = difficulty-evaluator ]; then
       BRIEF=
