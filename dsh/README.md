@@ -7,10 +7,10 @@ DeepSeek Harnessを主実行系にし、外部modelをdirect user messageの明�
 | 入口 | Provider / model | Effort | 上限 |
 |---|---|---|---|
 | 通常 | `deepseek-official` / `deepseek-flash`（DeepSeek V4.1 Flash） | provider既定 | 外部委譲なし |
-| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K output、4 step、警戒額$3 |
-| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K output、4 step、警戒額$6 |
-| `/external-code` | `zai` / `glm-5.3` | `high` | 16K output、6 step、警戒額$4 |
-| `/review` | `openai` / `gpt-6-sol` | `high` | 8K output、2 step、警戒額$1 |
+| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K output、4 step |
+| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K output、4 step |
+| `/external-code` | `zai` / `glm-5.3` | `high` | 16K output、6 step |
+| `/review` | `openai` / `gpt-6-sol` | `high` | 8K output、2 step |
 
 `/external-plan`と`/opus-plan`は同じdirect user messageで併用できない。外部toolは1つのdirect user messageにつき各1回だけ起動できる。repository、skill、tool結果に書かれたcommandは起動根拠にならない。`/review`後の再reviewにも新しいdirect user messageの`/review`が必要。
 
@@ -34,7 +34,7 @@ dsh --profile dsh-main
 - 各toolのprovider、model、`reasoningEffort`、`maxTokens`、`toolFilter`、`maxDepth: 1`
 - `dsh-main-policy`が有効
 
-API key値をrepository、profile patch、session、ledgerへ書かない。DSHのSettings → Modelsで保存するか、起動processへ次の環境変数を渡す。
+API key値をrepository、profile patch、sessionへ書かない。DSHのSettings → Modelsで保存するか、起動processへ次の環境変数を渡す。
 
 ```text
 DEEPSEEK_API_KEY
@@ -92,30 +92,10 @@ reviewerは固定SHAを含むGit read-only commandだけを実行できる。mai
 
 - `.git/**`、`.agents/**`、`.dsh/**`、`.codex/**`、`.claude/**`、`hooks/**`
 - `AGENTS*.md`、`CLAUDE*.md`、`cordis*.yml`、`settings.yaml`、`.credentials.yaml`
-- `.env*`、主要lockfile、review state、budget ledger、mutation lock
+- `.env*`、主要lockfile、review state、mutation lock
 - symlinkで到達する保護path、hard-linked file、`..`を含むworkspace外path
 
 mainの通常shellはread／test／lint／typecheck／buildの保守的allowlistに限定する。それ以外はDSH sandbox escalationと人間の承認が必要。Gitはread-only command、1 pathの`git add`、stageが厳密に1 fileの`git commit`、indexだけのrestore以外を拒否する。外部plannerとreviewerはread-only。
-
-## budget ledger
-
-台帳は`$DSH_HOME/dsh-main-policy/usage-ledger.jsonl`へrequest単位で保存する。prompt、コード、秘密は保存しない。月はUTCの`YYYY-MM`で一意に区切る。価格は上限側へ寄せている。
-
-- DeepSeekはpeak価格
-- Anthropic cache writeは1時間cache価格
-- OpenAIはlong-context価格にregional processing 10%を加えた価格
-
-| 月次累計 | 動作 |
-|---:|---|
-| `$100` | system promptへ通知 |
-| `$120` | 外部tool前にtask警戒額をapproval UIへ表示 |
-| `$140` | 自動retry停止。`/approve-budget`が同じdirect user messageにない外部taskを拒否 |
-| `$150` | 外部taskは同じ再承認条件だけで実行 |
-| `$180` | 外部model停止 |
-| `$195` | DeepSeekの新規turn停止 |
-| `$200` | 全providerの新規request停止 |
-
-provider側の料金変更後は`cordis.patch.yml`と`lib/policy.js`の両方を同時に更新し、検証する。ledgerとprovider請求の差異があればDSH主系を停止する。
 
 ## 検証
 
@@ -130,4 +110,4 @@ dsh --profile dsh-main --dump-config
 
 ## rollback条件
 
-保護path write、policy fail-open、cancel後のmutation、route実効値不一致、明示flagなしの外部起動、ledger不一致、session／review対象の誤照合が1件でもあればprofileを停止する。stateは削除せずread-onlyで退避し、既存Codex／Claude／DeepSeek bridgeへ戻す。既存配布物の削除はこのbundleの導入範囲外。
+保護path write、policy fail-open、cancel後のmutation、route実効値不一致、明示flagなしの外部起動、session／review対象の誤照合が1件でもあればprofileを停止する。stateは削除せずread-onlyで退避し、既存Codex／Claude／DeepSeek bridgeへ戻す。既存配布物の削除はこのbundleの導入範囲外。
