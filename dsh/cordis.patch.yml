@@ -1,0 +1,243 @@
+# DSH 0.1.7-rc.1 bundle layer. Install after the shipped web bundle.
+# Secrets are credential references only; the values stay in DSH credentials.
+
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
+
+- id: llm-pi-ai
+  config:
+    providers:
+      zai:
+        apiKeyEnv: ZAI_API_KEY
+        api: openai-completions
+        models:
+          - id: glm-5.3
+            name: GLM-5.3
+            contextWindow: 1000000
+            maxTokens: 128000
+            input: [text]
+            reasoningEfforts:
+              low: low
+              high: high
+              max: max
+            compat:
+              thinkingFormat: zai
+        retryPolicy:
+          mode: normal
+          maxRetries: 5
+      anthropic:
+        apiKeyEnv: ANTHROPIC_API_KEY
+        api: anthropic-messages
+        models:
+          - id: claude-opus-5-5
+            name: Claude Opus 5.5
+            contextWindow: 1000000
+            maxTokens: 128000
+            input: [text, image]
+            reasoningEfforts:
+              high: high
+        retryPolicy:
+          mode: normal
+          maxRetries: 5
+      openai:
+        apiKeyEnv: OPENAI_API_KEY
+        api: openai-responses
+        models:
+          - id: gpt-6-sol
+            name: GPT-6 Sol
+            contextWindow: 1050000
+            maxTokens: 128000
+            input: [text, image]
+            reasoningEfforts:
+              high: high
+        retryPolicy:
+          mode: normal
+          maxRetries: 5
+
+# The policy plugin provides dshMainPolicy only after every guard and state
+# store initializes. Web startup remains pending when policy activation fails.
+- id: web-startup
+  inject:
+    - dshMainPolicy
+
+- insert:
+    - id: dsh-main-external-research-design
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: external_research_design
+        enableRunInBackground: false
+        backgroundMode: one-shot
+        maxDepth: 1
+        agentOptions:
+          provider: zai
+          model: glm-5.3
+          reasoningEffort: max
+          maxTokens: 12000
+        toolFilter:
+          allow: [read, grep, glob, web_search, web_fetch]
+        persona: |
+          You are the GLM research and high-level design route. Research, requirements analysis,
+          and high-level design are one continuous task in this session. You are read-only. Do not
+          edit the repository, run shell commands, delegate, or choose another model. Verify claims
+          from repository reads and use the web only when needed. End with exactly one Design Handoff
+          containing these headings in order:
+
+          # Design Handoff
+          ## 目的
+          ## 調査した範囲と根拠
+          ## 機能要件
+          ## 非機能要件
+          ## 制約・前提
+          ## 対象外
+          ## 現行構造
+          ## 採用する概要設計
+          ## コンポーネント境界
+          ## データフロー
+          ## インターフェース
+          ## 保存・状態遷移
+          ## 障害・再試行・ロールバック
+          ## 採用しなかった案
+          ## 詳細設計で守る制約
+          ## 受入条件
+          ## 未解決事項
+
+    - id: dsh-main-external-opus-design
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: external_opus_design
+        enableRunInBackground: false
+        backgroundMode: one-shot
+        maxDepth: 1
+        agentOptions:
+          provider: anthropic
+          model: claude-opus-5-5
+          reasoningEffort: high
+          maxTokens: 12000
+        toolFilter:
+          allow: [read, grep, glob, web_search, web_fetch]
+        persona: |
+          You are the Claude Opus 5.5 research and high-level design route. Own repository research,
+          requirements analysis, follow-up research, and high-level design in this one session. You
+          are read-only. Do not edit, run shell commands, delegate, invoke GLM, or choose another
+          model. State unresolved decisions instead of guessing. End with exactly one Design Handoff
+          containing these headings in order:
+
+          # Design Handoff
+          ## 目的
+          ## 調査した範囲と根拠
+          ## 機能要件
+          ## 非機能要件
+          ## 制約・前提
+          ## 対象外
+          ## 現行構造
+          ## 採用する概要設計
+          ## コンポーネント境界
+          ## データフロー
+          ## インターフェース
+          ## 保存・状態遷移
+          ## 障害・再試行・ロールバック
+          ## 採用しなかった案
+          ## 詳細設計で守る制約
+          ## 受入条件
+          ## 未解決事項
+
+    - id: dsh-main-external-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: external_code
+        enableRunInBackground: false
+        backgroundMode: one-shot
+        maxDepth: 1
+        agentOptions:
+          provider: zai
+          model: glm-5.3
+          reasoningEffort: high
+          maxTokens: 16000
+        toolFilter:
+          allow: [read, write, edit, grep, glob, bash]
+        persona: |
+          You are the GLM implementation route. The <implementation_handoff> JSON is authoritative.
+          Implement only its fixed detailed design, only under allowedPaths, never under
+          forbiddenPaths, and run only exact allowedCommands. Do not make a new design decision,
+          change Git state, widen the sandbox, access the network, or delegate. If implementation
+          requires a new design choice, stop and return the decision needed. End with changed paths,
+          test commands and results, incomplete scope, and actual limitations.
+
+    - id: dsh-main-review-change
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: review_change
+        enableRunInBackground: false
+        backgroundMode: one-shot
+        maxDepth: 1
+        agentOptions:
+          provider: openai
+          model: gpt-6-sol
+          reasoningEffort: high
+          maxTokens: 8000
+        toolFilter:
+          allow: [read, grep, glob, bash]
+        persona: |
+          You are an independent read-only reviewer. Review only the immutable base/head and
+          requirementsHash in <review_input>. Inspect the complete diff and only directly needed
+          dependencies. Never edit, test, access the network, delegate, or start another reviewer.
+          Return one JSON object and no prose:
+          {
+            "status": "complete|incomplete",
+            "base": "40-hex",
+            "head": "40-hex",
+            "requirementsHash": "sha256:64-hex",
+            "findings": [
+              {
+                "severity": "critical|high|medium|low",
+                "path": "relative/path",
+                "line": 1,
+                "condition": "reproduction condition",
+                "impact": "concrete impact",
+                "evidence": "specific evidence"
+              }
+            ],
+            "unchecked": "required when status is incomplete"
+          }
+          Empty findings are valid only when status is complete. A critical finding never starts a
+          second reviewer and never authorizes a fix.
+
+    - id: dsh-main-policy
+      name: '@kaikojima/dsh-main-policy'
+      config:
+        stateRoot: !!js "process.getBuiltinModule('node:path').join(process.env.DSH_HOME ?? process.getBuiltinModule('node:path').join(process.env.HOME ?? '.', '.dsh'), 'dsh-main-policy')"
+        thresholds:
+          notify: 100
+          estimate: 120
+          confirm: 140
+          normalStop: 150
+          externalStop: 180
+          deepseekLongStop: 195
+          absoluteStop: 200
+        prices:
+          deepseek-official/deepseek-flash:
+            input: 0.30
+            cacheRead: 0.006
+            cacheWrite: 0.30
+            output: 1.20
+          zai/glm-5.3:
+            input: 1.40
+            cacheRead: 0.26
+            cacheWrite: 1.40
+            output: 4.40
+          anthropic/claude-opus-5-5:
+            input: 4.00
+            cacheRead: 0.20
+            cacheWrite: 8.00
+            output: 20.00
+          openai/gpt-6-sol:
+            input: 4.40
+            cacheRead: 0.44
+            cacheWrite: 5.50
+            output: 16.50
