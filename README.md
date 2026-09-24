@@ -4,15 +4,15 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
 ## Codexの動線
 
-repository調査・原因診断は親が行い、実装・test・通常修正・検証は別repositoryの`deepseek-bridge`へ渡す。親は確認済み事実、要件、設計、指摘採否、Git、報告を保持する。通常・調査・設計はAstra / medium、再指摘箇所の直接修正は従来どおりAstra / xhighを使う。難度採点とLuna/Solへの振り分けは行わない。
+repository調査・原因診断は親が行い、実装・test・通常修正・検証は別repositoryの`deepseek-bridge`へ渡す。親は確認済み事実、要件、設計、指摘採否、Git、報告を保持する。通常・調査・設計はSol / high、設計監査・実装レビューと再指摘箇所の直接修正はAstra / mediumを使う。難度採点によるモデル振り分けは行わない。
 
-設計を伴う変更とTDDは、親Astra / mediumの調査・設計→DeepSeek実装・検証→親のcommit→freshなAstra / high `code-reviewer`の順。実装レビューでcriticalが出たらAstra / xhigh `code-reviewer-critical`で同じ対象を再レビューし、そのタスクの修正後レビューもxhighを維持する。独立設計監査（ponytail）はAstra / high `design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astraへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
+設計を伴う変更とTDDは、親Sol / highの調査・設計→DeepSeek実装・検証→親のcommit→freshなAstra / medium `code-reviewer`の順。実装レビューでcriticalが出たら同じAstra / mediumの`code-reviewer-critical`で対象を再レビューし、そのタスクの修正後レビューも同設定を維持する。独立設計監査（ponytail）はAstra / medium `design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astra / mediumへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
 
 Claudeの既存動線は維持する。共通文書内の難度評価・メイン実装・nesting-reviewerはClaude用であり、Codexへ適用しない。
 
 ### DeepSeek bridgeの接続
 
-別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。絶対pathをMCPのargsへ指定してもよい。`deepseek-launch.sh`は設定済みの`DEEPSEEK_API_KEY`を優先し、未設定ならzshの`.zshrc`を読み込む。キー値とrcの出力はMCPの標準出力・logへ出さず、環境変数として渡す。必要な場合だけ`DEEPSEEK_BASE_URL`を設定する。配置先repository rootで`mcp-protected.sh`へ引き継ぎ、主担当model・effortは配布設定のAstra / mediumを使う。
+別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。絶対pathをMCPのargsへ指定してもよい。`deepseek-launch.sh`は設定済みの`DEEPSEEK_API_KEY`を優先し、未設定ならzshの`.zshrc`を読み込む。キー値とrcの出力はMCPの標準出力・logへ出さず、環境変数として渡す。必要な場合だけ`DEEPSEEK_BASE_URL`を設定する。配置先repository rootで`mcp-protected.sh`へ引き継ぎ、主担当model・effortは配布設定のSol / highを使う。
 
 公開契約は`start_task(brief,title?)`、`wait_task(task_id)`、`continue_task(task_id,message)`、`abort_task(task_id)`。返却の`task_id`と`status`（running/completed/needs_decision/failed/aborted/interrupted）をhookが照合する。`wait_task`は途中経過を返さずterminal結果まで1回のtool callを保持し、MCP timeoutはworkerの20分上限と回収時間を超える1,300秒とする。起動が成功しても実装・privacy・DSH停止の検証済みとは扱わない。
 
