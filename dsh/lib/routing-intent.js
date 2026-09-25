@@ -5,13 +5,26 @@
  * registry dispatch in `../index.js` calls {@link RoutingIntentStore.open} with
  * `{ source: 'command' }`; nothing else in the process may open one, so
  * repository text, skill bodies, tool results, model output, and replayed turns
- * cannot create an intent. An intent is bound to the exact turn that admitted
- * the command and is consumed at most once.
+ * cannot create an intent.
+ *
+ * ## Why the turn is bound at delivery, not at dispatch
+ *
+ * The DSH command registry dispatches a registered command without opening a
+ * turn: the Web composer claims a command's leading token and submits the line
+ * through `ctx.commands.execute`, which appends `command/run` and calls the
+ * handler. A command handler therefore has no open turn to bind, and demanding
+ * one would refuse every command a human types.
+ *
+ * The handler instead delivers the task as an ordinary follow-up user message.
+ * When the policy sees that exact message at the next model step, it binds the
+ * intent to the step's turn. Every later authorization compares that recorded
+ * turn with the caller's, so an intent can only authorize work in the turn that
+ * actually received it — the one-shot property holds without a turn at dispatch.
  */
 
 import { randomUUID } from 'node:crypto'
 
-/** Routing intents live for exactly the turn that admitted the command. */
+/** Routing intents live for exactly the turn that received them. */
 export const ROUTING_INTENT_STATE_VERSION = 1
 
 /** The four external routes, keyed by the tool that serves them. */
@@ -65,21 +78,21 @@ function trimToNull(value) {
  * One closed/open intent record.
  *
  * Only routing facts are stored. The command's task text is deliberately absent:
- * policy state must never become a copy of user content, and the text already
- * reaches the agent through the injected context message.
+ * policy state must never become a copy of user content, and the text reaches
+ * the agent as an ordinary user message instead.
  */
-function newIntent({ command, tool, sessionId, turn }) {
+function newIntent({ command, tool, sessionId }) {
   return {
     id: randomUUID(),
     command,
     tool,
     sessionId,
-    turn,
     status: 'open',
     openedAt: new Date().toISOString(),
     closedReason: null,
     consumedAt: null,
-    consumedFromTurn: null,
+    deliveredAt: null,
+    deliveredTurn: null,
     runId: null,
     resultStatus: null,
   }
@@ -92,19 +105,18 @@ function normalizeIntent(raw) {
   if (!ROUTE_TOOLS.includes(raw.tool)) return undefined
   if (commandForRouteTool(raw.tool) !== raw.command) return undefined
   if (typeof raw.sessionId !== 'string' || raw.sessionId === '') return undefined
-  if (!Number.isInteger(raw.turn) || raw.turn < 0) return undefined
   if (raw.status !== 'open' && raw.status !== 'consumed' && raw.status !== 'closed') return undefined
   return {
     id: raw.id,
     command: raw.command,
     tool: raw.tool,
     sessionId: raw.sessionId,
-    turn: raw.turn,
     status: raw.status,
     openedAt: typeof raw.openedAt === 'string' ? raw.openedAt : new Date(0).toISOString(),
     closedReason: typeof raw.closedReason === 'string' ? raw.closedReason : null,
     consumedAt: typeof raw.consumedAt === 'string' ? raw.consumedAt : null,
-    consumedFromTurn: Number.isInteger(raw.consumedFromTurn) ? raw.consumedFromTurn : null,
+    deliveredAt: typeof raw.deliveredAt === 'string' ? raw.deliveredAt : null,
+    deliveredTurn: Number.isInteger(raw.deliveredTurn) ? raw.deliveredTurn : null,
     runId: typeof raw.runId === 'string' ? raw.runId : null,
     resultStatus: typeof raw.resultStatus === 'string' ? raw.resultStatus : null,
   }
@@ -114,12 +126,11 @@ function normalizeIntent(raw) {
  * Durable, per-session one-shot routing intents.
  *
  * The store keeps no timers and performs no automatic escalation: an intent is
- * opened only by a direct command dispatch, consumed only by the matching
- * route tool, and closed by explicit lifecycle facts.
+ * opened only by a direct command dispatch, delivered only with the task message
+ * the command produced, consumed only by the matching route tool, and closed by
+ * explicit lifecycle facts.
  */
 export class RoutingIntentStore {
-  #nextOrdinal = 1
-
   #sessions = new Map()
 
   /** Rebuild from persisted state, failing loudly on anything unreadable. */
@@ -138,20 +149,15 @@ export class RoutingIntentStore {
       if (!intent) throw new Error('routing-intent state carries a malformed intent record')
       const session = store.#session(intent.sessionId)
       session.intents.push(intent)
-      session.ordinal += 1
       if (intent.status === 'open') session.open.push(intent.id)
-      else session.closed.add(intent.id)
-      const ordinal = Number.parseInt(intent.id.split(':').at(-1) ?? '', 10)
-      if (Number.isInteger(ordinal) && ordinal >= store.#nextOrdinal) store.#nextOrdinal = ordinal + 1
     }
-    for (const session of store.#sessions.values()) session.ordinal = session.intents.length
     return store
   }
 
   #session(sessionId) {
     let session = this.#sessions.get(sessionId)
     if (!session) {
-      session = { intents: [], open: [], closed: new Set(), ordinal: 0, usedTurns: new Map() }
+      session = { intents: [], open: [], delivered: new Map() }
       this.#sessions.set(sessionId, session)
     }
     return session
@@ -174,10 +180,24 @@ export class RoutingIntentStore {
   /** The currently open intent for a session, if any. */
   openIntent(sessionId) {
     const session = this.#sessions.get(String(sessionId))
-    if (!session) return undefined
-    const id = session.open.at(-1)
+    const id = session?.open.at(-1)
     if (id === undefined) return undefined
     return session.intents.find(intent => intent.id === id)
+  }
+
+  /**
+   * Whether the session already holds a route that was admitted and has not been
+   * settled. A turn end settles every intent that turn received, so this is only
+   * true for a route whose task text has not arrived yet or whose tool is still
+   * running — both of which mean one task still owns a research route. That is
+   * what makes two mutually exclusive plan commands conflict across turns: each
+   * command line is its own turn.
+   */
+  hasUnsettledIntent(sessionId, commands) {
+    const session = this.#sessions.get(String(sessionId))
+    if (!session) return false
+    return session.intents.some(intent => commands.includes(intent.command)
+      && (intent.status === 'open' || intent.status === 'consumed'))
   }
 
   /** Read one intent by id, without exposing mutable store internals. */
@@ -187,44 +207,107 @@ export class RoutingIntentStore {
   }
 
   /**
-   * Close every open intent for a session.
+   * The route tool's own intent for a session when it is not the open one.
+   *
+   * A refusal should say which of the three states applies — no command was ever
+   * issued, the command's task text has not reached a turn yet, or the one-shot
+   * authorization was already spent — because those need different responses
+   * from whoever reads it.
+   */
+  spentIntent(sessionId, tool) {
+    const session = this.#sessions.get(String(sessionId))
+    if (!session) return undefined
+    return session.intents.findLast(intent => intent.tool === tool && intent.status !== 'open')
+  }
+
+  /**
+   * Close one intent and drop it from the open queue.
+   *
+   * A consumed intent has already left the queue but is still unsettled, so the
+   * caller reaches it through {@link #unsettled} rather than through the queue.
+   */
+  #close(session, intent, reason) {
+    intent.status = 'closed'
+    intent.closedReason = reason
+    session.open = session.open.filter(id => id !== intent.id)
+  }
+
+  /**
+   * Every intent of a session that is admitted and not yet settled.
+   *
+   * `consumed` counts as unsettled on purpose: consuming an intent only records
+   * that the route tool was authorized. Until the owning turn ends, the tool may
+   * report success, a failure, or nothing at all, and the route still owns its
+   * exclusive slot while that is unknown.
+   */
+  #unsettled(session, predicate = () => true) {
+    return session.intents.filter(intent => (intent.status === 'open' || intent.status === 'consumed')
+      && predicate(intent))
+  }
+
+  /**
+   * Record the turn that received an intent's task message.
+   *
+   * This is the binding every later authorization compares against. A second
+   * delivery of the same intent is refused, because the first already owns a
+   * turn and re-binding would let one command authorize two turns.
+   */
+  bindDelivery(sessionId, intentId, turn) {
+    const session = this.#sessions.get(String(sessionId))
+    const intent = session?.intents.find(candidate => candidate.id === intentId)
+    if (!session || !intent) return { ok: false, reason: 'routing intentを確認できません。' }
+    if (intent.status !== 'open') return { ok: false, reason: 'routing intentは既に終了しています。' }
+    if (intent.deliveredTurn !== null) {
+      return { ok: false, reason: 'routing intentは既に別のturnへ配送済みです。' }
+    }
+    if (!Number.isInteger(turn) || turn < 1) return { ok: false, reason: 'routing intent requires a turn to bind' }
+    intent.deliveredAt = new Date().toISOString()
+    intent.deliveredTurn = turn
+    return { ok: true, intent }
+  }
+
+  /** The intent a turn already received, so a repeated pre-step never re-injects. */
+  deliveredIntentForTurn(sessionId, turn) {
+    const id = this.#sessions.get(String(sessionId))?.delivered.get(turn)
+    if (id === undefined) return undefined
+    return this.get(sessionId, id)
+  }
+
+  /** Remember which intent a turn received, for turn-end settlement. */
+  noteDelivered(sessionId, turn, intentId) {
+    this.#session(String(sessionId)).delivered.set(turn, intentId)
+  }
+
+  /**
+   * Close every unsettled intent for a session.
    * @returns the closed intents, so the caller can release dependent locks.
    */
-  closeSession(sessionId, reason, turn) {
+  closeSession(sessionId, reason) {
     const session = this.#sessions.get(String(sessionId))
     if (!session) return []
-    const closed = []
-    for (const id of [...session.open]) {
-      const intent = session.intents.find(candidate => candidate.id === id)
-      if (!intent) continue
-      intent.status = 'closed'
-      intent.closedReason = reason
-      if (Number.isInteger(turn)) intent.closedTurn = turn
-      session.closed.add(id)
-      closed.push(intent)
-    }
-    session.open = []
+    const closed = this.#unsettled(session)
+    for (const intent of closed) this.#close(session, intent, reason)
+    session.delivered.clear()
     return closed
   }
 
-  /** Close every open intent for one session when its turn reaches `turn`. */
+  /**
+   * Settle the intents a finished turn owned.
+   *
+   * Only intents that turn actually received are settled. An admitted but
+   * undelivered intent belongs to a task the user has not completed yet — the
+   * command line still awaited its task text — so closing it here would silently
+   * cancel the route the human asked for.
+   *
+   * @returns the closed intents.
+   */
   closeTurn(sessionId, turn, reason) {
     const session = this.#sessions.get(String(sessionId))
     if (!session) return []
-    const stale = session.open.filter((id) => {
-      const intent = session.intents.find(candidate => candidate.id === id)
-      return intent !== undefined && intent.turn <= turn
-    })
-    const closed = []
-    for (const id of stale) {
-      const intent = session.intents.find(candidate => candidate.id === id)
-      intent.status = 'closed'
-      intent.closedReason = reason
-      session.closed.add(id)
-      closed.push(intent)
-    }
-    session.open = session.open.filter(id => !stale.includes(id))
-    return closed
+    const stale = this.#unsettled(session, intent => intent.deliveredTurn !== null && intent.deliveredTurn <= turn)
+    for (const intent of stale) this.#close(session, intent, reason)
+    session.delivered.delete(turn)
+    return stale
   }
 
   /**
@@ -246,40 +329,29 @@ export class RoutingIntentStore {
     }
     const sessionId = trimToNull(request?.sessionId)
     if (!sessionId) return { ok: false, reason: 'routing intent requires a session id' }
-    const turn = request?.turn
-    if (!Number.isInteger(turn) || turn < 1) {
-      return { ok: false, reason: 'routing intent requires the turn that admitted the command' }
-    }
     const depth = request?.delegationDepth ?? 0
     if (depth !== 0) return { ok: false, reason: '外部roleからrouting intentを作成できません。' }
 
     const session = this.#session(sessionId)
     const conflict = MUTUALLY_EXCLUSIVE_COMMANDS.find(name => name !== command
-      && session.usedTurns.get(name) === turn)
+      && this.hasUnsettledIntent(sessionId, [name]))
     if (conflict) {
       return {
         ok: false,
         reason: `\`/${conflict}\`と\`/${command}\`は同一taskで併用できません。`,
       }
     }
-    const priorForTurn = session.intents.filter(intent => intent.turn === turn && intent.status === 'open')
-    for (const prior of priorForTurn) this.#close(session, prior, 'superseded-by-command')
+    // One task owns one route: admitting a second command for the same session
+    // closes the earlier undelivered intent rather than leaving two live routes.
+    for (const id of [...session.open]) {
+      const prior = session.intents.find(candidate => candidate.id === id)
+      if (prior) this.#close(session, prior, 'superseded-by-command')
+    }
 
-    const ordinal = session.ordinal + 1
-    session.ordinal = ordinal
-    const intent = newIntent({ command, tool, sessionId, turn })
-    intent.id = `intent:${sessionId}:${ordinal}`
+    const intent = newIntent({ command, tool, sessionId })
     session.intents.push(intent)
     session.open.push(intent.id)
-    session.usedTurns.set(command, turn)
     return { ok: true, intent }
-  }
-
-  #close(session, intent, reason) {
-    intent.status = 'closed'
-    intent.closedReason = reason
-    session.closed.add(intent.id)
-    session.open = session.open.filter(id => id !== intent.id)
   }
 
   /**
@@ -299,7 +371,6 @@ export class RoutingIntentStore {
     intent.status = 'consumed'
     intent.consumedAt = new Date().toISOString()
     session.open = session.open.filter(id => id !== intentId)
-    session.closed.add(intentId)
     return { ok: true, intent }
   }
 }
@@ -307,10 +378,11 @@ export class RoutingIntentStore {
 /**
  * Which route tool may run for one agent state, using only durable facts.
  *
- * @param input - session id, current turn, optional open-intent lookup, and tool name.
+ * @param input - session id, current turn, tool name, and the intent that could
+ *   authorize it.
  * @returns `{ allowed: true, intent }` or `{ allowed: false, reason }`.
  */
-export function authorizeRouteTool({ sessionId, turn, tool, openIntent, delegationDepth = 0 }) {
+export function authorizeRouteTool({ sessionId, turn, tool, openIntent, spentIntent, delegationDepth = 0 }) {
   if (delegationDepth !== 0) {
     return { allowed: false, reason: '外部agentから別の外部agentを起動できません。' }
   }
@@ -319,6 +391,20 @@ export function authorizeRouteTool({ sessionId, turn, tool, openIntent, delegati
   }
   const expected = commandForRouteTool(tool)
   if (!openIntent) {
+    // No open intent: either nothing was ever routed, the command's task text has
+    // not reached a turn yet, or the one-shot authorization was already spent.
+    if (spentIntent?.status === 'consumed') {
+      return {
+        allowed: false,
+        reason: `${tool}のrouting intentは使用済みです。同じtaskで再利用するには新しいdirect userの\`/${expected}\`が必要です。`,
+      }
+    }
+    if (spentIntent?.status === 'open' && spentIntent.deliveredTurn === null) {
+      return {
+        allowed: false,
+        reason: `${tool}のrouting intentはまだtask本文の配送待ちです。`,
+      }
+    }
     return {
       allowed: false,
       reason: `${tool}はdirect userの\`/${expected}\`で開始したtaskでのみ実行できます。`,
@@ -333,7 +419,10 @@ export function authorizeRouteTool({ sessionId, turn, tool, openIntent, delegati
   if (openIntent.sessionId !== sessionId) {
     return { allowed: false, reason: 'routing intentが別sessionに属します。' }
   }
-  if (turn !== undefined && openIntent.turn !== turn) {
+  if (turn === undefined) {
+    return { allowed: false, reason: 'routing intentはturnの外では実行できません。' }
+  }
+  if (openIntent.deliveredTurn !== turn) {
     return { allowed: false, reason: 'routing intentは別taskのものです。再利用は禁止されています。' }
   }
   return { allowed: true, intent: openIntent }
