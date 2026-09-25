@@ -1,0 +1,7 @@
+interface:
+  display_name: "meeting"
+  short_description: "要件と既存経路を確認し設計書の作成と単純化を進める"
+  default_prompt: "$meeting を使い、要件監査から設計書の作成と単純化まで進めてください。"
+
+policy:
+  allow_implicit_invocation: false
