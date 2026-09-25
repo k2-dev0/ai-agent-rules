@@ -3,8 +3,15 @@
  *
  * Everything the real-DSH tests share is created here: a throwaway `DSH_HOME`
  * with the profile installed from this bundle, a throwaway Git workspace with
- * two commits, the deployed skills, the loopback mock provider, and the
- * `--patch` overlays that point the profile at that mock.
+ * two commits, the loopback mock provider, and the `--patch` overlays that point
+ * the profile at that mock.
+ *
+ * The workspace deliberately has **no** `.agents/skills` or `.dsh/skills` root.
+ * The DSH filesystem provider outranks this bundle's provider (project-agents
+ * rank 200 against the bundle's 350), so deploying the distribution's skills
+ * into the workspace first would make every catalog assertion pass on files the
+ * test copied, never on the provider the bundle ships. Leaving the roots absent
+ * is what makes the skill cases real.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -21,13 +28,17 @@ import {
   repositoryRoot,
 } from './harness.mjs'
 import { startMockProvider } from './mock-provider.mjs'
-import { deploySkills } from '../../lib/deploy-skills.js'
+import { discoverDistributionSkills, distributionSkillsRoot } from '../../lib/distribution-skills.js'
 
-/** Skills this distribution publishes to DSH. */
-export const DISTRIBUTED_SKILLS = [
-  'cowlick', 'dictionary', 'e2e', 'meeting', 'polish',
-  'ponytail', 'preflight', 'rebase', 'tdd', 'unwind',
-]
+/**
+ * Skills this distribution publishes to DSH.
+ *
+ * Derived from the bundle's own provider rather than written out, so the tests
+ * assert the shipped catalog instead of a second copy of it.
+ */
+export const DISTRIBUTED_SKILLS = Object.freeze(
+  discoverDistributionSkills(distributionSkillsRoot()).map(candidate => candidate.name),
+)
 
 /** The Design Handoff contract the research routes must produce. */
 export const DESIGN_HANDOFF_HEADINGS = [
@@ -98,10 +109,16 @@ export async function setupWorkflowEnvironment() {
   initializeProfile(env)
   const bundles = installBundle(env)
   const git = createGitWorkspace(env)
-  const skills = deploySkills({
-    sourceRoot: join(repositoryRoot, 'skills'),
-    targetRoot: join(env.workdir, '.agents', 'skills'),
-  })
+
+  // The profile install is what publishes the bundle's skills. A stale install
+  // would leave the catalog cases asserting a provider the profile does not
+  // have, so the installed copy is checked here rather than asserted later.
+  const installedRoot = join(env.home, 'profiles', env.profile, 'node_modules', '@kaikojima', 'dsh-main-policy')
+  const installedManifest = JSON.parse(readFileSync(join(installedRoot, 'package.json'), 'utf8'))
+  if (!installedManifest.files?.includes('skills')) {
+    throw new Error('the installed bundle does not publish its skills directory; reinstall the profile')
+  }
+
   const mock = await startMockProvider()
   const routePatchPath = join(env.root, 'mock-route.yml')
   writeFileSync(routePatchPath, mockRoutePatch(mock.baseURL), 'utf8')
@@ -112,7 +129,7 @@ export async function setupWorkflowEnvironment() {
     bundleRoot,
     bundles,
     git,
-    skills,
+    installedRoot,
     mock,
     routePatchPath,
     base: git.revParse('HEAD~1'),
