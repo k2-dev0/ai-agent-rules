@@ -79,6 +79,18 @@ if (!onlyE2E) {
       `the bundle must ship skills/${skill}/SKILL.md`)
   }
 
+  // A profile installs this bundle as a package, so every file the plugin needs
+  // at runtime must be in `files`. A path that exists only in the checkout works
+  // here and disappears from an installed profile, which is exactly how the
+  // skills went missing once already.
+  for (const entry of ['index.js', 'lib', 'skills', 'cordis.patch.yml']) {
+    assert.ok(packageManifest.files.includes(entry),
+      `the bundle requires ${entry} at runtime but does not publish it`)
+  }
+  for (const doc of ['HOOK_RESPONSIBILITIES.md', 'SKILL_CLASSIFICATION.md', 'AGENTS.dsh.md']) {
+    assert.ok(packageManifest.files.includes(doc), `the bundle does not publish ${doc}`)
+  }
+
   // No budget, price, or spend concept may exist in this bundle.
   for (const forbidden of [
     /sk-[A-Za-z0-9_-]{16,}/,
@@ -102,5 +114,4 @@ if (runE2E) {
   // runner that is already executing, so their failures reach this process.
   await import(pathToFileURL(join(root, 'test', 'e2e', 'workflows.test.js')).href)
 }
-
 console.log('DSH bundle verification passed')
