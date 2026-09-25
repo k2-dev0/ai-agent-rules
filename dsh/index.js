@@ -371,7 +371,13 @@ function activate(ctx, config) {
       if (workspaceReview) return `workspace is frozen for review ${workspaceReview.intentId}`
       if (mutationLock) {
         if (role !== 'external_code' || parentId !== mutationLock.parentSessionId) {
-          return `workspace mutation is owned by external coder task ${mutationLock.intentId}`
+          // The two checks below produce the same verdict text, so a refusal
+          // names the precondition that actually failed. Without this, a denied
+          // coder and a denied main are indistinguishable in the record, and the
+          // operator cannot tell an intended refusal from a routing defect.
+          return 'workspace mutation is owned by external coder task '
+            + `${mutationLock.intentId} (this caller: role=${String(role)}, `
+            + `parent=${String(parentId)}, owner=${String(mutationLock.parentSessionId)})`
         }
         if (!isInsideAllowedPath(path, cwd, mutationLock.handoff.allowedPaths, mutationLock.handoff.forbiddenPaths)) {
           return 'external coder attempted a write outside implementation_handoff.allowedPaths'
@@ -463,11 +469,11 @@ function activate(ctx, config) {
     const agent = execution.agent
     if (!agent) throw new Error(`${execution.name} requires an agent`)
     const sessionId = String(agent.id)
-    const turn = currentTurn(agent.session)
+    // The turn was recorded when this intent's task message reached its model
+    // step, so consumption only has to spend the one-shot authorization.
     const consumed = intents.consume(sessionId, intents.openIntent(sessionId)?.id)
     if (!consumed.ok) throw new Error(consumed.reason)
     const intent = consumed.intent
-    intent.consumedFromTurn = Number.isInteger(turn) ? turn : null
     persistIntents()
 
     const cwd = workspaceOf(agent)
@@ -538,55 +544,81 @@ function activate(ctx, config) {
   })
 
   /**
-   * Record one routing intent for a direct command dispatch.
+   * Record one routing intent for a direct command dispatch and hand the agent
+   * its task text.
    *
    * `handler` runs only after the command registry admitted a human-typed line,
-   * so this is the single place an intent may be created. `recordInput` stays at
-   * its default so `command/run` carries the raw input in the durable log, and
-   * the delivery step below reads that same event instead of storing the task
-   * text a second time.
+   * so this is the single place an intent may be created.
+   *
+   * The registry does not open a turn — the Web composer claims a command's
+   * leading token and submits the line directly — so the intent cannot carry a
+   * turn here. The task text is delivered as an ordinary follow-up user message,
+   * which becomes the sole message of its own turn, and {@link registerIntentDelivery}
+   * binds the intent to that turn when the message reaches the model step. Until
+   * then no route tool can run, because every authorization compares the turn the
+   * intent received with the caller's.
+   *
+   * `recordInput` stays at its default, so the durable log carries the same
+   * `command/run` event this delivery pairs with.
    */
   function executeRoutingCommand(command, tool, invocation) {
     const agent = invocation.agent
-    if (!agent) return { kind: 'error', text: `/${command} requires a live agent` }
+    if (!agent) return { kind: 'error', text: `/${command} にはlive agentが必要です。` }
     const sessionId = String(agent.id)
-    const turn = currentTurn(agent.session)
-    if (!Number.isInteger(turn)) {
-      return { kind: 'error', text: `/${command} はturnの外では実行できません。` }
+    const taskText = typeof invocation.rawInput === 'string' ? invocation.rawInput.trim() : ''
+    if (taskText === '') {
+      return {
+        kind: 'error',
+        text: `/${command} にはtask本文が必要です。例: /${command} <依頼内容>`,
+      }
     }
     const opened = intents.open({
       command,
       tool,
       sessionId,
-      turn,
       source: 'command',
       delegationDepth: agent.session.header.delegationDepth ?? 0,
     })
     if (!opened.ok) return { kind: 'error', text: opened.reason }
     persistIntents()
+    try {
+      // A follow-up is what makes the task text durable and gives the intent the
+      // turn it will be authorized in. It is the same shape `@deepseek-ai/dsh-command-goal`
+      // uses to hand a command's objective to its agent.
+      agent.followup({
+        id: randomUUID(),
+        role: 'user',
+        content: [
+          { type: 'text', text: taskText },
+          { type: 'text', text: intentContextText(opened.intent, taskText) },
+        ],
+        source: { kind: 'user' },
+      })
+    } catch (error) {
+      // The intent was recorded but its task never reached the agent. Close it so
+      // a later turn cannot inherit an authorization the user never received.
+      intents.closeSession(sessionId, 'delivery-failed')
+      persistIntents()
+      throw error
+    }
     return {
       kind: 'success',
-      text: `/${command} をこのtaskに1回だけ予約しました。task本文はこのturnのagent contextへ配送します。`,
+      text: `/${command} をこのtaskに1回だけ予約し、task本文をagentへ配送しました。`,
     }
   }
 
   /**
-   * Deliver the open intent into the agent's next model step.
+   * Bind an open intent to the turn that receives its task message.
    *
-   * `agent.inject()` queues context for a *later* pre-step, so a command that
-   * runs in the middle of a step can miss its own turn entirely. Entering the
-   * message through this waterfall instead makes delivery authoritative: the
-   * decision returned here is the batch the step actually sends, so an open
-   * intent is always in front of the model on its turn.
+   * The handler delivers the task with `agent.followup`, so the message the
+   * human's command produced is what arrives here. Binding at this point — in the
+   * `agent/pre-step` waterfall, before the step's request is built — means the
+   * turn is recorded before the model can call anything, and the decision this
+   * listener observes is the batch the step actually sends.
    *
    * The listener is registered on the agent's own context, because the pre-step
    * waterfall is agent-scoped: a listener owned by the plugin's context never
    * participates in that agent's steps.
-   *
-   * The task text comes from the `command/run` event the registry already
-   * logged, which keeps policy state free of user content. A message already
-   * carrying this intent id means the batch was already delivered, so the
-   * listener is idempotent across repeated pre-steps.
    */
   function registerIntentDelivery(agent) {
     agent.ctx.on('agent/pre-step', async ({ signal }, next) => {
@@ -596,27 +628,17 @@ function activate(ctx, config) {
         const sessionId = String(agent.id)
         const intent = intents.openIntent(sessionId)
         if (!intent) return decision
-
-        const events = agent.session.snapshotEvents()
-        const run = events.findLast(event => event.type === 'command/run')
-        if (run?.data?.name !== intent.command) return decision
-        const alreadyDelivered = events.some(event => event.type === 'user/message'
-          && event.data?.content?.some(block => String(block.text ?? '').includes(intent.id)))
-        if (alreadyDelivered) return decision
-
-        const message = {
-          id: randomUUID(),
-          role: 'user',
-          content: [{ type: 'text', text: intentContextText(intent, run.data.args ?? '') }],
-          source: { kind: 'user' },
-        }
-        return { ...decision, messages: [...(decision.messages ?? []), message] }
+        const turn = currentTurn(agent.session)
+        const bound = intents.bindDelivery(sessionId, intent.id, turn)
+        if (!bound.ok) return decision
+        intents.noteDelivered(sessionId, turn, intent.id)
+        persistIntents()
       } catch (error) {
-        // A delivery failure must not abort the user's turn: the intent stays
-        // open and the guards keep refusing route tools until it is delivered.
+        // A binding failure must not abort the user's turn: the intent stays open
+        // and the guards keep refusing route tools until it is bound.
         process.emitWarning(`dsh-main-policy: routing intent delivery failed: ${error instanceof Error ? error.message : String(error)}`)
-        return decision
       }
+      return decision
     })
   }
 
@@ -629,6 +651,7 @@ function activate(ctx, config) {
       turn,
       tool: execution.name,
       openIntent: intents.openIntent(sessionId),
+      spentIntent: intents.spentIntent(sessionId, execution.name),
       delegationDepth: agent.session.header.delegationDepth ?? 0,
     })
     if (!decision.allowed) return decision
