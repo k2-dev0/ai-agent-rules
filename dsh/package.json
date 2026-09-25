@@ -17,11 +17,13 @@
     "verify.mjs",
     "README.md",
     "HOOK_RESPONSIBILITIES.md",
+    "SKILL_CLASSIFICATION.md",
     "AGENTS.dsh.md"
   ],
   "scripts": {
+    "pretest": "node test/clean.mjs",
     "test": "node --test test/*.test.js",
-    "test:e2e": "node --test test/e2e/workflows.test.js",
+    "test:unit": "node --test test/*.test.js",
     "verify": "node verify.mjs"
   },
   "engines": {
