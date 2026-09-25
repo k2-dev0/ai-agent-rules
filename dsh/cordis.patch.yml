@@ -6,6 +6,13 @@
     provider: deepseek-official
     model: deepseek-flash
 
+# The distribution's skills are published by the bundle's own provider
+# (`dsh/lib/distribution-skills.js`), registered from `index.js` on
+# `ctx.skills.registerProvider`. It is deliberately not a
+# `dsh-skill-filesystem` row pointed at a directory: a YAML-configured root has
+# to name a path that exists in whatever layout the bundle is installed into,
+# while the provider derives its root from the bundle's own module location.
+
 - id: llm-pi-ai
   config:
     providers:
