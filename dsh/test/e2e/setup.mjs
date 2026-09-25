@@ -64,30 +64,59 @@ export const DESIGN_HANDOFF_HEADINGS = [
 
 export const DESIGN_HANDOFF = DESIGN_HANDOFF_HEADINGS.map(heading => `${heading}\n本文`).join('\n\n')
 
-/** The mock provider overlay, applied with `--patch` and never part of the bundle. */
+/**
+ * The mock provider overlay, applied with `--patch` and never part of the bundle.
+ *
+ * One patch row replaces a row's whole config, so restating `llm-pi-ai` here
+ * would drop the real `zai`, `anthropic`, and `openai` route declarations and
+ * leave an external route with no adapter — its tool call then fails during
+ * provider resolution, before the policy installs the lock that call is supposed
+ * to take. Pointing those same provider ids at the loopback mock keeps every
+ * route reachable with no credential and still no real provider.
+ */
 export function mockRoutePatch(baseURL) {
-  return `# E2E-only overlay: a loopback mock provider. Never part of the bundle.
-- id: agent-default-model
-  config:
-    provider: mock
-    model: mock-1
-- id: llm-pi-ai
-  config:
-    providers:
-      mock:
-        apiKeyEnv: ${MOCK_CREDENTIAL_ENV}
-        api: openai-completions
-        baseURL: ${baseURL}
-        models:
-          - id: mock-1
-            name: Mock 1
-            contextWindow: 200000
-            maxTokens: 8192
-            input: [text]
-        retryPolicy:
-          mode: normal
-          maxRetries: 0
-`
+  const loopback = (provider, modelIds) => [
+    `      ${provider}:`,
+    `        apiKeyEnv: ${MOCK_CREDENTIAL_ENV}`,
+    '        api: openai-completions',
+    `        baseURL: ${baseURL}`,
+    '        models:',
+    ...modelIds.flatMap(id => [
+      `          - id: ${id}`,
+      `            name: ${id}`,
+      '            contextWindow: 200000',
+      '            maxTokens: 8192',
+      '            input: [text]',
+      // The bundle pins a `reasoningEffort` on every external route, so the mock
+      // has to advertise the same efforts or route resolution refuses the child
+      // before the policy can install the lock that call is meant to take.
+      '            reasoningEfforts:',
+      '              low: low',
+      '              high: high',
+      '              max: max',
+    ]),
+    '        retryPolicy:',
+    '          mode: normal',
+    '          maxRetries: 0',
+  ].join('\n')
+
+  return [
+    '# E2E-only overlay: a loopback mock provider. Never part of the bundle.',
+    '- id: agent-default-model',
+    '  config:',
+    '    provider: mock',
+    '    model: mock-1',
+    '- id: llm-pi-ai',
+    '  config:',
+    '    providers:',
+    loopback('mock', ['mock-1']),
+    // Each route keeps the model id the bundle declares for it, so the child a
+    // route tool spawns resolves; only the endpoint and the credential name move.
+    loopback('zai', ['glm-5.3', 'glm-5.3-code']),
+    loopback('anthropic', ['claude-opus-5-5']),
+    loopback('openai', ['gpt-6-sol']),
+    '',
+  ].join('\n')
 }
 
 /** The probe overlay that mounts the in-profile E2E probe on the real profile. */
