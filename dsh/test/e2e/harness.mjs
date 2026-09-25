@@ -186,8 +186,19 @@ export function initializeProfile(env) {
   return manifestPath
 }
 
-/** Install this bundle into the profile with the real plugin manager. */
+/**
+ * Install this bundle into the profile with the real plugin manager.
+ *
+ * The installed package directory is removed first. pnpm answers "Already up to
+ * date" for a `file:` dependency it believes it has already placed, so without
+ * this the profile would keep serving whichever revision it installed first and
+ * every end-to-end case would assert a bundle that is no longer in the working
+ * tree. That is not hypothetical: it is how the shipped skills went missing from
+ * a real profile.
+ */
 export function installBundle(env, { offline = false } = {}) {
+  const scope = join(env.home, 'profiles', env.profile, 'node_modules', '@kaikojima')
+  rmSync(scope, { recursive: true, force: true })
   const args = ['plugin', '--profile', env.profile, 'add', `file:${bundleRoot}`]
   if (offline) args.push('--offline')
   const installed = runDsh(env, args)
@@ -198,6 +209,10 @@ export function installBundle(env, { offline = false } = {}) {
   const bundles = manifest?.dsh?.profile?.bundles ?? []
   if (!bundles.includes('@kaikojima/dsh-main-policy')) {
     throw new Error(`bundle install did not register the bundle layer: ${JSON.stringify(bundles)}`)
+  }
+  const installedManifest = join(scope, 'dsh-main-policy', 'package.json')
+  if (!existsSync(installedManifest)) {
+    throw new Error(`bundle install left no package at ${installedManifest}`)
   }
   return bundles
 }
