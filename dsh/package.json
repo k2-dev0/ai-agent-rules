@@ -11,11 +11,17 @@
   "files": [
     "index.js",
     "lib",
+    "skills",
+    "test",
     "cordis.patch.yml",
-    "README.md"
+    "verify.mjs",
+    "README.md",
+    "HOOK_RESPONSIBILITIES.md",
+    "AGENTS.dsh.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/e2e/workflows.test.js",
     "verify": "node verify.mjs"
   },
   "engines": {
