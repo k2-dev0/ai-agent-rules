@@ -18,31 +18,33 @@ import {
   resolve,
   sep,
 } from 'node:path'
+import { registeredCommandNames } from './routing-intent.js'
 
+/** Route table shared by the command registry and the tool guards. */
 export const EXTERNAL_TOOLS = Object.freeze({
   external_research_design: Object.freeze({
-    flag: 'externalPlan',
+    command: 'external-plan',
     provider: 'zai',
     model: 'glm-5.3',
     effort: 'max',
     maxSteps: 4,
   }),
   external_opus_design: Object.freeze({
-    flag: 'opusPlan',
+    command: 'opus-plan',
     provider: 'anthropic',
     model: 'claude-opus-5-5',
     effort: 'high',
     maxSteps: 4,
   }),
   external_code: Object.freeze({
-    flag: 'externalCode',
+    command: 'external-code',
     provider: 'zai',
     model: 'glm-5.3',
     effort: 'high',
     maxSteps: 6,
   }),
   review_change: Object.freeze({
-    flag: 'review',
+    command: 'review',
     provider: 'openai',
     model: 'gpt-6-sol',
     effort: 'high',
@@ -105,7 +107,44 @@ const PROTECTED_BASENAMES = new Set([
 const MUTATING_SHELL = /(?:^|[;&|\s])(rm|rmdir|unlink|shred|srm|mv|cp|rsync|install|dd|truncate|tee|ln|mkdir|touch|chmod|chown|chgrp|sed\s+[^;&|]*-i)(?:\s|$)/i
 const PROTECTED_SHELL_TOKEN = /(?:^|[\s"'=/])(?:\.git|\.agents|\.dsh|\.codex|\.claude|hooks|AGENTS(?:\.local|\.override)?\.md|CLAUDE(?:\.local)?\.md|cordis(?:\.patch)?\.yml|settings\.yaml|\.credentials\.yaml|\.env(?:\.[^\s"']+)?|(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|Cargo\.lock|poetry\.lock|composer\.lock|Gemfile\.lock)|[^\s"']*review-state[^\s"']*)(?:[\s"'/]|$)/i
 const SHELL_CONTROL = /[\n\r;&|<>`]|\$\(/
-const SAFE_MAIN_COMMAND = /^(?:pwd|ls(?:\s|$)|find(?:\s|$)|rg(?:\s|$)|grep(?:\s|$)|head(?:\s|$)|tail(?:\s|$)|wc(?:\s|$)|sed\s+-n(?:\s|$)|git\s+(?:status|diff|show|log|rev-parse|ls-files|branch\s+--show-current)(?:\s|$)|(?:npm|pnpm|yarn|bun)\s+(?:test|run\s+(?:test|lint|typecheck|check|build))(?:\s|$)|pytest(?:\s|$)|python3?\s+-m\s+pytest(?:\s|$)|cargo\s+(?:test|check|clippy)(?:\s|$)|go\s+test(?:\s|$)|make\s+(?:test|check|lint|build)(?:\s|$))/
+/*
+ * The literal allowlisted npm/pnpm/yarn/bun script names. Kept as an explicit
+ * list rather than a pattern so widening it is always a deliberate, reviewable
+ * edit: an unknown script name still needs a sandbox escalation.
+ */
+const ALLOWED_PACKAGE_SCRIPTS = Object.freeze([
+  'test',
+  'lint',
+  'typecheck',
+  'check',
+  'build',
+  'verify',
+])
+
+/*
+ * A script name must be followed by whitespace or end-of-input. The explicit
+ * negative lookahead keeps the regex engine from backtracking a rejected script
+ * name into `??\s+test`; with it, only a script whose literal name is `test`
+ * matches the bare-`test` alternative.
+ */
+const PACKAGE_YARD = '(?:npm|pnpm|yarn|bun)'
+const SCRIPT_END = '(?!\\S)'
+// Only `verify` accepts a `:<qualifier>` suffix (`verify:e2e`), and the
+// qualifier grammar is restricted to lowercase kebab-case.
+const ALLOWED_SCRIPT_PATTERN = ALLOWED_PACKAGE_SCRIPTS
+  .map(name => (name === 'verify' ? 'verify(?::[a-z0-9]+(?:-[a-z0-9]+)*)?' : name))
+  .join('|')
+
+const SAFE_MAIN_COMMAND = new RegExp(
+  '^(?:pwd|ls(?:\\s|$)|find(?:\\s|$)|rg(?:\\s|$)|grep(?:\\s|$)|head(?:\\s|$)|tail(?:\\s|$)|wc(?:\\s|$)'
+  + '|sed\\s+-n(?:\\s|$)'
+  + '|git\\s+(?:status|diff|show|log|rev-parse|ls-files|branch\\s+--show-current)(?:\\s|$)'
+  + `|${PACKAGE_YARD}\\s+run\\s+(?:${ALLOWED_SCRIPT_PATTERN})${SCRIPT_END}`
+  + `|${PACKAGE_YARD}\\s+test${SCRIPT_END}`
+  + '|pytest(?:\\s|$)|python3?\\s+-m\\s+pytest(?:\\s|$)'
+  + '|cargo\\s+(?:test|check|clippy)(?:\\s|$)|go\\s+test(?:\\s|$)'
+  + '|make\\s+(?:test|check|lint|build)(?:\\s|$))',
+)
 const EXTERNAL_CODE_COMMAND = /^(?:(?:npm|pnpm|yarn|bun)\s+(?:test|run\s+(?:test|lint|typecheck|check|build|format))(?:\s|$)|pytest(?:\s|$)|python3?\s+-m\s+pytest(?:\s|$)|cargo\s+(?:test|check|clippy|fmt\s+--check)(?:\s|$)|go\s+test(?:\s|$)|gofmt\s+-d(?:\s|$)|make\s+(?:test|check|lint|build|format-check)(?:\s|$))/
 const READ_ONLY_GIT = new Set([
   'status',
@@ -128,32 +167,17 @@ function contentText(content) {
     .join('\n')
 }
 
-function positiveLine(text, pattern) {
-  return text.split(/\r?\n/).some(line => pattern.test(line)
-    && !/(?:使わない|不要|禁止|しない|do\s+not|don't|without|disable)/i.test(line))
-}
-
-export function routingFlags(text) {
+/**
+ * Names of the routing commands that appear as a bare token in direct user text.
+ *
+ * This is deliberately not a keyword or natural-language classifier: it reports
+ * only an exact, whitespace-bounded slash-command token. Routing itself is
+ * driven by {@link RoutingIntentStore}; this helper exists so other surfaces can
+ * recognize the same token spelling without inventing a second grammar.
+ */
+export function commandTokens(text) {
   const source = String(text ?? '')
-  const externalPlan = /(?:^|\s)\/external-plan(?:\s|$)/.test(source)
-    || positiveLine(source, /(?:GLM(?:-5\.3)?)(?:で|を使って|による).*(?:調査|要件整理|概要設計)/i)
-    || positiveLine(source, /(?:use|ask)\s+GLM(?:-5\.3)?.*(?:research|requirements|high-level design|architecture)/i)
-  const opusPlan = /(?:^|\s)\/opus-plan(?:\s|$)/.test(source)
-    || positiveLine(source, /(?:Claude\s+)?Opus(?:\s*5\.5)?(?:で|を使って|による).*(?:調査|要件整理|概要設計)/i)
-    || positiveLine(source, /(?:use|ask)\s+(?:Claude\s+)?Opus(?:\s*5\.5)?.*(?:research|requirements|high-level design|architecture)/i)
-  const externalCode = /(?:^|\s)\/external-code(?:\s|$)/.test(source)
-    || positiveLine(source, /(?:GLM(?:-5\.3)?)(?:で|を使って|による).*(?:実装|修正|コーディング)/i)
-    || positiveLine(source, /(?:use|ask)\s+GLM(?:-5\.3)?.*(?:implement|code|coding)/i)
-  const review = /(?:^|\s)\/review(?:\s|$)/.test(source)
-    || positiveLine(source, /(?:GPT-?6\s*Sol)(?:で|を使って|による).*(?:レビュー|監査)/i)
-    || positiveLine(source, /(?:review|audit).*(?:with|using)\s+GPT-?6\s*Sol/i)
-  return {
-    externalPlan,
-    opusPlan,
-    externalCode,
-    review,
-    conflict: externalPlan && opusPlan,
-  }
+  return registeredCommandNames().filter(name => new RegExp(`(?:^|\\s)/${name}(?:\\s|$)`).test(source))
 }
 
 export function latestDirectUserMessage(session) {
@@ -163,33 +187,29 @@ export function latestDirectUserMessage(session) {
     if (event.type === 'turn/start') break
     if (event.type !== 'user/message') continue
     if (event.data?.source?.kind !== 'user') continue
-    return {
-      id: String(event.data.id),
-      text: contentText(event.data.content),
-      flags: routingFlags(contentText(event.data.content)),
-    }
+    const text = contentText(event.data.content)
+    return { id: String(event.data.id), text, commands: commandTokens(text) }
   }
   return undefined
 }
 
-export function routingDecision(toolName, session, alreadyUsed = false) {
-  const route = EXTERNAL_TOOLS[toolName]
-  if (!route) return { allowed: true }
-  if ((session?.header?.delegationDepth ?? 0) !== 0) {
-    return { allowed: false, reason: '外部agentから別の外部agentを起動できません。' }
+/**
+ * The turn currently open in a session log, or `undefined` between turns.
+ *
+ * An intent is bound to this number so a routing decision can never be reused
+ * by a later turn even if the same user text is replayed.
+ */
+export function currentTurn(session) {
+  const events = session?.snapshotEvents?.() ?? []
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type === 'turn/end') return undefined
+    if (event.type === 'turn/start') {
+      const turn = event.data?.turn
+      return Number.isInteger(turn) ? turn : undefined
+    }
   }
-  const direct = latestDirectUserMessage(session)
-  if (!direct) return { allowed: false, reason: '現在turnのdirect user messageがないため外部modelを起動できません。' }
-  if (direct.flags.conflict) {
-    return { allowed: false, reason: '`/external-plan`と`/opus-plan`は同一taskで併用できません。' }
-  }
-  if (!direct.flags[route.flag]) {
-    return { allowed: false, reason: `${toolName}は現在turnのdirect user messageに対応する明示指定がある場合だけ実行できます。` }
-  }
-  if (alreadyUsed) {
-    return { allowed: false, reason: `${toolName}は1つのdirect user messageに対して1回だけ実行できます。` }
-  }
-  return { allowed: true, direct }
+  return undefined
 }
 
 function canonicalizeExisting(path) {
@@ -432,6 +452,28 @@ export function routeFor(provider, model) {
     ?? (provider === 'deepseek-official' && model === 'deepseek-flash' ? 'main' : undefined)
 }
 
+/**
+ * Every route tool must have exactly one registered command, and vice versa.
+ *
+ * The route table and the command registry are separate declarations on
+ * purpose (one drives tool guards, the other the command registry), so this
+ * check keeps a drift between them from silently disabling or duplicating a
+ * route. It runs at plugin activation, where a mismatch fails the profile.
+ */
+export function assertRouteCommandConsistency() {
+  const commands = registeredCommandNames()
+  const tools = Object.keys(EXTERNAL_TOOLS)
+  const missingTool = commands.filter(command => !tools.some(tool => EXTERNAL_TOOLS[tool].command === command))
+  if (missingTool.length > 0) {
+    throw new Error(`routing command(s) without a route tool: ${missingTool.join(', ')}`)
+  }
+  const missingCommand = tools.filter(tool => !commands.includes(EXTERNAL_TOOLS[tool].command))
+  if (missingCommand.length > 0) {
+    throw new Error(`route tool(s) without a registered command: ${missingCommand.join(', ')}`)
+  }
+  return true
+}
+
 export function isInsideAllowedPath(target, cwd, allowedPaths, forbiddenPaths = []) {
   const canonical = canonicalTarget(target, cwd)
   const allowed = allowedPaths.some(path => sameOrInside(canonicalTarget(path, cwd), canonical))
@@ -443,12 +485,25 @@ export function commandMatchesAllowlist(command, allowedCommands) {
   return allowedCommands.includes(String(command ?? '').trim())
 }
 
+/**
+ * Whether the reviewer may run one shell command.
+ *
+ * A reviewer sees only the frozen review range. Every accepted command is a
+ * Git read: `status` and `ls-files` are inherently range-free reads that cannot
+ * change the worktree, the index, or the object database; every other accepted
+ * read must name the supplied base or head so the reviewer can never inspect an
+ * unpinned revision.
+ */
 export function reviewGitCommandAllowed(command, input) {
   const tokens = splitSimpleCommand(command)
   if (!tokens || tokens[0] !== 'git' || !READ_ONLY_GIT.has(tokens[1])) return false
-  if (!['diff', 'show', 'cat-file', 'merge-base', 'rev-parse', 'status', 'ls-files', 'log', 'name-rev'].includes(tokens[1])) return false
-  const joined = tokens.slice(2).join(' ')
+  const rest = tokens.slice(2)
+  // Nothing that writes to the worktree, the index, or the object database.
+  if (rest.some(token => /^(?:-[a-zA-Z]*[wWaAdDfF]|--(?:force|hard|mixed|soft|merge|keep|delete|prune|update-ref))/.test(token))) {
+    return false
+  }
   if (tokens[1] === 'status' || tokens[1] === 'ls-files') return true
+  const joined = rest.join(' ')
   return joined.includes(input.base) || joined.includes(input.head)
 }
 
