@@ -90,6 +90,10 @@ function runProbe(name = 'workflows') {
     // budget has to exceed that wait.
     caseTimeoutMs: 30_000,
     turnCloseWaitMs: 20_000,
+    // The review freeze is installed when the review tool call starts and
+    // released when it settles, so the reviewer's pinned read is observed by
+    // polling during that window rather than by racing it.
+    dispatchWaitMs: 5_000,
     groups: name === 'reviewer'
       ? ['reviewer']
       : ['commands', 'instructions', 'skills', 'guards', 'coder'],
