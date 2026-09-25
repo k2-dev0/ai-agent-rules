@@ -16,6 +16,7 @@ import test from 'node:test'
 import { MOCK_CREDENTIAL, resolveDshBin, runDsh, webBootArgs } from './harness.mjs'
 import { DISTRIBUTED_SKILLS, probePatch, setupWorkflowEnvironment } from './setup.mjs'
 import { LEGACY_ROUTING_DOCS, LEGACY_SKILLS } from '../../lib/deploy-skills.js'
+import { PROVIDER_NAME as SKILL_PROVIDER } from '../../lib/distribution-skills.js'
 
 const ctx = await setupWorkflowEnvironment()
 test.after(async () => { await ctx.cleanup() })
@@ -32,19 +33,23 @@ const APPROVAL_SHELL = ['npm run surprise', 'python3 -c "print(1)"', 'git add RE
 const TASK_TEXT = 'E2E task text for the routing intent'
 
 /**
- * Run every end-to-end group in one profile boot.
+ * Run one probe boot and return its report.
  *
- * One boot keeps the suite fast. The probe is responsible for isolating groups
- * from each other: it gives every case its own agents, so one failure cannot
- * cascade into "inactive context" for the cases that follow.
+ * Two boots keep the suite fast while staying honest about state. The main boot
+ * runs every group that does not take an external role's lock. A second, short
+ * boot runs the role-boundary cases: those install the workspace mutation lock,
+ * and the policy keeps it in memory for the rest of the boot — which is correct
+ * behavior and would refuse every later case's writes for the wrong reason. A
+ * separate boot with a fresh `DSH_HOME` is the only honest way to observe a
+ * workspace that no external role owns.
  */
-let probed
-function runProbe() {
-  // Memoized: expectCases calls this once per assertion group, and without the
-  // cache every group installed and booted the profile again — four boots
-  // instead of one, which dominated the suite runtime.
-  if (probed !== undefined) return probed
-  const specPath = ctx.writeSpec('workflows', {
+const probed = new Map()
+function runProbe(name = 'workflows') {
+  // Memoized per boot: expectCases calls this once per assertion group, and
+  // without the cache every group installed and booted the profile again.
+  const cached = probed.get(name)
+  if (cached !== undefined) return cached
+  const specPath = ctx.writeSpec(name, {
     workspace: ctx.env.workdir,
     commands: ['external-plan', 'opus-plan', 'external-code', 'review'],
     taskText: TASK_TEXT,
@@ -59,6 +64,10 @@ function runProbe() {
       { name: 'meeting', modelInvocable: false, userInvocable: true },
     ],
     legacySkills: LEGACY_SKILLS,
+    legacyRoutingDocs: LEGACY_ROUTING_DOCS,
+    // The catalog must come from the bundle's own provider: the workspace has no
+    // skill root, so this name is the only thing that can publish those skills.
+    skillProvider: SKILL_PROVIDER,
     protectedPaths: PROTECTED_PATHS,
     protectedShellCommands: PROTECTED_SHELL,
     allowedShellCommands: ALLOWED_SHELL,
@@ -81,17 +90,20 @@ function runProbe() {
     // budget has to exceed that wait.
     caseTimeoutMs: 30_000,
     turnCloseWaitMs: 20_000,
-    groups: ['commands', 'instructions', 'skills', 'guards'],
+    groups: name === 'reviewer'
+      ? ['reviewer']
+      : ['commands', 'instructions', 'skills', 'guards', 'coder'],
   })
-  const patchPath = ctx.writePatch('workflows', probePatch(specPath))
-  const reportPath = join(ctx.env.root, 'workflows.report.json')
+  const patchPath = ctx.writePatch(name, probePatch(specPath))
+  const reportPath = join(ctx.env.root, `${name}.report.json`)
   const booted = runDsh(ctx.env, webBootArgs(ctx.env, [ctx.routePatchPath, patchPath]), {
     env: { DSH_E2E_PROBE_REPORT: reportPath },
     timeoutMs: 180_000,
   })
   const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, 'utf8')) : undefined
-  probed = { booted, report, results: report?.results ?? [] }
-  return probed
+  const result = { booted, report, results: report?.results ?? [] }
+  probed.set(name, result)
+  return result
 }
 
 /** Assert every named case ran and passed in the report produced for its group. */
@@ -171,24 +183,31 @@ test('e2e: no bundle-declared configuration pins a source-repository path', () =
   assert.equal(/\/(?:Users|home)\//.test(bundlePatch), false, 'the bundle declares an absolute path')
 })
 
-test('e2e: skills deploy into a DSH-discovered root and keep their invocation policy', () => {
-  assert.equal(ctx.skills.deployed.length, DISTRIBUTED_SKILLS.length)
-  assert.deepEqual(
-    ctx.skills.deployed.map(skill => skill.name).sort(),
-    [...DISTRIBUTED_SKILLS].sort(),
-  )
-  const byName = new Map(ctx.skills.deployed.map(skill => [skill.name, skill]))
-  assert.equal(byName.get('e2e').modelInvocable, false, 'the e2e skill must stay explicit-invocation only')
-  assert.equal(byName.get('preflight').userInvocable, false, 'preflight must stay model-only')
-  assert.equal(byName.get('tdd').modelInvocable, true)
-
-  const root = join(ctx.env.workdir, '.agents', 'skills')
-  for (const legacy of LEGACY_SKILLS) {
-    assert.equal(existsSync(join(root, legacy)), false, `${legacy} must not be published to DSH`)
+test('e2e: the installed bundle publishes its skills and the workspace stays clean', () => {
+  // The catalog cases below can only mean the bundle's own provider if the
+  // workspace has no skill root for the filesystem provider to find. Asserting
+  // the absence here is what turns those cases into real evidence.
+  for (const root of ['.agents/skills', '.dsh/skills']) {
+    assert.equal(existsSync(join(ctx.env.workdir, root)), false,
+      `the test workspace has ${root}, so a passing catalog would not prove the bundle provider works`)
   }
-  const published = readdirSync(root)
+  assert.ok(DISTRIBUTED_SKILLS.length > 0, 'the bundle publishes no skill at all')
+  for (const legacy of LEGACY_SKILLS) {
+    assert.equal(DISTRIBUTED_SKILLS.includes(legacy), false, `${legacy} must not be published to DSH`)
+  }
   for (const doc of LEGACY_ROUTING_DOCS) {
-    assert.equal(published.includes(doc), false, `${doc} was published as if it were a skill`)
+    const stem = doc.replace(/\.md$/, '').toLowerCase().replaceAll('_', '-')
+    assert.equal(DISTRIBUTED_SKILLS.includes(stem), false, `${doc} was published as the skill "${stem}"`)
+  }
+
+  // The install itself is what publishes them, so the installed copy is checked
+  // rather than the checkout: a stale profile install is exactly how the
+  // catalog went missing before.
+  for (const skill of DISTRIBUTED_SKILLS) {
+    const installed = join(ctx.installedRoot, 'skills', skill, 'SKILL.md')
+    assert.ok(existsSync(installed), `the installed bundle does not carry skills/${skill}/SKILL.md`)
+    assert.equal(readFileSync(installed, 'utf8'), readFileSync(join(ctx.bundleRoot, 'skills', skill, 'SKILL.md'), 'utf8'),
+      `the installed skills/${skill}/SKILL.md differs from the checkout`)
   }
 })
 
@@ -202,6 +221,7 @@ test('e2e: the four commands, one-shot intents, and the routing boundary behave'
     'unknown-command-is-not-admitted',
     'external-tool-without-command-is-denied',
     'external-tool-without-command-is-required-to-be-started-by-a-command',
+    'the-command-path-needs-no-open-turn',
     'command-records-intent-and-delivers-task-text',
     'external-tool-uses-its-intent-once',
     'plan-command-conflict-is-denied',
@@ -222,7 +242,10 @@ test('e2e: the skill catalog is visible and skill bodies load', () => {
     ...DISTRIBUTED_SKILLS.map(skill => `skill-catalog:${skill}`),
     ...['tdd', 'preflight', 'unwind', 'dictionary', 'rebase'].map(skill => `skill-load:${skill}`),
     ...['tdd', 'e2e', 'preflight', 'meeting'].map(skill => `skill-policy:${skill}`),
+    'every-catalog-skill-comes-from-the-bundle-provider',
+    'the-workspace-has-no-skill-root',
     'no-legacy-routing-skill-is-model-invocable',
+    'no-routing-document-was-published-as-a-skill',
   )
 })
 
@@ -239,6 +262,28 @@ test('e2e: protected paths and shell bypasses are denied', () => {
   )
 })
 
+test('e2e: the external coder boundaries hold while it owns mutation', () => {
+  expectCases(
+    runProbe('coder').results,
+    'external-coder-outside-allowed-paths-is-denied',
+    'external-coder-boundaries-are-enforced',
+    'the-coder-role-is-not-resolved-from-an-arbitrary-provider',
+    'mutation-lock-was-settled',
+  )
+})
+
+test('e2e: the reviewer is read-only and never starts another route', () => {
+  // Its own boot: the mutation lock lives in the policy's memory for the whole
+  // process, so a reviewer case in the coder's boot would be refused by the
+  // coder's lock instead of by the review freeze it is meant to observe.
+  expectCases(
+    runProbe('reviewer').results,
+    'the-reviewer-is-read-only',
+    'a-critical-finding-does-not-start-a-second-reviewer',
+    'mutation-lock-was-settled',
+  )
+})
+
 test('e2e: corrupt policy state fails the reboot closed and no intent stays open', () => {
   const stateDir = join(ctx.env.home, 'dsh-main-policy')
   const statePath = join(stateDir, 'routing-intents.json')
@@ -248,6 +293,15 @@ test('e2e: corrupt policy state fails the reboot closed and no intent stays open
   assert.ok(live.intents.length > 0, 'no routing intent was recorded at all')
   assert.equal(live.intents.some(intent => intent.status === 'open'), false,
     'a routing intent stayed open after the run')
+  // The binding is the gate every authorization compares against, so the run
+  // must have produced at least one intent that actually reached a turn.
+  assert.ok(live.intents.some(intent => Number.isInteger(intent.deliveredTurn)),
+    'no routing intent was ever bound to a turn, so nothing authorized a route')
+  for (const intent of live.intents) {
+    assert.equal(typeof intent.sessionId, 'string')
+    assert.equal(JSON.stringify(intent).includes(TASK_TEXT), false,
+      'a routing intent record carries the task text')
+  }
 
   writeFileSync(statePath, '{ this is not json', 'utf8')
   try {
