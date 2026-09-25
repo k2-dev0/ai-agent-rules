@@ -1,0 +1,7 @@
+interface:
+  display_name: "polish"
+  short_description: "今回変更した対象だけを整形し静的検査と品質確認を行う"
+  default_prompt: "$polish を使い、今回の対象pathを整形し、静的検査と品質確認を行ってください。"
+
+policy:
+  allow_implicit_invocation: false
