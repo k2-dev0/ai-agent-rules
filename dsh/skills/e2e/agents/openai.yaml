@@ -1,0 +1,7 @@
+interface:
+  display_name: "e2e"
+  short_description: "画面の要求と既存構成からブラウザでの動作検証を行う"
+  default_prompt: "$e2e を使い、対象画面の要求に沿ってブラウザで動作検証してください。"
+
+policy:
+  allow_implicit_invocation: false
