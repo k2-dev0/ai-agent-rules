@@ -155,6 +155,15 @@ function resultText(result) {
 const UNKNOWN_TOOL = /\bunknown tool\b|\bnot a registered tool\b/i
 
 /**
+ * The registry's own wording when a call's arguments fail schema validation.
+ *
+ * This is not a policy verdict: the call never reached a guard. A case that sees
+ * it has a harness defect, so it is reported as one instead of being read as a
+ * denial — the same posture as {@link UNKNOWN_TOOL}.
+ */
+const INVALID_ARGUMENTS = /invalid arguments|missing required property/i
+
+/**
  * Run one guarded tool call through the real registry and report its outcome.
  *
  * The registry resolves the tool before it evaluates any guard, so only a tool
@@ -167,7 +176,11 @@ async function callTool(ctx, agent, toolName, args) {
   const result = await ctx.tools.execute({
     callId: `call-${randomUUID().slice(0, 8)}`,
     name: toolName,
-    arguments: args,
+    // The delegation tool's schema requires a display label alongside the task,
+    // and a raw call that omits it is refused by argument validation before any
+    // guard runs — which reads exactly like a policy denial. The model always
+    // supplies one; the probe has to as well for the call to be well-formed.
+    arguments: { description: `e2e ${toolName}`, ...args },
     agent,
     signal: new AbortController().signal,
   })
@@ -175,6 +188,9 @@ async function callTool(ctx, agent, toolName, args) {
   const reason = resultText(result)
   if (UNKNOWN_TOOL.test(reason)) {
     throw new Error(`${toolName} is not mounted for this agent, so the call never reached a guard: ${reason}`)
+  }
+  if (INVALID_ARGUMENTS.test(reason)) {
+    throw new Error(`${toolName} was refused by argument validation, not by the policy: ${reason}`)
   }
   return { denied: true, reason }
 }
@@ -1025,27 +1041,47 @@ async function runReviewerCases(ctx, spec, { check, expect }) {
   })
 
   await check('the-reviewer-may-run-its-own-pinned-read', async () => {
-    // The one command the reviewer exists for. Driven through the real registry
-    // with a live review, so the command actually reaches the shell: the freeze
-    // is installed when the review is dispatched, so the review is awaited first
-    // and the pinned read is issued while its lock is still held.
+    // The one command the reviewer exists for, and the freeze that allows it are
+    // both transient: `reviewLocks` is installed when the review tool call
+    // starts and released when it settles. So this polls the reviewer's own
+    // verdict while the review is pending — the read is allowed exactly while
+    // the freeze is up — and reports a dispatch that never held one rather than
+    // a boundary failure the policy never made.
     const owner = (await makeAgent(ctx, spec)).agent
     await admitAndDeliverCommand(ctx, owner, spec, '/review pinned range case')
+    // Reported first: if the policy refuses its own route tool here, that is a
+    // policy result worth naming, not a harness artifact to work around.
+    const admitted = guardDecision(ctx, owner, 'review_change', { prompt: input })
+    expect(!admitted.denied, `the guard refused an authorized review: ${admitted.reason}`)
 
+    const reviewer = (await makeAgent(ctx, spec, {
+      parent: owner,
+      depth: 1,
+      agentOptions: { provider: 'openai', model: 'gpt-6-sol' },
+    })).agent
+
+    let settled = false
+    let dispatch = 'pending'
+    const review = callTool(ctx, owner, 'review_change', { prompt: input }).then(
+      (result) => { settled = true; dispatch = result.denied ? `denied: ${result.reason}` : 'dispatched' },
+      (error) => { settled = true; dispatch = `failed: ${error instanceof Error ? error.message : String(error)}` },
+    )
+
+    const deadline = Date.now() + (spec.dispatchWaitMs ?? 5000)
     let observed
-    const review = callTool(ctx, owner, 'review_change', { prompt: input })
-    const pinned = Promise.resolve().then(() => callTool(ctx, owner, 'bash', {
-      command: `git diff ${spec.reviewBase} ${spec.reviewHead}`,
-    })).then((result) => { observed = result }, () => {})
-    await Promise.all([review, pinned])
-
-    const denied = observed === undefined || observed.denied
-    if (denied) {
-      // Without a live freeze the read is refused, which is correct; name that
-      // instead of reporting a boundary failure the policy never made.
-      return `no live freeze during the read, so it was refused: ${observed?.reason ?? 'the read did not settle'}`
+    while (Date.now() < deadline) {
+      observed = guardDecision(ctx, reviewer, 'bash', {
+        command: `git diff ${spec.reviewBase} ${spec.reviewHead}`,
+      })
+      if (!observed.denied) break
+      if (settled) break
+      await new Promise(resolveWait => setTimeout(resolveWait, 10))
     }
-    return 'the pinned range was readable while the review held its freeze'
+    await review
+
+    expect(!(observed?.denied ?? true),
+      `the reviewer was refused its own pinned range (review ${dispatch}): ${observed?.reason ?? 'no verdict'}`)
+    return `the pinned range was readable while the review held its freeze (${dispatch})`
   })
 
   await check('a-critical-finding-does-not-start-a-second-reviewer', async () => {
