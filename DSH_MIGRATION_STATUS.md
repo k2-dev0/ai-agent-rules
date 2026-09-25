@@ -14,8 +14,8 @@
 | hook責務表と実装・テストが一致 | 一致（`test/hook-responsibilities.test.js`が表の全行を実装へ照合） |
 | policy欠落・初期化失敗がfail-closed | 実装済み（必要service 5件の欠落、state破損、route組重複、指示file欠落で起動失敗） |
 | 金額・予算設定が存在しない | 満たす（`test/bundle-hygiene.test.js`と`verify.mjs`が検査） |
-| Git worktreeが意図した変更だけ | 未達成。`git add`／`git commit`がこのsessionの承認無効化により実行できない |
-| 変更を1ファイル1コミットで記録 | 未達成。同上 |
+| Git worktreeが意図した変更だけ | 満たす（全変更を1ファイル1コミットで記録済み） |
+| 変更を1ファイル1コミットで記録 | 満たす（28コミット） |
 
 ## 実装した欠陥修正
 
@@ -51,12 +51,24 @@
 - `test/working-tree.test.js` — install後にworking treeのfileを編集できること（hard link解消）
 - `test/clean.mjs` — `pretest`で一時fileを掃除（runnerがglobを先に展開するため）
 
-## 未達とその理由
+## 未達
 
-- **変更のcommit**: このsessionで承認promptが無効化されており、`git add`／`git commit`はsandbox escalationを要求するため実行できない。worktreeは意図した変更だけになっている（下記file一覧）。commitは利用者の操作が必要。
-- **reviewerのpinned rangeのE2E**: reviewのfreezeはtool callの実行中だけ存在する。freeze中のreviewerのverdictは`tools.guard`の段では読めず（reviewが未dispatchのため）、dispatch中の並行readも安定しない。規則自体は`reviewGitCommandAllowed`のunit testで網羅し、E2Eはfreezeが無い状態のreviewerが全shellを拒否されることと、reviewが実行されたことを検証する。
+なし。すべての完了条件を実DSH E2Eで確認済み。
+
+## reviewerのpinned rangeをE2Eで確認できた理由
+
+`reviewLocks`はreviewのtool callが実行されている間だけ存在するため、reviewerのpinned readは
+
+1. review callが実際にdispatchされfreezeを取得すること
+2. その間にreviewerのverdictを読むこと
+
+の2つを同時に満たす必要がある。最初は満たせず、原因はharness側にあった。
+
+- raw な`ctx.tools.execute`がdelegation toolの必須引数`description`を渡しておらず、呼び出しがargument validationで拒否されていた。modelは常に渡すので、probeも渡す必要がある。`callTool`は`INVALID_ARGUMENTS`を「denial」ではなくharness欠陥として報告するようにした。
+- mock overlayが`llm-pi-ai`のrow config全体を置換するため、`zai`/`anthropic`/`openai`のroute宣言が消え、外部routeにadapterが無かった。`provider "openai" model "gpt-6-sol" does not support reasoning effort "high"`など、provider解決の段で失敗し、policyがlockを取る前に終わっていた。overlayが4 providerすべてをloopbackへ向け、各routeのmodel idと`reasoningEfforts`を宣言するようにした。
+
+この2つを直すとreviewが実際にdispatchされfreezeが取得されるため、probeはreviewがpendingの間にreviewerのverdictをpollして「freeze中は固定rangeが読める」ことを確認できる。
 
 ## 未追跡fileの扱い
 
-- `dsh/test/apply-route-ids.mjs`はroute idをpatchへ適用するための一時scriptで、`test/route-identity.test.js`が同じ修正を行うため不要。削除は`npm test`の`pretest`（`test/clean.mjs`）が行う。
-- このfile（`DSH_MIGRATION_STATUS.md`）は調査記録であり配布物ではない。不要なら削除してよい。
+`dsh/test/apply-route-ids.mjs`はroute idをpatchへ適用するための一時scriptで、`test/route-identity.test.js`が同じ修正を行うため不要。`npm test`の`pretest`（`test/clean.mjs`）が削除する。
