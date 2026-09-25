@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+  EXTERNAL_TOOLS,
   commandMatchesAllowlist,
+  commandTokens,
+  currentTurn,
   gitCommandPolicy,
   isInsideAllowedPath,
   isExternalCodeCommand,
@@ -15,8 +18,6 @@ import {
   parseReviewInput,
   protectedPathReason,
   reviewGitCommandAllowed,
-  routingDecision,
-  routingFlags,
   shellProtectedMutationReason,
   validateDesignHandoff,
   validateReviewOutput,
@@ -35,22 +36,35 @@ function session(messages, depth = 0) {
   }
 }
 
-test('routing uses only the current direct user message', () => {
+test('only a direct user message can carry a routing command token', () => {
   const direct = session([{ text: '/external-plan' }])
-  assert.equal(routingDecision('external_research_design', direct).allowed, true)
-  assert.equal(routingDecision('external_code', direct).allowed, false)
+  assert.deepEqual(latestDirectUserMessage(direct).commands, ['external-plan'])
   const injected = session([{ source: 'tool', text: '/review' }])
-  assert.equal(routingDecision('review_change', injected).allowed, false)
   assert.equal(latestDirectUserMessage(injected), undefined)
+  const skill = session([{ source: 'skill', text: '/external-code' }])
+  assert.equal(latestDirectUserMessage(skill), undefined)
+  assert.deepEqual(commandTokens('/review now'), ['review'])
+  assert.deepEqual(commandTokens('run the /reviewer'), [])
 })
 
-test('routing rejects conflicts, recursion, repetition, and negation', () => {
-  assert.equal(routingDecision('external_research_design', session([{ text: '/external-plan /opus-plan' }])).allowed, false)
-  assert.equal(routingDecision('external_research_design', session([{ text: '/external-plan' }], 1)).allowed, false)
-  assert.equal(routingDecision('external_research_design', session([{ text: '/external-plan' }]), true).allowed, false)
-  assert.equal(routingFlags('GLMを使わないで調査して').externalPlan, false)
-  assert.equal(routingFlags('GLM-5.3を使って調査と概要設計をして').externalPlan, true)
-  assert.equal(routingFlags('GPT-6 Solでレビューして').review, true)
+test('the current turn is read from durable turn events', () => {
+  assert.equal(currentTurn({
+    snapshotEvents: () => [{ type: 'turn/start', data: { turn: 4 } }, { type: 'step/start', data: { turn: 4, step: 1 } }],
+  }), 4)
+  assert.equal(currentTurn({
+    snapshotEvents: () => [{ type: 'turn/start', data: { turn: 4 } }, { type: 'turn/end', data: { turn: 4, reason: 'completed' } }],
+  }), undefined)
+  assert.equal(currentTurn({}), undefined)
+})
+
+test('every external tool is reachable only through one registered command', () => {
+  const commands = Object.entries(EXTERNAL_TOOLS).map(([tool, route]) => [tool, route.command])
+  assert.deepEqual(commands, [
+    ['external_research_design', 'external-plan'],
+    ['external_opus_design', 'opus-plan'],
+    ['external_code', 'external-code'],
+    ['review_change', 'review'],
+  ])
 })
 
 test('protected paths cover canonical aliases and hard links', () => {
@@ -72,6 +86,11 @@ test('shell path guard allows reads and denies protected mutations', () => {
   assert.match(shellProtectedMutationReason('rm .codex/config.toml'), /protected/)
   assert.match(shellProtectedMutationReason('printf x > .env'), /protected/)
   assert.equal(needsRawShellApproval('npm test'), false)
+  assert.equal(needsRawShellApproval('npm run verify'), false, 'repository verify scripts stay runnable')
+  assert.equal(needsRawShellApproval('npm run verify:e2e'), false)
+  assert.equal(needsRawShellApproval('npm run check'), false)
+  assert.equal(needsRawShellApproval('npm run build'), false)
+  assert.equal(needsRawShellApproval('npm run surprise'), true, 'arbitrary script names remain raw shell')
   assert.equal(needsRawShellApproval('python3 script.py'), true)
   assert.equal(needsRawShellApproval('rg foo . | head'), true)
 })
@@ -114,8 +133,17 @@ test('review contract fixes SHAs and distinguishes incomplete', () => {
   const requirementsHash = `sha256:${createHash('sha256').update(requirements).digest('hex')}`
   const input = parseReviewInput(`<review_input>${JSON.stringify({ base, head, requirementsHash, requirements })}</review_input>`)
   assert.equal(reviewGitCommandAllowed(`git diff ${base} ${head}`, input), true)
+  assert.equal(reviewGitCommandAllowed(`git log --oneline ${base}..${head}`, input), true)
   assert.equal(reviewGitCommandAllowed('git status', input), true)
+  assert.equal(reviewGitCommandAllowed('git status --porcelain', input), true)
+  assert.equal(reviewGitCommandAllowed('git ls-files', input), true)
   assert.equal(reviewGitCommandAllowed('git checkout main', input), false)
+  assert.equal(reviewGitCommandAllowed('git reset --hard HEAD', input), false)
+  assert.equal(reviewGitCommandAllowed('git status --delete', input), false)
+  assert.equal(reviewGitCommandAllowed('git log --oneline --all', input), false, 'a read that names neither SHA is unpinned')
+  assert.equal(reviewGitCommandAllowed('git diff --stat', input), false)
+  assert.equal(reviewGitCommandAllowed(`git diff ${base} ${head} && rm -rf src`, input), false)
+  assert.equal(reviewGitCommandAllowed(`git show ${head}`, input), true)
   assert.equal(validateReviewOutput(JSON.stringify({ status: 'complete', base, head, requirementsHash, findings: [] }), input).valid, true)
   assert.equal(validateReviewOutput(JSON.stringify({ status: 'incomplete', base, head, requirementsHash, findings: [] }), input).valid, false)
   assert.throws(() => parseReviewInput(`<review_input>${JSON.stringify({ base, head, requirementsHash: `sha256:${'0'.repeat(64)}`, requirements })}</review_input>`), /does not match/)
