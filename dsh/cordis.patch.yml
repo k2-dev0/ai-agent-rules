@@ -31,6 +31,17 @@
               max: max
             compat:
               thinkingFormat: zai
+          - id: glm-5.3-code
+            name: glm-5.3-code (external_code route)
+            contextWindow: 1000000
+            maxTokens: 128000
+            input: [text]
+            reasoningEfforts:
+              low: low
+              high: high
+              max: max
+            compat:
+              thinkingFormat: zai
         retryPolicy:
           mode: normal
           maxRetries: 5
@@ -162,7 +173,7 @@
         maxDepth: 1
         agentOptions:
           provider: zai
-          model: glm-5.3
+          model: glm-5.3-code
           reasoningEffort: high
           maxTokens: 16000
         toolFilter:
