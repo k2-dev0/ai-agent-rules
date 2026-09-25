@@ -20,7 +20,17 @@ import {
 } from 'node:path'
 import { registeredCommandNames } from './routing-intent.js'
 
-/** Route table shared by the command registry and the tool guards. */
+/**
+ * Route table shared by the command registry and the tool guards.
+ *
+ * Every route needs a distinct `provider`/`model` pair, because
+ * {@link routeFor} resolves an agent's role from exactly that pair. The coder
+ * therefore uses its own model id (`glm-5.3-code`) declared over the same
+ * upstream model as the planner's: reusing `glm-5.3` would make the coder's role
+ * resolve to the planner's, and every coder guard would deny the work it exists
+ * to allow. {@link assertRouteCommandConsistency} refuses a duplicate at
+ * activation rather than letting that happen quietly.
+ */
 export const EXTERNAL_TOOLS = Object.freeze({
   external_research_design: Object.freeze({
     command: 'external-plan',
@@ -39,7 +49,7 @@ export const EXTERNAL_TOOLS = Object.freeze({
   external_code: Object.freeze({
     command: 'external-code',
     provider: 'zai',
-    model: 'glm-5.3',
+    model: 'glm-5.3-code',
     effort: 'high',
     maxSteps: 6,
   }),
@@ -73,6 +83,15 @@ export const DESIGN_HANDOFF_HEADINGS = Object.freeze([
   '## 未解決事項',
 ])
 
+/**
+ * Directory names whose presence makes every path below them protected.
+ *
+ * `skills` is here because a skill body is an instruction source: the catalog
+ * grants capabilities from it, and the Codex/Claude flows read the same files as
+ * their routing contract. A model that can rewrite a skill can grant itself what
+ * the skill authorizes, so the legacy `deny-skill-source.sh` rule is enforced
+ * here by path rather than left to the skill's own prose.
+ */
 const PROTECTED_COMPONENTS = new Set([
   '.git',
   '.agents',
@@ -80,6 +99,7 @@ const PROTECTED_COMPONENTS = new Set([
   '.codex',
   '.claude',
   'hooks',
+  'skills',
 ])
 
 const PROTECTED_BASENAMES = new Set([
@@ -105,7 +125,7 @@ const PROTECTED_BASENAMES = new Set([
 ])
 
 const MUTATING_SHELL = /(?:^|[;&|\s])(rm|rmdir|unlink|shred|srm|mv|cp|rsync|install|dd|truncate|tee|ln|mkdir|touch|chmod|chown|chgrp|sed\s+[^;&|]*-i)(?:\s|$)/i
-const PROTECTED_SHELL_TOKEN = /(?:^|[\s"'=/])(?:\.git|\.agents|\.dsh|\.codex|\.claude|hooks|AGENTS(?:\.local|\.override)?\.md|CLAUDE(?:\.local)?\.md|cordis(?:\.patch)?\.yml|settings\.yaml|\.credentials\.yaml|\.env(?:\.[^\s"']+)?|(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|Cargo\.lock|poetry\.lock|composer\.lock|Gemfile\.lock)|[^\s"']*review-state[^\s"']*)(?:[\s"'/]|$)/i
+const PROTECTED_SHELL_TOKEN = /(?:^|[\s"'=/])(?:\.git|\.agents|\.dsh|\.codex|\.claude|hooks|skills|AGENTS(?:\.local|\.override)?\.md|CLAUDE(?:\.local)?\.md|cordis(?:\.patch)?\.yml|settings\.yaml|\.credentials\.yaml|\.env(?:\.[^\s"']+)?|(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|Cargo\.lock|poetry\.lock|composer\.lock|Gemfile\.lock)|[^\s"']*review-state[^\s"']*)(?:[\s"'/]|$)/i
 const SHELL_CONTROL = /[\n\r;&|<>`]|\$\(/
 /*
  * The literal allowlisted npm/pnpm/yarn/bun script names. Kept as an explicit
@@ -447,6 +467,15 @@ export function validateReviewOutput(text, input) {
   return { valid: true, value }
 }
 
+/**
+ * The role an agent's fixed provider/model pair identifies.
+ *
+ * Two routes must never share a pair. The lookup returns the first match, so a
+ * duplicate would silently make the later route unreachable: its role would
+ * resolve to the earlier one's, and every guard written for it would deny the
+ * work it exists to do. {@link assertRouteCommandConsistency} refuses a
+ * duplicate at activation for exactly that reason.
+ */
 export function routeFor(provider, model) {
   return Object.entries(EXTERNAL_TOOLS).find(([, value]) => value.provider === provider && value.model === model)?.[0]
     ?? (provider === 'deepseek-official' && model === 'deepseek-flash' ? 'main' : undefined)
@@ -455,10 +484,15 @@ export function routeFor(provider, model) {
 /**
  * Every route tool must have exactly one registered command, and vice versa.
  *
- * The route table and the command registry are separate declarations on
- * purpose (one drives tool guards, the other the command registry), so this
- * check keeps a drift between them from silently disabling or duplicating a
- * route. It runs at plugin activation, where a mismatch fails the profile.
+ * The route table and the command registry are separate declarations on purpose
+ * (one drives tool guards, the other the command registry), so this check keeps
+ * a drift between them from silently disabling or duplicating a route.
+ *
+ * It also refuses two routes that share a provider/model pair. Role resolution
+ * reads that pair, so a duplicate makes one route's role unreachable and turns
+ * its guards into blanket denials — a defect that looks like enforcement.
+ *
+ * It runs at plugin activation, where any of these fails the profile.
  */
 export function assertRouteCommandConsistency() {
   const commands = registeredCommandNames()
@@ -470,6 +504,18 @@ export function assertRouteCommandConsistency() {
   const missingCommand = tools.filter(tool => !commands.includes(EXTERNAL_TOOLS[tool].command))
   if (missingCommand.length > 0) {
     throw new Error(`route tool(s) without a registered command: ${missingCommand.join(', ')}`)
+  }
+  const byPair = new Map()
+  for (const [tool, route] of Object.entries(EXTERNAL_TOOLS)) {
+    const pair = `${route.provider}/${route.model}`
+    const seen = byPair.get(pair)
+    if (seen !== undefined) {
+      throw new Error(
+        `route tools ${seen} and ${tool} share the provider/model pair ${pair}; `
+        + 'role resolution reads that pair, so one of the two roles would be unreachable',
+      )
+    }
+    byPair.set(pair, tool)
   }
   return true
 }
