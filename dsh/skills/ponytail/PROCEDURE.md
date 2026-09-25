@@ -1,0 +1,35 @@
+## 入力・対象
+
+元の要件・禁止制約・受入済みtrade-offの本文または正本path、要件revision、設計revision、対象の`.[agent_name]/prompt/.prompt.md`と参照先設計書を受け取る。設計書だけで要件を代用しない。不足は`blocked`を呼出元へ返す。
+
+## 起動・待機
+
+入力を組み立てる前に[子の起動手順](../SUBAGENT_RULES.md)の未読分を読む。
+
+1. repository絶対path、参照コードのHEAD、対象index・全設計書のpathとSHA-256を保持する
+   - 対象設計書以外の参照コードに未commit変更があれば`blocked`
+   - 設計書のcommitは要求しない
+2. briefは上記対象・revision・元の要件と制約だけ
+   - 前段の調査結果・作成経緯・採用理由・会話要約・過去のレビュー結果を渡さない
+3. 専用`design-reviewer`を新規起動する
+4. 完了後は子を終了・解放する
+   - 入力拒否は共通手順に従って訂正し、利用不能・中断・入力不足を解消できなければ`blocked`
+   - 同じ会話内の確認で代用しない
+
+## 結果・修正
+
+結果のrevisionと入力対象を照合し、HEAD・全対象hashが変わっていれば結果を破棄して対象を固定し直す。
+
+- `ponytail_ready`：入力と同じ要件・設計revision、対象path・hash・HEAD、全監査結果または非該当理由、未解決事項なしを確認して呼出元へ返す
+  - 欠落・条件不成立は`blocked`を返す
+  - 全差分の自己レビューは行わない
+- `changes_requested`：メインが指摘の根拠を確認し、Codexは[作業分担](../WORKFLOW_ROUTING.md)の設計工程、Claudeは[メインモデル選択](../MODEL_SELECTION.md)に従う
+  - 採用分は[cowlickの手順](../cowlick/PROCEDURE.md)を読み、現在の設計書・indexへ反映し、新revision・hashで新規レビューする
+- `consultation_required`：要件・公開挙動・受入済みtrade-offの変更は、選択肢・挙動差・推奨を呼出元へ返す
+  - ユーザー判断を代行しない
+- `blocked`・対象不一致・未確認範囲あり：未完了として理由を返す
+  - 指摘なしと扱わない
+
+却下は根拠を短く残す。要修正指摘が残った結果をメインの判断だけで`ponytail_ready`へ変更しない。却下だけで入力が変わらない場合は、未解決の判断として呼出元へ返す。同一入力の再起動は行わず、要件・設計・参照コードが変わった場合だけ新規レビューする。
+
+返却はstatus、要件・設計revision、対象path・hash・HEAD、監査結果、採用・却下・未解決事項だけ。
