@@ -1,0 +1,7 @@
+interface:
+  display_name: "bootstrap"
+  short_description: "配置済みのエージェント設定だけを初期化し置換漏れを検査する"
+  default_prompt: "$bootstrap を使い、配置済み設定を初期化してください。"
+
+policy:
+  allow_implicit_invocation: false
