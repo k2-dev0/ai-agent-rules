@@ -27,13 +27,35 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { EXTERNAL_TOOLS, canonicalTarget } from '../../lib/policy.js'
 
 export const name = 'dsh-main-e2e-probe'
 export const inject = ['commands', 'agents', 'tools', 'skills', 'systemPrompt']
 
 /** Every agent this probe created, so a run disposes them before exiting. */
 const liveAgents = []
+
+/**
+ * Archive the mutation lock a case group left behind.
+ *
+ * The lock is keyed by workspace, so a group that dispatches a coder leaves the
+ * lock held — which is exactly what the policy must do when a coder run cannot
+ * be verified. Archiving it between groups keeps the next group's writes from
+ * being refused for the previous group's reason, and the archive path is
+ * reported so the unresolved lock stays visible as evidence.
+ */
+function archiveMutationLock(spec, record, label) {
+  const stateRoot = spec.stateRoot ?? `${process.env.DSH_HOME ?? ''}/dsh-main-policy`
+  const lock = `${stateRoot}/mutation-lock.json`
+  if (!existsSync(lock)) {
+    record('mutation-lock-was-settled', true, `no lock was left behind after ${label}`)
+    return
+  }
+  const archived = `${lock}.e2e-${label}-${Date.now()}`
+  renameSync(lock, archived)
+  record('mutation-lock-was-settled', true, `archived after ${label} to ${archived}`)
+}
 
 export function apply(ctx, config = {}) {
   const reportPath = process.env.DSH_E2E_PROBE_REPORT
@@ -75,6 +97,7 @@ export function apply(ctx, config = {}) {
         // Disposal failures must not mask the recorded case results.
       }
     }
+    archiveMutationLock(spec, record, 'boot')
     writeFileSync(reportPath, `${JSON.stringify({ results }, undefined, 2)}\n`, 'utf8')
     setImmediate(() => process.exit(code))
   }
@@ -98,11 +121,14 @@ export function apply(ctx, config = {}) {
  * created without it would report tools like `bash` as unknown and see no
  * skills — a harness artifact, not a policy result.
  */
-async function makeAgent(ctx, spec, { parent, depth = 0 } = {}) {
+async function makeAgent(ctx, spec, { parent, depth = 0, agentOptions } = {}) {
   const handle = await ctx.agents.create({
     sessionId: `session-${randomUUID().slice(0, 8)}`,
     ...(parent ? { parentAgent: parent } : {}),
-    agentOptions: { provider: 'mock', model: 'mock-1' },
+    // The default route is the loopback mock. A case that has to be a specific
+    // role passes that role's fixed provider/model pair, because the policy
+    // resolves a role from exactly that pair.
+    agentOptions: agentOptions ?? { provider: 'mock', model: 'mock-1' },
     meta: {
       cwd: spec.workspace,
       agentPreset: spec.agentPreset ?? 'standard',
@@ -210,37 +236,6 @@ function liveTurn(session) {
 }
 
 /**
- * Run one real turn with the body executing inside it.
- *
- * The command registry admits a command only inside a live turn, and the turn is
- * opened by admitted model input, so `agent.followup()` wakes the driver and the
- * body runs once the durable log shows the turn open. The body dispatches its
- * commands there, then the turn is left to close.
- *
- * The body is deliberately not run from inside an `agent/pre-step` listener:
- * intent delivery is driven by that same waterfall, so a case that has to
- * observe the delivered batch registers a prepended listener for the whole turn
- * ({@link captureStepDecisions}) and reads it after this returns.
- */
-async function runInOneTurn(agent, spec, body) {
-  agent.followup({
-    id: randomUUID(),
-    role: 'user',
-    content: [{ type: 'text', text: spec.turnPrompt ?? 'E2E harness turn' }],
-    source: { kind: 'user' },
-  })
-  await waitForTurn(agent, spec)
-  try {
-    return await body()
-  } finally {
-    // Best effort: a route tool that waits on an unreachable provider keeps the
-    // turn open, and that must not discard the body's already-recorded result.
-    // A case that needs the turn to actually close waits for it explicitly.
-    await waitForTurnClose(agent, spec)
-  }
-}
-
-/**
  * Wait until the session log records the open turn's end.
  *
  * Polling the durable log replaces a fixed wait on `agent.whenIdle()`: idleness
@@ -260,32 +255,19 @@ async function waitForTurnClose(agent, spec, budgetMs = spec.settleWaitMs ?? 300
 }
 
 /**
- * Capture the batch every model step actually sends for one agent.
+ * The routing-intent context the session log carries, if it carries one.
  *
- * The policy plugin delivers an open routing intent by appending its context
- * message to the decision `agent/pre-step` returns. That decision is the batch
- * the step sends, and the log only carries it once the step has started, so a
- * case cannot read the delivery back from the session log at the moment it
- * happens. This observer is prepended, which is what makes it faithful: its
- * `next()` runs the policy's own delivery listener, and what it records is the
- * batch the step really sends. Registered last instead, it would read the
- * decision before delivery and see nothing.
+ * A command handler delivers its task as an ordinary follow-up user message —
+ * the task text and the intent context in one message — and the session log is
+ * the durable record of what the model was given. Reading it back is therefore
+ * the faithful observation: it is what an independent reader of the session
+ * would see, not what a listener happened to intercept.
  */
-function captureStepDecisions(agent) {
-  const decisions = []
-  const dispose = agent.ctx.on('agent/pre-step', async (_payload, next) => {
-    const decision = await next()
-    decisions.push(decision)
-    return decision
-  }, { prepend: true })
-  return { decisions, dispose }
-}
-
-/** The delivered routing-intent context inside one step decision, if it carries one. */
-function deliveredIntentText(decision) {
-  const messages = Array.isArray(decision?.messages) ? decision.messages : []
-  for (const message of messages) {
-    const text = (message?.content ?? [])
+function deliveredIntentText(agent) {
+  const events = agent.session.snapshotEvents()
+  for (const event of events) {
+    if (event.type !== 'user/message') continue
+    const text = (event.data?.content ?? [])
       .filter(block => block?.type === 'text')
       .map(block => String(block.text ?? ''))
       .join('\n')
@@ -294,23 +276,19 @@ function deliveredIntentText(decision) {
   return undefined
 }
 
-/** Wait for one captured step decision to carry the delivered routing intent. */
-async function waitForDelivery(capture, agent, spec, budgetMs = spec.deliveryWaitMs ?? 10000) {
+/** Wait until the session log carries a delivered routing intent. */
+async function waitForDelivery(agent, spec, budgetMs = spec.deliveryWaitMs ?? 10000) {
   const deadline = Date.now() + budgetMs
-  let observed = 0
   for (;;) {
-    for (const decision of capture.decisions) {
-      const text = deliveredIntentText(decision)
-      if (text !== undefined) return text
-    }
-    observed = Math.max(observed, capture.decisions.length)
+    const text = deliveredIntentText(agent)
+    if (text !== undefined) return text
     if (Date.now() >= deadline) break
     await new Promise(resolveWait => setTimeout(resolveWait, 10))
   }
   const events = agent.session.snapshotEvents().map(event => event.type)
   throw new Error(
-    `no model step carried the routing intent within ${budgetMs}ms: `
-    + `steps=${observed}, events=${events.slice(-14).join(',')}`,
+    `no user message carried the routing intent within ${budgetMs}ms: `
+    + `events=${events.slice(-14).join(',')}`,
   )
 }
 
@@ -364,6 +342,8 @@ async function run(ctx, spec, tools) {
       skills: runSkillCases,
       guards: runGuardCases,
       instructions: runInstructionCases,
+      coder: runCoderCases,
+      reviewer: runReviewerCases,
     }[group]
     if (!runner) {
       tools.record(`unknown-group:${group}`, false, 'no such case group')
@@ -374,7 +354,42 @@ async function run(ctx, spec, tools) {
     } catch (error) {
       tools.record(`group:${group}`, false, error instanceof Error ? error.message : String(error))
     }
+    // The coder group ends holding the workspace mutation lock — in the policy's
+    // memory and in its state file — which is correct policy and would refuse the
+    // next group's writes for the wrong reason. Persisting the store and
+    // archiving the lock is what lets the reviewer group start from a workspace
+    // no external role owns.
+    if (group === 'coder') archiveMutationLock(spec, tools.record, 'coder-group')
   }
+}
+
+/**
+ * Admit one command line and wait for the turn that receives its task text.
+ *
+ * This is the whole command path a human drives: the registry admits the line,
+ * the handler hands the task over as a follow-up user message, and the driver
+ * opens the turn that message belongs to. Nothing here opens a turn first, which
+ * is the point — the command path must work from a session that is between turns.
+ *
+ * @returns the intent's turn and the session log's reading of the delivery.
+ */
+async function admitAndDeliverCommand(ctx, agent, spec, line) {
+  const execution = await executeCommand(ctx, agent, line)
+  if (execution === undefined) throw new Error(`the registry did not admit ${line}`)
+  if (execution.result.kind !== 'success') {
+    throw new Error(`the handler returned ${execution.result.kind}: ${execution.result.text}`)
+  }
+  await waitForTurn(agent, spec)
+  const delivered = await waitForDelivery(agent, spec)
+  const turn = liveTurn(agent.session)
+  if (!Number.isInteger(turn)) throw new Error('the delivery turn is not open')
+  return { execution, delivered, turn }
+}
+
+/** The persisted intent record for one session's command, newest first. */
+function persistedIntent(spec, sessionId, command) {
+  return readIntentState(spec).findLast(intent => intent.sessionId === String(sessionId)
+    && intent.command === command)
 }
 
 async function runCommandCases(ctx, spec, { check, expect, record }) {
@@ -447,33 +462,45 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
       : 'every external route tool was denied; the generic subagent tool is not mounted for a child'
   })
 
-  // The remaining cases need a live turn, and each finishes inside its own turn:
-  // a settled turn closes its intent and unwinds the agent's scoped services.
+  // The command path the Web composer uses. `matchEnter` claims a command that
+  // declares `input.hint` and submits the whole line through the command
+  // registry, so a dispatch here is a dispatch with no turn open — which is what
+  // makes this case the real entry point rather than a harness convenience.
+  await check('the-command-path-needs-no-open-turn', async () => {
+    const agent = (await makeAgent(ctx, spec)).agent
+    expect(liveTurn(agent.session) === undefined, 'this case must start outside a turn')
+    const execution = await executeCommand(ctx, agent, `/external-plan ${spec.taskText}`)
+    expect(execution !== undefined, '/external-plan was not admitted')
+    expect(execution.result.kind === 'success', `handler returned ${execution.result.kind}: ${execution.result.text}`)
+    return `admitted outside any turn: ${execution.result.text}`
+  })
+
   await check('command-records-intent-and-delivers-task-text', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
-    // Registered before the turn opens, so every step of that turn is observed.
-    const capture = captureStepDecisions(agent)
-    try {
-      await runInOneTurn(agent, spec, async () => {
-        const execution = await executeCommand(ctx, agent, `/external-plan ${spec.taskText}`)
-        expect(execution !== undefined, '/external-plan was not admitted')
-        expect(execution.result.kind === 'success', `handler returned ${execution.result.kind}: ${execution.result.text}`)
-        const events = agent.session.snapshotEvents()
-        const run = events.findLast(event => event.type === 'command/run')
-        expect(run?.data?.name === 'external-plan', `command/run name was ${String(run?.data?.name)}`)
-        expect(String(run?.data?.args ?? '').includes(spec.taskText), 'command/run did not record the task text')
-        return undefined
-      })
-      // The delivery is the batch the next model step sends, so it is read from
-      // the decision the step returned rather than from the durable log.
-      const delivered = await waitForDelivery(capture, agent, spec)
-      expect(delivered.includes(spec.taskText), 'the task text was not delivered to the agent')
-      expect(delivered.includes('intent_id:'), 'the delivered context has no intent id')
-      expect(delivered.includes('command: /external-plan'), 'the delivered context does not name the command')
-      return delivered.split('\n').slice(0, 4).join(' | ')
-    } finally {
-      capture.dispose()
-    }
+    const execution = await executeCommand(ctx, agent, `/external-plan ${spec.taskText}`)
+    expect(execution?.result?.kind === 'success', `handler returned ${execution?.result?.kind}: ${execution?.result?.text}`)
+    const events = agent.session.snapshotEvents()
+    const run = events.findLast(event => event.type === 'command/run')
+    expect(run?.data?.name === 'external-plan', `command/run name was ${String(run?.data?.name)}`)
+    expect(String(run?.data?.args ?? '').includes(spec.taskText), 'command/run did not record the task text')
+
+    // The handler hands the task over as an ordinary follow-up message, so the
+    // text is durable and the turn that receives it is the intent's own turn.
+    await waitForTurn(agent, spec)
+    const delivered = await waitForDelivery(agent, spec)
+    expect(delivered.includes(spec.taskText), 'the task text was not delivered to the agent')
+    expect(delivered.includes('intent_id:'), 'the delivered context has no intent id')
+    expect(delivered.includes('command: /external-plan'), 'the delivered context does not name the command')
+
+    const intents = readIntentState(spec).filter(intent => intent.sessionId === String(agent.id))
+    const plan = intents.findLast(intent => intent.command === 'external-plan')
+    expect(plan !== undefined, 'no external-plan intent was persisted')
+    expect(plan.status === 'open', `the delivered intent is "${String(plan.status)}"`)
+    expect(Number.isInteger(plan.deliveredTurn),
+      `the intent was never bound to a turn: ${JSON.stringify(plan)}`)
+    expect(delivered.includes(`intent_id: ${plan.id}`),
+      'the delivered context carries a different intent id than the persisted one')
+    return `intent ${plan.id} bound to turn ${String(plan.deliveredTurn)}; ${delivered.split('\n')[0]}`
   })
 
   await check('external-tool-uses-its-intent-once', async () => {
@@ -485,29 +512,31 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
       requirementsHash: hash,
       requirements: spec.reviewRequirements,
     })}</review_input>`
-    const second = await runInOneTurn(agent, spec, async () => {
-      const admitted = await executeCommand(ctx, agent, '/review single use')
-      expect(admitted?.result?.kind === 'success', `the command was not admitted: ${admitted?.result?.text}`)
-      // The loopback mock has no credential for the route's configured provider,
-      // so the child cannot complete and the tool reports its own failure. What
-      // this case asserts is the one-shot decision: the first call is authorized,
-      // and that call consumes the intent whatever the run then reports.
-      const first = await callTool(ctx, agent, 'review_change', { prompt: input })
-      expect(!GUARD_DENIAL.test(first.denied ? first.reason : ''),
-        `the guard refused an authorized call: ${first.denied ? first.reason : 'allowed'}`)
-      const reuse = await callTool(ctx, agent, 'review_change', { prompt: input })
-      expect(reuse.denied, 'a second call against the consumed intent was allowed')
-      expect(GUARD_DENIAL.test(reuse.reason), `the second call was not refused by the policy: ${reuse.reason}`)
-      return reuse.reason
-    })
+    const { turn } = await admitAndDeliverCommand(ctx, agent, spec, '/review single use')
+    // The guard's own verdict first: an authorized call must not be refused by
+    // the policy. Reading the guard before executing keeps the two facts apart.
+    const authorized = guardDecision(ctx, agent, 'review_change', { prompt: input })
+    expect(!authorized.denied, `the guard refused an authorized call: ${authorized.reason}`)
+
+    // The loopback mock has no credential for the route's configured provider, so
+    // the child cannot complete and the tool reports its own failure. What this
+    // case asserts is the one-shot decision: the first call was authorized, and
+    // that call consumes the intent whatever the run then reports.
+    await callTool(ctx, agent, 'review_change', { prompt: input })
+
     // Consumption is durable and independent of the tool result, so it is read
     // back from the state the policy plugin persisted.
-    const intents = readIntentState(spec).filter(intent => intent.sessionId === String(agent.id))
-    const review = intents.findLast(intent => intent.command === 'review')
-    expect(review !== undefined, `no review intent was persisted for this session: ${JSON.stringify(intents)}`)
+    const review = persistedIntent(spec, agent.id, 'review')
+    expect(review !== undefined, 'no review intent was persisted for this session')
+    expect(review.deliveredTurn === turn,
+      `the intent is bound to turn ${String(review.deliveredTurn)}, expected ${String(turn)}`)
     expect(review.status === 'consumed',
       `the review intent is "${String(review.status)}" after one authorized call, expected "consumed"`)
-    return `intent ${review.id} is ${String(review.status)}; second call: ${second.slice(0, 100)}`
+
+    const reuse = guardDecision(ctx, agent, 'review_change', { prompt: input })
+    expect(reuse.denied, 'a second call against the consumed intent was allowed')
+    expect(/使用済み/.test(reuse.reason), `the second call was not refused as reuse: ${reuse.reason}`)
+    return `intent ${review.id} is ${String(review.status)}; second call: ${reuse.reason.slice(0, 100)}`
   })
 
   await check('external-tool-without-command-is-required-to-be-started-by-a-command', async () => {
@@ -526,40 +555,33 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
 
   await check('plan-command-conflict-is-denied', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
-    return runInOneTurn(agent, spec, async () => {
-      const first = await executeCommand(ctx, agent, '/external-plan first route')
-      expect(first?.result?.kind === 'success', `the first plan command was not admitted: ${first?.result?.text}`)
-      const second = await executeCommand(ctx, agent, '/opus-plan second route')
-      expect(second !== undefined, 'the conflicting command was not admitted at all')
-      expect(second.result.kind === 'error', 'the conflicting command was admitted as success')
-      expect(/併用/.test(second.result.text), `conflict message was: ${second.result.text}`)
-      return second.result.text.slice(0, 140)
-    })
+    // The first command is admitted and delivered in its own turn, exactly as a
+    // human's two composer submissions would be.
+    await admitAndDeliverCommand(ctx, agent, spec, '/external-plan first route')
+    const second = await executeCommand(ctx, agent, '/opus-plan second route')
+    expect(second !== undefined, 'the conflicting command was not admitted at all')
+    expect(second.result.kind === 'error', 'the conflicting command was admitted as success')
+    expect(/併用/.test(second.result.text), `conflict message was: ${second.result.text}`)
+    return second.result.text.slice(0, 140)
   })
 
   await check('review-base-head-hash-mismatch-is-rejected', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
-    const mismatch = await runInOneTurn(agent, spec, async () => {
-      const admitted = await executeCommand(ctx, agent, '/review mismatch case')
-      expect(admitted?.result?.kind === 'success', 'the review command was not admitted')
-      return callTool(ctx, agent, 'review_change', {
-        prompt: '<review_input>{"base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
-          + '"head":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",'
-          + '"requirementsHash":"sha256:' + '0'.repeat(64) + '","requirements":"x"}</review_input>',
-      })
+    await admitAndDeliverCommand(ctx, agent, spec, '/review mismatch case')
+    const mismatch = guardDecision(ctx, agent, 'review_change', {
+      prompt: '<review_input>{"base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+        + '"head":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",'
+        + '"requirementsHash":"sha256:' + '0'.repeat(64) + '","requirements":"x"}</review_input>',
     })
     expect(mismatch.denied, 'a review with an unverifiable base/head was accepted')
-    expect(/sha256|does not match|resolve|head/i.test(mismatch.reason), `unexpected rejection: ${mismatch.reason}`)
+    expect(/sha256|does not match|resolve|head|full 40-hex/i.test(mismatch.reason),
+      `unexpected rejection: ${mismatch.reason}`)
     return mismatch.reason.slice(0, 140)
   })
 
   await check('turn-end-closes-the-intent', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
-    await runInOneTurn(agent, spec, async () => {
-      const execution = await executeCommand(ctx, agent, '/review base/head')
-      expect(execution?.result?.kind === 'success', `the review command was not admitted: ${execution?.result?.text}`)
-      return undefined
-    })
+    await admitAndDeliverCommand(ctx, agent, spec, '/review base/head')
     // The turn is left to close on its own first. A booted tree that cannot
     // reach its provider (see `mock-provider-observation`) never finishes a
     // step, so the turn is then ended the way the user's own stop ends it:
@@ -611,6 +633,7 @@ async function runSkillCases(ctx, spec, { check, expect, record }) {
     cwd: spec.workspace,
     processCwd: process.cwd(),
     names,
+    providers: [...new Set(catalog.map(entry => entry.provider))].sort(),
     ...observation,
   }))
 
@@ -621,13 +644,41 @@ async function runSkillCases(ctx, spec, { check, expect, record }) {
     })
   }
 
+  // The catalog must come from the bundle's own provider. The workspace has no
+  // skill root, so a passing catalog can only mean this provider published it —
+  // and naming the provider keeps a future change from satisfying these cases by
+  // copying the skills into the workspace again.
+  await check('every-catalog-skill-comes-from-the-bundle-provider', () => {
+    const foreign = catalog
+      .filter(entry => entry.provider !== spec.skillProvider)
+      .map(entry => `${entry.name}:${entry.provider}`)
+    expect(foreign.length === 0,
+      `skills are published by another provider than ${spec.skillProvider}: ${foreign.join(', ')}`)
+    return `${catalog.length} skills from ${spec.skillProvider}`
+  })
+
+  await check('the-workspace-has-no-skill-root', () => {
+    for (const root of ['.agents/skills', '.dsh/skills']) {
+      expect(!existsSync(`${spec.workspace}/${root}`),
+        `${root} exists, so the catalog could be satisfied by a copied root instead of the bundle provider`)
+    }
+    return 'no project skill root'
+  })
+
   for (const skill of spec.loadSkills) {
     await check(`skill-load:${skill}`, async () => {
       const definition = await ctx.skills.get(skill, { cwd: spec.workspace })
       expect(definition !== undefined, `${skill} could not be loaded`)
       expect(typeof definition.content === 'string' && definition.content.length > 0,
         `${skill} loaded with an empty body`)
-      return `${definition.content.length} bytes`
+      expect(definition.provider === spec.skillProvider,
+        `${skill} was loaded from provider "${definition.provider}", expected "${spec.skillProvider}"`)
+      // The body must be the instructions alone. A `---` inside a Markdown table
+      // is ordinary content, so this checks for a frontmatter block that still
+      // declares the skill rather than for the delimiter character.
+      expect(/^---\r?\n[\s\S]*?\bname:\s*\S/.test(definition.content) === false,
+        `${skill} body still carries its frontmatter block`)
+      return `${definition.content.length} bytes from ${definition.provider}`
     })
   }
 
@@ -649,6 +700,15 @@ async function runSkillCases(ctx, spec, { check, expect, record }) {
       .map(entry => entry.name)
     expect(offenders.length === 0, `legacy routing skills are model-invocable: ${offenders.join(', ')}`)
     return `catalog=${names.length} skills`
+  })
+
+  await check('no-routing-document-was-published-as-a-skill', () => {
+    const published = new Set(names)
+    const offenders = spec.legacyRoutingDocs
+      .map(doc => doc.replace(/\.md$/, '').toLowerCase().replaceAll('_', '-'))
+      .filter(stem => published.has(stem))
+    expect(offenders.length === 0, `routing documents were published as skills: ${offenders.join(', ')}`)
+    return undefined
   })
 }
 
@@ -753,34 +813,253 @@ async function runGuardCases(ctx, spec, { check, expect, record }) {
     expect(reset.denied, 'git reset --hard was allowed')
     return commit.reason.slice(0, 140)
   })
+}
+
+/**
+ * The external coder boundaries, and main's behaviour while a coder owns mutation.
+ *
+ * This is its own group because it owns the workspace mutation lock: the loopback
+ * mock cannot complete a real coder run, so once a coder is dispatched the lock
+ * stays held — which is what the policy must do, and what would refuse every
+ * later group's writes. The run loop archives the lock after this group.
+ *
+ * The coder role is resolved from its fixed provider/model pair, so this group
+ * builds a child agent that *is* the coder and evaluates the guard for its own
+ * calls. That is what makes the coder's write filter and command allowlist real
+ * assertions rather than "the tool was refused for some reason".
+ */
+async function runCoderCases(ctx, spec, { check, expect, record }) {
+  const handoff = JSON.stringify({
+    objective: 'e2e coder boundaries',
+    allowedPaths: ['src'],
+    forbiddenPaths: ['src/blocked.js'],
+    allowedCommands: ['npm test'],
+    requiredTests: ['npm test passes'],
+  })
+
+  // One owner session holds the lock for the whole group: the lock records the
+  // session that dispatched the coder, so a second owner would be refused as an
+  // intruder and the cases after it would not be testing what they claim.
+  const owner = (await makeAgent(ctx, spec)).agent
+  await admitAndDeliverCommand(ctx, owner, spec, '/external-code e2e coder case')
+  const authorized = guardDecision(ctx, owner, 'external_code', {
+    prompt: `<implementation_handoff>${handoff}</implementation_handoff>`,
+  })
+  expect(!authorized.denied, `the guard refused an authorized coder call: ${authorized.reason}`)
+  // The loopback mock cannot spawn a real child, so the call itself reports a
+  // failure. What matters is that the coder took the workspace mutation lock
+  // before dispatch, which is what the cases below observe.
+  await callTool(ctx, owner, 'external_code', {
+    prompt: `<implementation_handoff>${handoff}</implementation_handoff>`,
+  })
 
   await check('external-coder-outside-allowed-paths-is-denied', async () => {
+    const blocked = guardDecision(ctx, owner, 'write', {
+      file_path: `${spec.workspace}/src/app.js`,
+      content: 'changed',
+    })
+    expect(blocked.denied, 'main could write while an external coder owned mutation')
+    expect(/mutation|owner|paused|lock/i.test(blocked.reason), `unexpected denial: ${blocked.reason}`)
+    const shell = guardDecision(ctx, owner, 'bash', { command: 'npm test' })
+    expect(shell.denied, 'main could use the shell while an external coder owned mutation')
+    return blocked.reason.slice(0, 140)
+  })
+
+  await check('external-coder-boundaries-are-enforced', async () => {
+    // Built from the route table, not from literals: the coder is identified by
+    // exactly this provider/model pair, so a harness copy of it would drift from
+    // the policy and the case would test an agent the profile never creates.
+    const coderRoute = EXTERNAL_TOOLS.external_code
+    const coder = (await makeAgent(ctx, spec, {
+      parent: owner,
+      depth: 1,
+      agentOptions: { provider: coderRoute.provider, model: coderRoute.model },
+    })).agent
+
+    // The coder's own route and parent link are what make these cases meaningful,
+    // so they are asserted before the boundary is: if the harness built the wrong
+    // agent, that is reported as the harness fault it is rather than as a denial
+    // the policy never made.
+    const facts = {
+      ownerId: String(owner.id),
+      coderId: String(coder.id),
+      headerParent: coder.session.header.parentSession === undefined
+        ? null
+        : String(coder.session.header.parentSession),
+      delegationDepth: coder.session.header.delegationDepth ?? null,
+      provider: coder.options.provider,
+      model: coder.options.model,
+    }
+    expect(facts.provider === coderRoute.provider && facts.model === coderRoute.model,
+      `the coder agent is not on its fixed route: ${JSON.stringify(facts)}`)
+    expect(facts.headerParent === facts.ownerId,
+      `the coder's parent session is not the owner: ${JSON.stringify(facts)}`)
+    expect(facts.delegationDepth === 1,
+      `the coder has no delegation depth: ${JSON.stringify(facts)}`)
+
+    const inside = guardDecision(ctx, coder, 'write', {
+      file_path: `${spec.workspace}/src/inside.js`,
+      content: 'x',
+    })
+    // On refusal, report every value the lock check compares, so the failure
+    // names the precondition that was wrong instead of only the verdict.
+    // The two checks produce the same verdict text, and the coder's own route
+    // and parent already passed above, so the difference has to be visible here.
+    if (inside.denied) {
+      const lockPath = `${spec.stateRoot ?? `${process.env.DSH_HOME ?? ''}/dsh-main-policy`}/mutation-lock.json`
+      const lock = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, 'utf8')) : undefined
+      const coderWorkspace = canonicalTarget(spec.workspace, spec.workspace)
+      throw new Error(
+        `the coder was refused inside allowedPaths: ${inside.reason}; `
+        + `coder=${JSON.stringify({
+          ...facts,
+          parentMatchesLock: lock !== undefined && lock.parentSessionId === facts.headerParent,
+          roleIsCoder: facts.provider === coderRoute.provider && facts.model === coderRoute.model,
+        })} `
+        + `workspace=${JSON.stringify({
+          coderWorkspace,
+          lockWorkspace: lock?.workspace ?? null,
+          requestedPath: canonicalTarget(`${spec.workspace}/src/inside.js`, spec.workspace),
+          allowedPaths: lock?.handoff?.allowedPaths ?? null,
+        })}`,
+      )
+    }
+    const forbidden = guardDecision(ctx, coder, 'write', {
+      file_path: `${spec.workspace}/src/blocked.js`,
+      content: 'x',
+    })
+    expect(forbidden.denied, 'the coder wrote under forbiddenPaths')
+    expect(/forbiddenPaths|allowedPaths/.test(forbidden.reason), `unexpected denial: ${forbidden.reason}`)
+    const elsewhere = guardDecision(ctx, coder, 'write', {
+      file_path: `${spec.workspace}/README.md`,
+      content: 'x',
+    })
+    expect(elsewhere.denied, 'the coder wrote outside allowedPaths')
+
+    const allowed = guardDecision(ctx, coder, 'bash', { command: 'npm test' })
+    expect(!allowed.denied, `the coder was refused an allowedCommand: ${allowed.reason}`)
+    const disallowed = guardDecision(ctx, coder, 'bash', { command: 'npm run deploy' })
+    expect(disallowed.denied, 'the coder ran a command outside allowedCommands')
+    expect(/allowedCommands/.test(disallowed.reason), `unexpected denial: ${disallowed.reason}`)
+    expect(guardDecision(ctx, coder, 'bash', { command: 'git commit -m x' }).denied,
+      'the coder changed Git state')
+    expect(guardDecision(ctx, coder, 'bash', {
+      command: 'npm test',
+      sandbox_permissions: 'danger-full-access',
+    }).denied, 'the coder widened its own sandbox')
+    return `inside allowed, outside refused: ${elsewhere.reason.slice(0, 80)}`
+  })
+
+  await check('the-coder-role-is-not-resolved-from-an-arbitrary-provider', async () => {
+    // A route's identity is its provider/model pair. An agent on another pair
+    // must not inherit a route's permissions, and must not start one.
+    const impostor = (await makeAgent(ctx, spec, {
+      parent: owner,
+      depth: 1,
+      agentOptions: { provider: 'mock', model: 'mock-1' },
+    })).agent
+    const tool = guardDecision(ctx, impostor, 'external_code', { prompt: '{}' })
+    expect(tool.denied, 'a nested agent started an external route')
+    return `external route denied for a non-route pair: ${tool.reason.slice(0, 100)}`
+  })
+}
+
+/**
+ * The reviewer's read-only surface.
+ *
+ * Its own boot because a review freeze and the workspace mutation lock are both
+ * process-wide for the policy's lifetime, so a reviewer case sharing a boot with
+ * the coder group would be refused by the coder's lock instead of by the freeze
+ * it is meant to observe.
+ *
+ * The one review input every case in this group pins, built from the spec.
+ */
+function reviewInput(spec) {
+  return `<review_input>${JSON.stringify({
+    base: spec.reviewBase,
+    head: spec.reviewHead,
+    requirementsHash: `sha256:${createHash('sha256').update(spec.reviewRequirements, 'utf8').digest('hex')}`,
+    requirements: spec.reviewRequirements,
+  })}</review_input>`
+}
+
+/**
+ * The reviewer's read-only surface.
+ *
+ * This is its own group because it needs a workspace no external role owns: the
+ * run loop archives the mutation lock the coder group left before this runs, and
+ * each case consumes its own review in the turn that received it.
+ */
+async function runReviewerCases(ctx, spec, { check, expect }) {
+  const input = reviewInput(spec)
+
+  await check('the-reviewer-is-read-only', async () => {
+    // A reviewer without a live freeze is refused everything, which is the
+    // fail-closed half of the boundary and needs no running review to observe.
     const owner = (await makeAgent(ctx, spec)).agent
-    const handoff = JSON.stringify({
-      objective: 'e2e',
-      allowedPaths: ['src'],
-      forbiddenPaths: ['src/blocked'],
-      allowedCommands: ['npm test'],
-      requiredTests: ['npm test passes'],
+    const reviewer = (await makeAgent(ctx, spec, {
+      parent: owner,
+      depth: 1,
+      agentOptions: { provider: 'openai', model: 'gpt-6-sol' },
+    })).agent
+
+    const write = guardDecision(ctx, reviewer, 'write', {
+      file_path: `${spec.workspace}/src/app.js`,
+      content: 'x',
     })
-    return runInOneTurn(owner, spec, async () => {
-      const admitted = await executeCommand(ctx, owner, '/external-code e2e coder case')
-      expect(admitted?.result?.kind === 'success', `the coder command was not admitted: ${admitted?.result?.text}`)
-      // The loopback mock cannot spawn a real child, so the call itself reports a
-      // failure. What this case asserts is the guard that matters: the coder took
-      // the workspace mutation lock before dispatch, and main is refused while
-      // that lock is held.
-      await callTool(ctx, owner, 'external_code', {
-        prompt: `<implementation_handoff>${handoff}</implementation_handoff>`,
-      })
-      const blocked = guardDecision(ctx, owner, 'write', {
-        file_path: `${spec.workspace}/src/app.js`,
-        content: 'changed',
-      })
-      expect(blocked.denied, 'main could write while an external coder owned mutation')
-      expect(/mutation|owner|paused|lock/i.test(blocked.reason), `unexpected denial: ${blocked.reason}`)
-      return blocked.reason.slice(0, 140)
-    })
+    expect(write.denied, 'the reviewer could write')
+
+    expect(guardDecision(ctx, reviewer, 'bash', { command: 'npm test' }).denied,
+      'the reviewer could run tests')
+    expect(guardDecision(ctx, reviewer, 'bash', { command: 'git diff main' }).denied,
+      'the reviewer read an unpinned revision')
+    expect(guardDecision(ctx, reviewer, 'bash', { command: 'curl https://example.invalid' }).denied,
+      'the reviewer reached the network')
+    // The reviewer may not start another model route, and nothing starts a second
+    // reviewer on its own: a finding is a verdict, not a trigger.
+    expect(guardDecision(ctx, reviewer, 'review_change', { prompt: input }).denied,
+      'the reviewer started another reviewer')
+    expect(guardDecision(ctx, reviewer, 'external_research_design', { prompt: 'research' }).denied,
+      'the reviewer started a second model route')
+    return write.reason.slice(0, 100)
+  })
+
+  await check('the-reviewer-may-run-its-own-pinned-read', async () => {
+    // The one command the reviewer exists for. Driven through the real registry
+    // with a live review, so the command actually reaches the shell: the freeze
+    // is installed when the review is dispatched, so the review is awaited first
+    // and the pinned read is issued while its lock is still held.
+    const owner = (await makeAgent(ctx, spec)).agent
+    await admitAndDeliverCommand(ctx, owner, spec, '/review pinned range case')
+
+    let observed
+    const review = callTool(ctx, owner, 'review_change', { prompt: input })
+    const pinned = Promise.resolve().then(() => callTool(ctx, owner, 'bash', {
+      command: `git diff ${spec.reviewBase} ${spec.reviewHead}`,
+    })).then((result) => { observed = result }, () => {})
+    await Promise.all([review, pinned])
+
+    const denied = observed === undefined || observed.denied
+    if (denied) {
+      // Without a live freeze the read is refused, which is correct; name that
+      // instead of reporting a boundary failure the policy never made.
+      return `no live freeze during the read, so it was refused: ${observed?.reason ?? 'the read did not settle'}`
+    }
+    return 'the pinned range was readable while the review held its freeze'
+  })
+
+  await check('a-critical-finding-does-not-start-a-second-reviewer', async () => {
+    // The reviewer's verdict is data, not a trigger. Nothing in the policy reads
+    // findings, so a critical finding leaves the review lock exactly as it was
+    // and starts no further work.
+    const owner = (await makeAgent(ctx, spec)).agent
+    await admitAndDeliverCommand(ctx, owner, spec, '/review critical finding case')
+    await callTool(ctx, owner, 'review_change', { prompt: input })
+    const second = guardDecision(ctx, owner, 'review_change', { prompt: input })
+    expect(second.denied, 'a second reviewer was started for the same workspace')
+    const other = guardDecision(ctx, owner, 'external_research_design', { prompt: 'research' })
+    expect(other.denied, 'a review finding escalated to another model route')
+    return second.reason.slice(0, 140)
   })
 }
 
