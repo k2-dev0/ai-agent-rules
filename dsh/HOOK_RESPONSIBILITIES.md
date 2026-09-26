@@ -31,7 +31,7 @@
 | context／contract配送 | `load-required-contract.sh`、`load-operation-context.sh` | native移植済み | `ctx.systemPrompt.section`（`DSH_INSTRUCTIONS`、`MAIN_POLICY_PROMPT`）＋subagent `persona` |
 | session継続・resume・compaction | `session.sh` | DSH標準sandboxへ委譲 | `dsh-session-persistence`／`dsh-compaction`が担当。skill scope markerは`dsh-skill`のcatalogへ置換 |
 | resultのsession ID・task ID・terminal status照合 | `agent-wait.sh`、`agent-input.py` | native移植済み | 外部route toolは`runId`と`resultStatus`をintentへ記録し、終端foreground resultだけを受理 |
-| 専用role指定の起動tool検査 | `require-implementer.sh` | native移植済み | route tool名を固定し、各toolの`agentOptions`でprovider／model／effortを固定。roleはその組から解決するので、組の重複は`assertRouteCommandConsistency`が起動時に拒否する |
+| 専用role指定の起動tool検査 | `require-implementer.sh` | native移植済み | route tool名を固定し、各toolの`agentOptions`でprovider／model／effortを固定。roleはその組から解決するので、組の重複は`assertRouteCommandConsistency`が起動時に拒否する。routeのmodel entryが話すprotocolの必要compat（`anthropic-messages`の`forceAdaptiveThinking`）を宣言しているかは`assertRouteDeclarations`が起動時に拒否する |
 | 通常commandのallowlist | `command-approval.sh` | native移植済み | `SAFE_MAIN_COMMAND`。それ以外はsandbox escalationと承認を要求 |
 | slash commandの登録とtask配送 | （新規） | native移植済み | `ctx.commands.register`で4 commandを登録。handlerが`agent.followup`でtask本文とrouting intent contextを配送し、`agent/pre-step`でintentを配送turnへ束縛する |
 | OS-levelのread-only強制 | `agent-input.py`（sandbox mode） | DSH標準sandboxへ委譲 | DSH sandbox policyが担当。このbundleはtool単位の境界のみ持つ |
@@ -51,6 +51,7 @@
 - 解決不能なmutation lockの残留 → 起動失敗
 - route tableとcommand registryの不一致 → 起動失敗
 - 2つのrouteが同じ`provider`/`model`組を宣言 → 起動失敗（roleが解決不能になり、そのrole向けguardが許可すべき仕事を拒否するため）
+- routeのmodel entryが必要compatを宣言していない、route／model／apiがpatchに無い → 起動失敗（課金前にproviderが拒否し、呼出側にはroute名も欠落fieldも見えないため）
 - `AGENTS.dsh.md`が読めない、または指示blockが空 → 起動失敗
 
 ## 未保証範囲
