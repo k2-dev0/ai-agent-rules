@@ -1,7 +1,7 @@
 /**
  * The real DSH end-to-end run.
  *
- * Every assertion here is produced by the installed DSH `0.1.7-rc.1` CLI, by the
+ * Every assertion here is produced by the installed DSH `0.1.7-rc.2` CLI, by the
  * profile it boots, or by the in-profile probe those tests mount. The environment
  * is a throwaway `DSH_HOME`, a throwaway Git workspace, and a loopback mock
  * provider, so nothing reaches a real provider and nothing bills an account.
@@ -17,6 +17,20 @@ import { MOCK_CREDENTIAL, resolveDshBin, runDsh, webBootArgs } from './harness.m
 import { DISTRIBUTED_SKILLS, probePatch, setupWorkflowEnvironment } from './setup.mjs'
 import { LEGACY_ROUTING_DOCS, LEGACY_SKILLS } from '../../lib/deploy-skills.js'
 import { PROVIDER_NAME as SKILL_PROVIDER } from '../../lib/distribution-skills.js'
+import { EXTERNAL_TOOLS } from '../../lib/policy.js'
+
+/**
+ * Every pair the shipped profile is expected to serve, from the policy's own
+ * table: the main route plus one per external role.
+ */
+const ROUTE_ROWS = Object.freeze([
+  { provider: 'deepseek-official', model: 'deepseek-flash' },
+  ...Object.entries(EXTERNAL_TOOLS).map(([, route]) => ({
+    provider: route.provider,
+    model: route.model,
+    effort: route.effort,
+  })),
+])
 
 const ctx = await setupWorkflowEnvironment()
 test.after(async () => { await ctx.cleanup() })
@@ -171,6 +185,35 @@ test('e2e: the composed profile pins the main route, four role routes, and the p
     'the web surface does not depend on the policy service')
   assert.equal(/\bbudget\b|\bspend\b|\bcost\b|\bprice\b|\bbilling\b/i.test(text), false,
     'the composed profile carries a budget or cost concept')
+})
+
+test("e2e: the bundle's own route rows resolve in the real profile", () => {
+  // No loopback overlay in this boot: it composes the rows the bundle ships,
+  // which are the only description of `claude-opus-5-5` on an installed pi-ai
+  // that does not list it. A route the adapter refuses does not fail the boot —
+  // it stays dormant with a diagnostic — so the probe asks the llm registry
+  // instead: every pair must resolve, carry no configuration diagnostic, and
+  // still offer the effort its route pins. A declaration the adapter rejected
+  // fails here rather than surfacing later as an opaque provider rejection on
+  // the first `/opus-plan`.
+  const specPath = ctx.writeSpec('routes', {
+    workspace: ctx.env.workdir,
+    groups: ['routes'],
+    routes: ROUTE_ROWS,
+  })
+  const patchPath = ctx.writePatch('routes', probePatch(specPath))
+  const reportPath = join(ctx.env.root, 'routes.report.json')
+  const booted = runDsh(ctx.env, webBootArgs(ctx.env, [patchPath]), {
+    env: { DSH_E2E_PROBE_REPORT: reportPath },
+    timeoutMs: 180_000,
+  })
+  assert.equal(existsSync(reportPath), true,
+    `the profile did not activate with the bundle's own route rows: ${booted.stderr || booted.stdout}`)
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+  assert.ok(report.results.some(entry => entry.id === 'bundle-route-rows-resolve'),
+    `the probe did not resolve the routes: ${JSON.stringify(report.results)}`)
+  const failed = report.results.filter(entry => !entry.ok)
+  assert.deepEqual(failed, [], `the probe reported: ${JSON.stringify(failed)}`)
 })
 
 test('e2e: no bundle-declared configuration pins a source-repository path', () => {
@@ -358,6 +401,6 @@ test('e2e: no credential value or task text reaches policy state or profile logs
 })
 
 test('e2e: the DSH binary under test is the pinned version', () => {
-  assert.equal(ctx.version, '0.1.7-rc.1')
+  assert.equal(ctx.version, '0.1.7-rc.2')
   assert.ok(resolveDshBin().includes('@deepseek-ai'))
 })
