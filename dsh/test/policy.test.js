@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import {
   EXTERNAL_TOOLS,
+  annotateCancelledRun,
   commandMatchesAllowlist,
   commandTokens,
   currentTurn,
@@ -124,6 +125,29 @@ test('design handoff requires every ordered heading', async () => {
   const { DESIGN_HANDOFF_HEADINGS } = await import('../lib/policy.js')
   assert.equal(validateDesignHandoff(DESIGN_HANDOFF_HEADINGS.join('\ntext\n')).valid, true)
   assert.equal(validateDesignHandoff('# Design Handoff\n## 目的').valid, false)
+})
+
+test('a policy cancellation is added to the run failure, never substituted for it', () => {
+  const cancelled = {
+    isError: true,
+    error: { message: 'subagent run was cancelled' },
+    content: [{ type: 'text', text: 'Error: subagent run was cancelled' }],
+  }
+  const annotated = annotateCancelledRun(cancelled, 'review_change exceeded maxSteps=6')
+  assert.match(annotated.error.message, /^subagent run was cancelled/)
+  assert.match(annotated.error.message, /review_change exceeded maxSteps=6/)
+  assert.match(annotated.content[0].text, /^Error: subagent run was cancelled/)
+  assert.match(annotated.content[0].text, /review_change exceeded maxSteps=6/)
+
+  // No policy cancellation, or a run that succeeded: nothing to add.
+  assert.equal(annotateCancelledRun(cancelled, undefined), cancelled)
+  assert.equal(annotateCancelledRun(cancelled, ''), cancelled)
+  const succeeded = { isError: false, value: { kind: 'foreground' } }
+  assert.equal(annotateCancelledRun(succeeded, 'review_change exceeded maxSteps=6'), succeeded)
+
+  // A failure that carries no text block still names the reason.
+  const headerOnly = annotateCancelledRun({ isError: true, error: { message: 'boom' } }, 'exceeded maxSteps=6')
+  assert.match(headerOnly.content[0].text, /exceeded maxSteps=6/)
 })
 
 test('review contract fixes SHAs and distinguishes incomplete', () => {
