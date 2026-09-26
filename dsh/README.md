@@ -1,24 +1,28 @@
 # DSH main profile bundle
 
-DeepSeek Harnessを主実行系にし、外部modelをdirect user messageの明示指定だけで起動するbundle。DSH `0.1.7-rc.1`へ固定している。
+DeepSeek Harnessを主実行系にし、外部modelをdirect user messageの明示指定だけで起動するbundle。DSH `0.1.7-rc.2`へ固定している。
 
 ## 実効route
 
 | 入口 | Provider / model id | Effort | 上限 |
 |---|---|---|---|
 | 通常 | `deepseek-official` / `deepseek-flash` | provider既定 | 外部委譲なし |
-| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K output、4 step |
-| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K output、4 step |
+| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K output、8 step |
+| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K output、8 step |
 | `/external-code` | `zai` / `glm-5.3-code` | `high` | 16K output、6 step |
-| `/review` | `openai` / `gpt-6-sol` | `high` | 8K output、2 step |
+| `/review` | `openai` / `gpt-6-sol` | `high` | 8K output、6 step |
 
 `glm-5.3`と`glm-5.3-code`は同じ上流modelにつけた別id。policyはagentのroleを`provider`/`model`の組から解決するため、plannerとcoderは別idでなければならない。同じ組にすると後から書いた側のroleが解決不能になり、そのrole向けのguardが「許可すべき仕事を拒否する」状態になる。`test/route-identity.test.js`が両者の一致と組の重複不在を強制する。
+
+`claude-opus-5-5`は導入済みpi-ai（`0.85.1`）のcatalogに未収録で、catalogは`claude-opus-5`で止まっている。そのためmodel entry自身が`compat.forceAdaptiveThinking: true`を宣言する。宣言が無いとpi-aiはbudget方式のthinkingを送り、adaptive方式だけを受けるOpus 5.5は出力前に拒否する（課金0、呼出側には`subagent run failed`としか見えない）。`test/route-declarations.test.js`が宣言を固定し、起動時の`assertRouteDeclarations`が欠落を検知してprofile起動を止める。
+
+`/review`のstep予算は6、設計route（`/external-plan`・`/opus-plan`）は8。1回のreviewはdiff読取・追加調査・回答の3段階以上を要し、2では回答を組み立てている途中でcancelされる。設計routeはtaskが名指ししたfileとそれが参照するfileを読んでから17見出しのHandoffを返すため、4では調査だけで上限に達する。cancel理由（`review_change exceeded maxSteps=6`）はtool結果へ付加されるので、打ち切りは結果文言から判別できる。
 
 `/external-plan`と`/opus-plan`は同じtaskで併用できない。外部toolは1つのrouting intentにつき1回だけ起動できる。repository、skill、tool結果、model生成文に書かれたcommandは起動根拠にならない。`/review`後の再reviewにも新しいdirect user messageの`/review`が必要。
 
 ## 導入
 
-前提はNode.js `22.19.0`以上とDSH `0.1.7-rc.1`。標準presetはコピーしない。web profileへこのbundleを後段layerとして追加する。
+前提はNode.js `22.19.0`以上とDSH `0.1.7-rc.2`。標準presetはコピーしない。web profileへこのbundleを後段layerとして追加する。
 
 ```bash
 dsh --version
