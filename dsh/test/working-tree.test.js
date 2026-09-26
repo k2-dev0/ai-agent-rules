@@ -58,10 +58,18 @@ test('every installed bundle file can be edited from the working tree', () => {
     // A single link is already editable, and a non-regular file is not ours.
     if (!metadata.isFile() || metadata.nlink < 2) continue
     const scratch = `${file}.relink-${process.pid}`
-    // COPYFILE_FICLONE_FORCE: the default copy is allowed to share the source's
-    // inode (and does, when the filesystem reflinks), which would leave the
-    // "new" file just as hard-linked as the old one.
-    copyFileSync(file, scratch, constants.COPYFILE_FICLONE_FORCE)
+    // COPYFILE_FICLONE_FORCE asks the filesystem to clone, so the replacement
+    // cannot share the source's extents. A filesystem that cannot clone — or a
+    // sandbox that refuses the clone syscall — answers ENOSYS or ENOTSUP
+    // instead, and that must not leave the checkout uneditable: any copy that
+    // lands in a fresh inode satisfies this test, so the clone is attempted
+    // first and a plain byte copy is the fallback.
+    try {
+      copyFileSync(file, scratch, constants.COPYFILE_FICLONE_FORCE)
+    } catch (error) {
+      if (!['ENOSYS', 'ENOTSUP', 'EOPNOTSUPP'].includes(error?.code)) throw error
+      copyFileSync(file, scratch)
+    }
     unlinkSync(file)
     renameSync(scratch, file)
     relinked.push(relative(bundleRoot, file))
