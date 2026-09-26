@@ -37,14 +37,18 @@ export const EXTERNAL_TOOLS = Object.freeze({
     provider: 'zai',
     model: 'glm-5.3',
     effort: 'max',
-    maxSteps: 4,
+    // A design run reads a task's whole surface — the files it names and the
+    // files those reference — before it can return its ordered handoff. At 4 a
+    // recorded run was cancelled at step 5 while still reading, so the budget
+    // only covered the investigation, never the answer.
+    maxSteps: 8,
   }),
   external_opus_design: Object.freeze({
     command: 'opus-plan',
     provider: 'anthropic',
     model: 'claude-opus-5-5',
     effort: 'high',
-    maxSteps: 4,
+    maxSteps: 8,
   }),
   external_code: Object.freeze({
     command: 'external-code',
@@ -58,8 +62,29 @@ export const EXTERNAL_TOOLS = Object.freeze({
     provider: 'openai',
     model: 'gpt-6-sol',
     effort: 'high',
-    maxSteps: 2,
+    // A review reads a diff, follows up on what it found, and then answers. At 2
+    // the child was cancelled while it was still assembling its verdict, and the
+    // caller saw only `subagent run was cancelled`.
+    maxSteps: 6,
   }),
+})
+
+/**
+ * The compat fields one wire protocol requires a route's model entry to declare.
+ *
+ * A route names a model id the installed pi-ai catalog may not ship — it ships
+ * neither `claude-opus-5-5` (0.85.1 stops at `claude-opus-5`) nor the zai ids —
+ * and for those ids the model entry is the only description that exists. The
+ * requirement is stated per protocol because that is where the shape is decided:
+ * `anthropic-messages` sends budget-based thinking unless the model carries
+ * `forceAdaptiveThinking`, and an adaptive-only model rejects that request
+ * before producing any output (zero token usage, so the failure names neither
+ * the route nor the field). The OpenAI-style protocols infer their request shape
+ * from the endpoint, so an id they do not describe still works and needs nothing
+ * declared here.
+ */
+export const ROUTE_MODEL_REQUIREMENTS = Object.freeze({
+  'anthropic-messages': Object.freeze(['forceAdaptiveThinking']),
 })
 
 export const DESIGN_HANDOFF_HEADINGS = Object.freeze([
@@ -520,6 +545,120 @@ export function assertRouteCommandConsistency() {
   return true
 }
 
+/**
+ * The provider routes a patch declares, each with its api and the compat of
+ * every model entry.
+ *
+ * The bundle writes `cordis.patch.yml` itself, so its shape is a contract rather
+ * than a guess: providers sit at six spaces under `providers:`, a route's `api`
+ * and `models:` at eight, each model entry at ten, and its fields at twelve.
+ * Reading that indentation is what keeps a `model:` or a `compat:` belonging to
+ * another row from being attributed to this one — a substring search would take
+ * the first match in the file, which is the zai block that precedes anthropic.
+ *
+ * @param patchText - the contents of `cordis.patch.yml`.
+ * @returns providers by id, each with its route api and its models by id.
+ */
+function declaredProviders(patchText) {
+  const providers = new Map()
+  let provider
+  let model
+  let block
+  for (const raw of String(patchText).split(/\r?\n/)) {
+    const line = raw.trimEnd()
+    const content = line.trim()
+    if (content === '' || content.startsWith('#')) continue
+    const indent = line.length - line.trimStart().length
+    if (indent <= 4) {
+      provider = undefined
+      model = undefined
+      block = undefined
+      continue
+    }
+    if (indent === 6) {
+      const key = content.match(/^([A-Za-z0-9._-]+):$/)
+      provider = key ? { api: undefined, models: new Map() } : undefined
+      if (provider) providers.set(key[1], provider)
+      model = undefined
+      block = undefined
+      continue
+    }
+    if (provider === undefined) continue
+    if (indent === 8) {
+      const api = content.match(/^api:\s*(\S+)$/)
+      if (api) provider.api = api[1]
+      model = undefined
+      block = undefined
+      continue
+    }
+    if (indent === 10) {
+      const id = content.match(/^-\s*id:\s*(\S+)$/)
+      model = id ? { api: undefined, compat: new Set() } : undefined
+      if (model) provider.models.set(id[1], model)
+      block = undefined
+      continue
+    }
+    if (model === undefined) continue
+    if (indent === 12) {
+      block = content.match(/^([A-Za-z0-9_]+):$/)?.[1]
+      const api = content.match(/^api:\s*(\S+)$/)
+      if (api) model.api = api[1]
+      continue
+    }
+    if (block === 'compat') model.compat.add(content.split(':', 1)[0])
+  }
+  return providers
+}
+
+/**
+ * Every route's declared model must carry the compat its protocol requires.
+ *
+ * This runs at activation against the bundle's own patch, so a declaration that
+ * would only fail on the first request fails the profile instead. The message
+ * names the route, its protocol, and the missing field, because the alternative
+ * is a provider rejection with zero token usage that names none of them.
+ *
+ * @param patchText - the contents of the bundle's own `cordis.patch.yml`.
+ * @param routes - the route table to verify; defaults to every route.
+ * @returns true when every route is described well enough to serve a request.
+ * @throws when a route, its model entry, its protocol, or a required compat
+ *   field is missing.
+ */
+export function assertRouteDeclarations(patchText, routes = EXTERNAL_TOOLS) {
+  const providers = declaredProviders(patchText)
+  const problems = []
+  for (const [tool, route] of Object.entries(routes)) {
+    const provider = providers.get(route.provider)
+    if (provider === undefined) {
+      problems.push(`${tool}: the patch declares no provider route "${route.provider}"`)
+      continue
+    }
+    const model = provider.models.get(route.model)
+    if (model === undefined) {
+      problems.push(`${tool}: provider "${route.provider}" declares no model entry "${route.model}"`)
+      continue
+    }
+    const api = model.api ?? provider.api
+    if (api === undefined) {
+      problems.push(`${tool}: neither route "${route.provider}" nor model "${route.model}" names its api,`
+        + ' so only an installed pi-ai catalog entry can describe it; declare the api in cordis.patch.yml')
+      continue
+    }
+    for (const field of ROUTE_MODEL_REQUIREMENTS[api] ?? []) {
+      if (model.compat.has(field)) continue
+      problems.push(`${tool} (${route.provider}/${route.model}) speaks ${api}, which needs`
+        + ` compat.${field}: true on the model entry: without it pi-ai sends budget-based thinking,`
+        + ' which a model the installed catalog does not describe rejects before producing any output,'
+        + ' and the caller sees only `subagent run failed`. Declare the field in cordis.patch.yml,'
+        + ' or name a model the installed catalog ships.')
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(`route declaration check failed:\n- ${problems.join('\n- ')}`)
+  }
+  return true
+}
+
 export function isInsideAllowedPath(target, cwd, allowedPaths, forbiddenPaths = []) {
   const canonical = canonicalTarget(target, cwd)
   const allowed = allowedPaths.some(path => sameOrInside(canonicalTarget(path, cwd), canonical))
@@ -559,6 +698,35 @@ export function outputText(value) {
     .filter(block => block && block.type === 'text' && typeof block.text === 'string')
     .map(block => block.text)
     .join('')
+}
+
+/**
+ * Add a policy cancellation reason to the failure a route tool reported.
+ *
+ * A child the policy cancelled reaches the caller as the tool's own fixed
+ * wording (`subagent run was cancelled`), and the reason it was cancelled — a
+ * step budget, in practice — is what makes that actionable. The reason is
+ * appended rather than substituted: the tool's own failure stays the headline,
+ * and a policy note must not relabel a provider error as a policy verdict.
+ *
+ * @param result - the route tool's result.
+ * @param reason - the recorded policy reason, when one exists for this run.
+ * @returns the result, annotated only when a reason applies.
+ */
+export function annotateCancelledRun(result, reason) {
+  if (typeof reason !== 'string' || reason === '') return result
+  if (!result || result.isError !== true) return result
+  const note = `\nDSH policy: ${reason}`
+  const content = Array.isArray(result.content) && result.content.length > 0
+    ? result.content.map((block, index) => (index === result.content.length - 1
+      && block?.type === 'text' && typeof block.text === 'string'
+      ? { ...block, text: `${block.text}${note}` }
+      : block))
+    : [{ type: 'text', text: `Error:${note}` }]
+  const message = typeof result.error?.message === 'string' && result.error.message !== ''
+    ? `${result.error.message}${note}`
+    : `route run cancelled${note}`
+  return { ...result, error: { ...result.error, message }, content }
 }
 
 export function resolveWorkspacePath(cwd, input) {
