@@ -4,7 +4,7 @@
  * The harness always works against a throwaway `DSH_HOME`, a throwaway Git
  * workspace, and a local mock provider, so no test can reach a real provider or
  * bill an account. Everything it asserts is produced by the real DSH
- * `0.1.7-rc.1` CLI or by the real profile boot; nothing is simulated in place of
+ * `0.1.7-rc.2` CLI or by the real profile boot; nothing is simulated in place of
  * DSH behavior.
  */
 
