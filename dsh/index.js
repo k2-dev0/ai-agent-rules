@@ -26,12 +26,15 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { registerDistributionSkills } from './lib/distribution-skills.js'
 import { DSH_INSTRUCTIONS } from './lib/dsh-instructions.js'
 import {
   EXTERNAL_TOOLS,
+  annotateCancelledRun,
   assertRouteCommandConsistency,
+  assertRouteDeclarations,
   canonicalTarget,
   commandMatchesAllowlist,
   currentTurn,
@@ -65,6 +68,27 @@ const DEFAULT_STATE_ROOT = join(
   process.env.DSH_HOME ?? join(process.env.HOME ?? process.cwd(), '.dsh'),
   'dsh-main-policy',
 )
+
+/**
+ * The bundle's own profile patch, resolved from this module's location.
+ *
+ * The same reasoning as the skill provider: a configured path would have to
+ * exist in whatever layout the bundle is installed into, while the module's own
+ * location is that layout by definition. This is the patch whose route rows the
+ * bundle ships, so it is the one activation has to verify.
+ */
+export function bundlePatchFile(moduleUrl = import.meta.url) {
+  return join(dirname(fileURLToPath(moduleUrl)), 'cordis.patch.yml')
+}
+
+function loadBundlePatch(moduleUrl) {
+  const path = bundlePatchFile(moduleUrl)
+  try {
+    return readFileSync(path, 'utf8')
+  } catch (error) {
+    throw new Error(`the bundle patch cannot be read (${path}): ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
 
 const GENERIC_DELEGATION_TOOLS = Object.freeze([
   'subagent',
@@ -258,6 +282,12 @@ function activate(ctx, config) {
   // A route command without a route tool (or the reverse) would silently
   // disable a route, so this fails startup instead.
   assertRouteCommandConsistency()
+  // A route whose model entry omits the compat its protocol needs fails on the
+  // first request rather than at startup: pi-ai sends the wrong thinking shape,
+  // the provider refuses it before billing anything, and the caller reads only
+  // `subagent run failed`. The bundle's own declaration is part of the startup
+  // contract for the same reason the route/command pairing is.
+  assertRouteDeclarations(loadBundlePatch())
 
   safeStateFile(intentStatePath)
   const storedIntents = existsSync(intentStatePath) ? readJsonState(intentStatePath) : undefined
@@ -286,6 +316,17 @@ function activate(ctx, config) {
   let mutationLock
   const reviewLocks = new Map()
   const stepCounts = new Map()
+  /**
+   * The reason the policy cancelled a route run, by the parent session that will
+   * read its result.
+   *
+   * The tool reports a cancelled child as its own fixed wording, so without this
+   * the step budget that ended the run is invisible to the caller. It is keyed by
+   * parent because the child's failure reaches the parent as the tool result and
+   * carries no child identity, and it is dropped when the result is read — a
+   * later run must not inherit an earlier run's reason.
+   */
+  const cancelledRuns = new Map()
 
   for (const [index, section] of POLICY_SECTIONS.entries()) {
     ctx.systemPrompt.section({
@@ -330,6 +371,7 @@ function activate(ctx, config) {
       const closeReason = CANCELLED_TURN.test(reason) ? `cancelled:${reason}` : `turn-end:${reason}`
       if (intents.closeTurn(sessionId, turn, closeReason).length > 0) persistIntents()
       stepCounts.delete(sessionId)
+      cancelledRuns.delete(sessionId)
       return
     }
     if (event.type !== 'step/start') return
@@ -345,7 +387,14 @@ function activate(ctx, config) {
     counts.steps += 1
     stepCounts.set(sessionId, counts)
     if (counts.steps > limit.maxSteps) {
-      ctx.agents.get(session.id)?.cancel({ kind: 'hook', reason: `${route} exceeded maxSteps=${limit.maxSteps}` })
+      const child = ctx.agents.get(session.id)
+      const reason = `${route} exceeded maxSteps=${limit.maxSteps}`
+      // The child's failure reaches its parent as the route tool's result, and
+      // the tool reports a cancellation without a reason. Recording it against
+      // the parent session is what lets that result name the budget.
+      const parent = child?.session?.header?.parentSession
+      if (parent !== undefined) cancelledRuns.set(String(parent), reason)
+      child?.cancel({ kind: 'hook', reason })
     }
   })
 
@@ -507,21 +556,27 @@ function activate(ctx, config) {
     try {
       const result = await next()
       const runId = resultRunId(result)
+      // Reading the reason consumes it: a later run in this session must not
+      // inherit a cancellation that already surfaced.
+      const cancellation = cancelledRuns.get(sessionId)
+      if (cancellation !== undefined) cancelledRuns.delete(sessionId)
       intent.runId = runId ?? null
       intent.resultStatus = resultTerminalStatus(result)
       // A route tool that never reported a terminal foreground run did not verify
       // its output: the result is recorded as unconfirmed and any workspace
       // restriction stays in place. That is a fact about the tool result rather
       // than a policy verdict — the tool itself was already authorized — so the
-      // original result is returned unchanged and the caller sees the real
-      // failure instead of a policy error that would mask the guard's decision.
+      // original result is returned and the caller sees the real failure instead
+      // of a policy error that would mask the guard's decision. A cancellation
+      // this policy caused is the one addition: the tool's own wording does not
+      // say why the run ended, and the step budget is the actionable half.
       if (!runId) {
         if (execution.name === 'external_code' && mutationLock) {
           mutationLock.status = 'stop-unconfirmed'
           atomicWriteJson(mutationLockPath, mutationLock, stateRoot)
         }
         persistIntents()
-        return result
+        return annotateCancelledRun(result, cancellation)
       }
       if (execution.name === 'external_research_design' || execution.name === 'external_opus_design') {
         const validation = validateDesignHandoff(outputText(result.value))
