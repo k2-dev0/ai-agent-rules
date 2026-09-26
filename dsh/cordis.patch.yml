@@ -1,4 +1,4 @@
-# DSH 0.1.7-rc.1 bundle layer. Install after the shipped web bundle.
+# DSH 0.1.7-rc.2 bundle layer. Install after the shipped web bundle.
 # Secrets are credential references only; the values stay in DSH credentials.
 
 - id: agent-default-model
@@ -56,6 +56,19 @@
             input: [text, image]
             reasoningEfforts:
               high: high
+            # Opus 5.5 refuses the manually sized thinking request
+            # (`thinking.type.enabled is not supported for this model.`), and the
+            # installed pi-ai 0.85.1 catalog stops at `claude-opus-5`, so nothing
+            # else supplies these two switches: without them pi-ai sends
+            # `thinking.type.enabled`, and the request is refused before the model
+            # produces any output. `forceAdaptiveThinking` selects adaptive
+            # thinking plus `output_config.effort`; `supportsTemperature` states
+            # that the model takes no temperature. Both are fields
+            # dsh-llm-pi-ai offers for `anthropic-messages`, and
+            # `assertRouteDeclarations` refuses a boot that drops the first of them.
+            compat:
+              forceAdaptiveThinking: true
+              supportsTemperature: false
         retryPolicy:
           mode: normal
           maxRetries: 5
