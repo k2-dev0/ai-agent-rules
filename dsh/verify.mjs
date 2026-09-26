@@ -3,7 +3,7 @@
  *
  * Two phases:
  * 1. static checks over the bundle declarations and the unit suite
- * 2. the real end-to-end run against an installed DSH `0.1.7-rc.1`
+ * 2. the real end-to-end run against an installed DSH `0.1.7-rc.2`
  *
  * The E2E phase uses a throwaway DSH home, a throwaway Git workspace, and a
  * loopback mock provider, so it never contacts a real provider and never bills
@@ -36,7 +36,7 @@ function run(command, args) {
 }
 
 if (!onlyE2E) {
-  assert.equal(version, '0.1.7-rc.1')
+  assert.equal(version, '0.1.7-rc.2')
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
 
   for (const expected of [
