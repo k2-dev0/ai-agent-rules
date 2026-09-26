@@ -31,7 +31,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { EXTERNAL_TOOLS, canonicalTarget } from '../../lib/policy.js'
 
 export const name = 'dsh-main-e2e-probe'
-export const inject = ['commands', 'agents', 'tools', 'skills', 'systemPrompt']
+export const inject = ['commands', 'agents', 'tools', 'skills', 'systemPrompt', 'llm']
 
 /** Every agent this probe created, so a run disposes them before exiting. */
 const liveAgents = []
@@ -358,6 +358,7 @@ async function run(ctx, spec, tools) {
       skills: runSkillCases,
       guards: runGuardCases,
       instructions: runInstructionCases,
+      routes: runRouteCases,
       coder: runCoderCases,
       reviewer: runReviewerCases,
     }[group]
@@ -1096,6 +1097,40 @@ async function runReviewerCases(ctx, spec, { check, expect }) {
     const other = guardDecision(ctx, owner, 'external_research_design', { prompt: 'research' })
     expect(other.denied, 'a review finding escalated to another model route')
     return second.reason.slice(0, 140)
+  })
+}
+
+/**
+ * The bundle's own route rows, as the llm registry resolved them.
+ *
+ * A route whose configuration the adapter refuses does not fail the boot: it
+ * stays dormant and carries a diagnostic instead. So a boot that reaches the
+ * probe cannot say whether a declaration was accepted, and the only honest
+ * verdict is the registry's own: `listConfigurableProviders()` carries the
+ * diagnostic, and `resolveModelInfo()` proves the exact provider/model pair —
+ * including the reasoning effort the route pins — resolves in the installed
+ * tree. `spec.routes` names the pairs the profile is expected to serve.
+ */
+async function runRouteCases(ctx, spec, { check, expect }) {
+  const routes = spec.routes ?? []
+  await check('bundle-route-rows-resolve', async () => {
+    expect(routes.length > 0, 'the spec names no route to resolve')
+    const directory = ctx.llm.listConfigurableProviders()
+    const resolved = []
+    for (const { provider, model, effort } of routes) {
+      const entry = directory.find(candidate => candidate.provider === provider)
+      expect(entry !== undefined, `the profile registers no ${provider} route`)
+      expect(!entry.error, `the ${provider} route carries a configuration diagnostic: ${String(entry.error)}`)
+      const info = await ctx.llm.resolveModelInfo(provider, model)
+      expect(info.id === model, `resolving ${provider}/${model} returned ${String(info.id)}`)
+      if (effort !== undefined) {
+        const offered = (info.reasoning?.efforts ?? []).map(candidate => candidate.id)
+        expect(offered.includes(effort),
+          `${provider}/${model} does not offer the pinned ${effort} effort; it offers ${offered.join(', ') || 'none'}`)
+      }
+      resolved.push(`${provider}/${model}`)
+    }
+    return resolved.join(', ')
   })
 }
 
