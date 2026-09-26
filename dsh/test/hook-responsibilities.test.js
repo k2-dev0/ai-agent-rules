@@ -282,6 +282,21 @@ test('the route table fixes every external role, including its step budget', () 
     assert.ok(Number.isInteger(route.maxSteps) && route.maxSteps > 0, `${tool} has no step budget`)
     assert.equal(typeof route.command, 'string', `${tool} has no owning command`)
   }
+  // The budget is what cancels a route mid-run, so it has to cover one read
+  // phase plus the answer the run exists to produce. At 2, a review was
+  // cancelled while it was still assembling its findings and the caller saw only
+  // `subagent run was cancelled`.
+  for (const [tool, route] of Object.entries(EXTERNAL_TOOLS)) {
+    assert.ok(route.maxSteps >= 4, `${tool} cannot read anything and still answer within ${route.maxSteps} step(s)`)
+  }
+  // A design run is the widest read there is: a recorded run had a child
+  // cancelled at step 5 under a 4-step budget, still reading the files its task
+  // named (dsh/FAILURES.md F-1). Its budget must exceed the coder's, which
+  // already writes rather than investigates.
+  for (const tool of ['external_research_design', 'external_opus_design']) {
+    assert.ok(EXTERNAL_TOOLS[tool].maxSteps >= 6,
+      `${tool} cannot finish a multi-file investigation and its handoff within ${EXTERNAL_TOOLS[tool].maxSteps} step(s)`)
+  }
 })
 
 test('the unported responsibilities are declared, not implied', () => {
