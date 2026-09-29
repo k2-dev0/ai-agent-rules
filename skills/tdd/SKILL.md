@@ -8,9 +8,9 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 通常起動はユーザー依頼と確認済み事実を根拠とし、`prompt/`を読まない。scope名はASCII kebab-caseで決める。`$tdd --from-doc`はユーザーが明示した場合だけ使い、通常起動から切り替えない。明示された場合は最初に[設計書モード](FROM_DOC.md)を読む。
 
-Codexは[作業分担](../WORKFLOW_ROUTING.md)と[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)の未読分を読む。調査・設計・シナリオ選択・診断分類・Gitは親、test作成・実装・通常修正・検証はDeepSeekが行う。Claudeの調査・実装・修正・検証はメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
+Codexは[作業分担](../WORKFLOW_ROUTING.md)の未読分を読む。両環境とも調査・設計・シナリオ選択・test作成・実装・通常修正・検証・診断分類・Gitはメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
 
-開始時に[子の起動可否](../SUBAGENT_RULES.md#開始時の可用性確認)を確認する。CodexはDeepSeekの4 tool、Claudeはユーザーによるモデル指定がなければ難度評価用roleが必要。独立レビュー用roleはユーザーがレビューを明示的に要求した場合だけ確認する。必要なtoolまたはroleが利用不能ならシナリオの承認を求めず報告する。
+Claudeだけ、開始時に[子の起動可否](../SUBAGENT_RULES.md#開始時の可用性確認)で難度評価用roleを確認する。独立レビュー用roleはユーザーがレビューを明示的に要求した場合だけ確認する。必要なroleが利用不能ならシナリオの承認を求めず報告する。
 
 ## 調査
 
@@ -28,7 +28,7 @@ Codexは[作業分担](../WORKFLOW_ROUTING.md)と[DeepSeekの実行](../DEEPSEEK
 
 ## Red
 
-Claudeだけ、最初のtest編集前に[メインモデル選択](../MODEL_SELECTION.md)を完了する。Codexは確定したシナリオのRed作成・確認までをDeepSeekへ渡す。
+Claudeだけ、最初のtest編集前に[メインモデル選択](../MODEL_SELECTION.md)を完了する。
 
 選択済みシナリオのtestを書き、既存assertionを弱めない。既存の配置・方式に合わせて結合testを優先し、API・DB処理はPrisma mockでなくtest DBを使う。外部APIはmockで呼出条件と異常系、複雑な分岐はunit testで境界と分岐、非公開処理は公開APIから検証する。React component・hook専用の隣接unit testは新設しない。
 
@@ -36,7 +36,7 @@ Claudeだけ、最初のtest編集前に[メインモデル選択](../MODEL_SELE
 
 既存test scriptで、対象testが実装不足または期待値との差により失敗することを確認する。syntax・import・型の失敗はシナリオを変えず先に直す。最初から成功するtestは要求を検出できるか確認し、未確認事実が必要なら調査へ、シナリオ変更が必要なら選択へ戻る。
 
-CodexはRed確認後にworkerを返却させ、親がtest差分・失敗理由を確認する。両環境とも親が追跡対象testをcommitし、cleanな状態で実装直前に[baseline](../polish/BASELINE.md)を記録する。ユーザー由来のdirty fileが残れば実装を止める。Codexはその後、同一worker sessionへGreen実装を指示する。
+Red確認後、メインがtest差分・失敗理由を確認する。両環境とも追跡対象testをcommitし、cleanな状態で実装直前に[baseline](../polish/BASELINE.md)を記録する。ユーザー由来のdirty fileが残れば実装を止める。
 
 ## 実装・検証
 
@@ -44,7 +44,7 @@ CodexはRed確認後にworkerを返却させ、親がtest差分・失敗理由�
 
 選択済みtest、直接の回帰test、変更packageのtypecheck、対象pathのlint、変更schemaのPrisma `format`・`validate`・`generate`、要求された検証を実行する。typecheck scriptがなくtsconfigがあれば`tsc -p <tsconfig> --noEmit`を使う。無関係なpackage・repository全体へ広げず、commandがなければ発明せず`not run`とする。
 
-失敗時だけ[修正手順](../FIX_FLOW.md)を読み、修正・再検証する。診断が残る場合は同文書のscope帰属で分類する。
+失敗時だけ[修正手順](../FIX_FLOW.md)を読み、メインが修正・再検証する。診断が残る場合は同文書のscope帰属で分類する。
 
 ## 完了
 
