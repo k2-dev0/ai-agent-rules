@@ -13,16 +13,14 @@ Codexの親だけが読む。ユーザーのモデル指定を優先し、指定
 
 private symbolのrename・typo・整形でも、外部consumer、動的参照、serialization、DB、設定keyへ影響するなら設計判断へ戻る。file数だけで分類しない。調査結果が不足する場合は親が追加調査する。
 
-repository調査・原因診断・診断のscope分類は親が行い、確認済み事実・変更範囲・不変条件・検証方法を保持する。test作成・実装・通常修正・検証・整形は[DeepSeekの実行](DEEPSEEK_WORKFLOW.md)に従う。workerが未確認事実や新しい設計判断を必要とした場合は親へ返し、親が追加調査して同じ正本を更新する。workerへ調査全体を再委任しない。
-
-設計文書は親が編集する。production code・testの親による修正は[再指摘箇所への介入](FIX_FLOW.md#codexの修正担当)またはユーザーの明示指定に限る。bridge利用不能を理由に親実装・別runnerへ自動代替しない。
+repository調査・原因診断・診断のscope分類、設計、test作成、実装、通常修正、検証、整形、Git、報告は親が行う。確認済み事実・変更範囲・不変条件・検証方法を保持し、実装を外部workerへ委譲しない。
 
 ## モデル・effort
 
-通常・調査・設計は主担当`gpt-5.6-sol` / `high`。設計監査・実装レビューは`gpt-6-astra` / `medium`とし、critical検出後もeffortを上げない。再指摘箇所の直接修正は[修正担当](FIX_FLOW.md#codexの修正担当)に従いAstra / mediumへ切り替える。難度採点によるモデル振り分けは行わない。
+通常・調査・設計・実装・修正・検証は主担当`gpt-5.6-sol` / `high`。設計監査・実装レビューは`gpt-6-astra` / `medium`とし、critical検出後もeffortを上げない。難度採点によるモデル振り分けは行わない。
 
-現在値が担当工程の選定値と違えば[切替手順](MODEL_SWITCH.md)の未読分を読み、先行tool・worker・reviewer・承認の完了後に`switch_model`だけを呼ぶ。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。再指摘箇所の直接修正後はSol / highへ戻す。
+現在値が担当工程の選定値と違えば[切替手順](MODEL_SWITCH.md)の未読分を読み、先行tool・reviewer・承認の完了後に`switch_model`だけを呼ぶ。受付だけでは進まず、適用結果と実際のmodel・effortを確認する。
 
 ## 完了
 
-worker停止後、親が変更範囲・ユーザー変更の保持・実検証結果を照合し、1ファイルずつstage・commitする。[独立レビュー](INDEPENDENT_REVIEW.md)はユーザーが明示的に要求した場合だけ実行する。未実行・未確認・未解決を成功に含めない。
+親が変更範囲・ユーザー変更の保持・実検証結果を照合し、1ファイルずつstage・commitする。[独立レビュー](INDEPENDENT_REVIEW.md)はユーザーが明示的に要求した場合だけ実行する。未実行・未確認・未解決を成功に含めない。
