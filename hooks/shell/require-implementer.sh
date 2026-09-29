@@ -13,11 +13,11 @@ case "$(hook_tool_name)" in
 esac
 hook_serial_agent_launch_valid || hook_deny "並列実行は禁止です。background・一括起動・resumeを使わず、子の完了後に次へ進んでください。"
 ROLE=$(hook_agent_type)
-[ "$ROLE" != implementer ] || hook_deny "native子への実装委任は禁止です。CodexはDeepSeek MCP、Claudeはメインで実装してください。"
+[ "$ROLE" != implementer ] || hook_deny "native子への実装委任は禁止です。メインで実装してください。"
 if [ "$HOOK_AGENT" = codex ]; then
   case "$ROLE" in
     code-reviewer|code-reviewer-critical|design-reviewer) ;;
-    *) hook_deny "Codexの子はcode-reviewer・code-reviewer-critical・design-reviewerの専用roleだけです。調査・ネスト候補抽出は親、実装はDeepSeek MCPを使ってください。" ;;
+    *) hook_deny "Codexの子はcode-reviewer・code-reviewer-critical・design-reviewerの専用roleだけです。調査・実装・修正・検証はメインで行ってください。" ;;
   esac
 fi
 [ "$HOOK_AGENT:$ROLE" != claude:code-reviewer-critical ] || hook_deny "code-reviewer-criticalはCodex専用です。"
