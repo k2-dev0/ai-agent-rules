@@ -142,7 +142,7 @@ class ProtectedExec(unittest.TestCase):
                           'else: protected = False\n'
                           'print(json.dumps({"argv": sys.argv[1:], "input": sys.stdin.read(), "agent": os.environ.get("CONTEXT_AGENT"), "protected": protected}))\n')
         context = self.parent / "context dictionary"
-        for program in (fake_bin / "npx", fake_bin / "deepseek-bridge", context / "node_modules/.bin/tsx"):
+        for program in (fake_bin / "npx", context / "node_modules/.bin/tsx"):
             program.parent.mkdir(parents=True, exist_ok=True)
             program.write_text("#!/bin/sh\nexec python3 " + shlex.quote(str(driver)) + ' "$@"\n')
             program.chmod(0o755)
@@ -152,7 +152,7 @@ class ProtectedExec(unittest.TestCase):
             else:
                 source = (REPO / "codex/config.toml").read_text()
                 configs = {}
-                for name in ("chrome-devtools", "context-dictionary", "deepseek-worker"):
+                for name in ("chrome-devtools", "context-dictionary"):
                     section = source.split("[mcp_servers." + name + "]\n", 1)[1].split("\n[", 1)[0]
                     # These shipped fields are basic strings/lists; strict TOML
                     # parsing is independently exercised by verify-all's CLI.
@@ -161,10 +161,9 @@ class ProtectedExec(unittest.TestCase):
                 with self.subTest(agent=agent, server=name):
                     args = [a.replace("__CONTEXT_DICTIONARY_ROOT__", str(context)) for a in config["args"]]
                     self.assertEqual(config["command"], "bash")
-                    entry = "deepseek-launch.sh" if name == "deepseek-worker" else "mcp-protected.sh"
-                    self.assertEqual(args[0], f".{agent}/hooks/shell/{entry}")
+                    self.assertEqual(args[0], f".{agent}/hooks/shell/mcp-protected.sh")
                     environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"], CONTEXT_AGENT=agent,
-                                       DEEPSEEK_API_KEY="test-launch-canary")
+                                       )
                     result = subprocess.run([config["command"], *args], cwd=self.root, env=environment, input="stdio request", text=True, capture_output=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     output = json.loads(result.stdout)
