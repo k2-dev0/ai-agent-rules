@@ -244,24 +244,13 @@ else
   ng "専用roleの登録または承認前の参照が不正"
   cat "$S/role-config.out"
 fi
-if python3 "$SUITE/test_deepseek_worker.py" > "$S/deepseek-worker.out" 2>&1; then
-  ok "DeepSeek非同期hookの予約・結果照合・旧wait拒否を検証"
-else
-  ng "DeepSeek非同期hookの保護が不正"
-  cat "$S/deepseek-worker.out"
-fi
-if python3 "$SUITE/test_deepseek_launch.py" > "$S/deepseek-launch.out" 2>&1; then
-  ok "DeepSeek環境変数・zshrcの読込とsecret/rc出力の遮断を検証"
-else
-  ng "DeepSeek起動時の環境変数読込が不正"
-  cat "$S/deepseek-launch.out"
-fi
-DEEPSEEK_WORKFLOW="$REPO/skills/DEEPSEEK_WORKFLOW.md"
-grep -Fq '`ALL_TOOLS`' "$DEEPSEEK_WORKFLOW" && grep -Fq '初期表示だけで未提供と判断しない' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekの遅延公開toolを実行時registryで確認" || ng "DeepSeekの遅延公開tool確認手順が不足"
 WORKFLOW_ROUTING="$REPO/skills/WORKFLOW_ROUTING.md"
-grep -Fq 'repository調査・原因診断・診断のscope分類は親が行い' "$WORKFLOW_ROUTING" && grep -Fq 'test作成・実装・通常修正・検証・整形は' "$WORKFLOW_ROUTING" && grep -Fq 'workerへ調査全体を再委任しない' "$WORKFLOW_ROUTING" && ok "Codex親が調査正本を保持" || ng "Codexの調査責務がDeepSeekから分離されていない"
-grep -Fq '実装または検証依頼' "$DEEPSEEK_WORKFLOW" && grep -Fq '未確認事実・診断のscope分類・原因調査・新しい設計判断' "$DEEPSEEK_WORKFLOW" && grep -Fq '`needs_decision`を返す' "$DEEPSEEK_WORKFLOW" && ! grep -Fq '調査のみ／編集可' "$DEEPSEEK_WORKFLOW" && ok "DeepSeekは確定済み実装・検証だけを担当" || ng "DeepSeekへ調査判断を委任可能"
-grep -Fq '`wait_task({"task_id":"..."})`を1回呼び' "$DEEPSEEK_WORKFLOW" && grep -Fq '途中経過の取得・再poll・実況を行わない' "$DEEPSEEK_WORKFLOW" && grep -Fq '親は独自の進捗監視を追加しない' "$DEEPSEEK_WORKFLOW" && ok "DeepSeek待機はterminal結果だけを返す" || ng "DeepSeek待機が途中経過を表示可能"
+grep -Fq 'test作成、実装、通常修正、検証、整形、Git、報告は親が行う' "$WORKFLOW_ROUTING" && grep -Fq '実装を外部workerへ委譲しない' "$WORKFLOW_ROUTING" && ok "Codex親が実装と検証を直接担当" || ng "Codexの直接実装責務が不足"
+if ! grep -R -Eq 'deepseek-worker|DEEPSEEK_WORKFLOW|deepseek-bridge' "$REPO/AGENTS.md" "$REPO/skills" "$REPO/codex" "$REPO/hooks"; then
+  ok "Codex配布物にDeepSeek委譲経路なし"
+else
+  ng "Codex配布物にDeepSeek委譲経路が残存"
+fi
 TDD_SKILL="$REPO/skills/tdd/SKILL.md"
 TDD_FROM_DOC="$REPO/skills/tdd/FROM_DOC.md"
 FIX_FLOW="$REPO/skills/FIX_FLOW.md"
@@ -276,7 +265,7 @@ grep -Fq '`claude/agents/` | `<repo>/.claude/agents/`' "$REPO/README.md" && grep
 [ ! -d "$REPO/skills/errand" ] && [ ! -e "$REPO/skills/SCENARIO_FLOW.md" ] && [ ! -e "$REPO/rules/typescript/tdd-pattern.md" ] && ! grep -Eq 'SCENARIO_FLOW.md|tdd-pattern.md|\$errand' "$TDD_SKILL" "$REPO/skills/IMPLEMENTATION_RULES.md" && ok "廃止した実装skill・共通フロー・test規約を配布しない" || ng "廃止資産または参照が残存"
 grep '^description:' "$TDD_SKILL" | grep -Fq 'runtime挙動を実装・修正する依頼' && grep '^description:' "$TDD_SKILL" | grep -Fq '文書・設定・書式だけの変更、挙動を変えない整理では起動しない' && grep -Fq '依頼の識別子・path・番号・固有名詞は変えない' "$TDD_SKILL" && ok "tddは選択境界と依頼の識別子を保持" || ng "tddの選択・依頼境界が不正"
 grep -Fq '`prompt/`を読まない' "$TDD_SKILL" && grep -Fq '`$tdd --from-doc`はユーザーが明示した場合だけ使い、通常起動から切り替えない' "$TDD_SKILL" && grep -Fq '[設計書モード](FROM_DOC.md)' "$TDD_SKILL" && grep -Fq '`$tdd --from-doc`だけが読む' "$TDD_FROM_DOC" && grep -Fq '参照先がない、または未完了項目がなければ変更せず報告' "$TDD_FROM_DOC" && ok "tddは通常依頼と明示的な設計書modeを分離" || ng "tddの入力・完了処理の分岐が不正"
-grep -Fq "調査・実装・修正・検証はメインが行う" "$TDD_SKILL" && grep -Fq "メインが指摘範囲を直接修正する" "$FIX_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$TDD_SKILL" "$FIX_FLOW" && ok "Claudeのtddはメイン実装・修正を維持" || ng "Claudeのtdd実装責務が不正"
+grep -Fq "両環境とも調査・設計・シナリオ選択・test作成・実装・通常修正・検証・診断分類・Gitはメインが行う" "$TDD_SKILL" && grep -Fq "採用した指摘を直接修正・検証する" "$FIX_FLOW" && ! grep -Eq '初回実装を先に代行せず|2回連続|下位モデルに再実装させる' "$TDD_SKILL" "$FIX_FLOW" && ok "両環境のtddはメイン実装・修正を維持" || ng "tddのメイン実装責務が不正"
 if [ ! -e "$REPO/hooks/shell/delegate.sh" ] && ! grep -q 'hooks/shell/delegate.sh' "$REPO/codex/hooks.json" "$REPO/claude/settings.json"; then
   ok "上位モデルの独立読み取りを調査委任hookで遮断しない"
 else
@@ -318,7 +307,7 @@ grep -Fq 'API・DB処理はPrisma mockでなくtest DBを使う' "$TDD_SKILL" &&
 grep -Fq "IMPLEMENTATION_RULES.md" "$FIX_FLOW" && grep -Fq "制御フローとdata変換を上から追える" "$IMPLEMENTATION_RULES" && grep -Fq "関数ジャンプ" "$IMPLEMENTATION_RULES" && grep -Fq "YAGNI" "$IMPLEMENTATION_RULES" && grep -Fq "filter().map()" "$FUNCTION_RULES" && grep -Fq "reduce()" "$FUNCTION_RULES" && ok "上位モデルは共有基準で保守性と可読性をレビュー" || ng "上位モデルの共有判断基準が不足"
 grep -Fq 'メインによる全差分の自己レビューは工程に含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && ok "メインの全差分自己レビューを工程から除外" || ng "自己レビュー工程が残存"
 grep -Fq '降格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '現在のモデルで続行する' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq '必要な昇格ができない' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'その判断に依存する変更を止め' "$REPO/skills/MODEL_SWITCH.md" && grep -Fq 'ユーザーの明示指定を満たせない' "$REPO/skills/MODEL_SWITCH.md" && ok "モデル切り替え不能時は降格・昇格・明示指定を区別" || ng "切り替え不能時の分岐が不足"
-grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '同じfile内の関数・section・testへの指摘が再発した場合' "$FIX_FLOW" && grep -Fq '主担当Astra / mediumへ移管する' "$FIX_FLOW" && ok "レビューseverityと再発時のAstra直接修正を分離" || ng "レビューseverityの処理が不正"
+grep -Fq '`medium`、`low`の順で各指摘の先頭に通し番号' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '修正する番号を指定してください' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq '同じ箇所へ成立指摘が再発したら自動修正を止め' "$FIX_FLOW" && ok "レビューseverityと再発時の停止条件を分離" || ng "レビューseverityの処理が不正"
 grep -Fq '変更file・直接依存先以外の未変更文書' "$REPO/skills/CODE_REVIEW_CONTRACT.md" && grep -Fq '採点・モデル選択・切替手順はrequirementsへ含めない' "$REPO/skills/INDEPENDENT_REVIEW.md" && grep -Fq 'CODE_REVIEW_CONTRACT.md' "$REPO/hooks/shell/load-operation-context.sh" && ok "レビューの参照範囲を子へ限定注入" || ng "レビューの参照範囲が過剰"
 grep -Fq '変更範囲・整合性条件・検証方法を含む実装方針を確定' "$MODEL_SELECTION" && grep -Fq '新規実装や実装がないrepositoryでは' "$MODEL_SELECTION" && grep -Fq 'テストを含む最初の編集前' "$MODEL_SELECTION" && grep -Fq '同じ方針の修正・再開では再利用' "$MODEL_SELECTION" && grep -Fq '入力エラー時は`{"error":"<concise English reason>"}`' "$REPO/skills/DIFFICULTY_CONTRACT.md" && grep -Fq '`{"error":"..."}`（入力エラー）' "$MODEL_SELECTION" && ok "方針確定後・最初の編集前に独立難度評価" || ng "独立難度評価の順序または再利用条件が不正"
 grep -Fq '`schema.prisma`、`constants.ts` / `constants.js`、`constants/`だけの変更' "$TDD_SKILL" && grep -Fq '候補提示・test追加・Red / Greenを省略' "$TDD_SKILL" && grep -Fq '他のruntime挙動も変える場合はその挙動を通常どおり扱う' "$TDD_SKILL" && ok "tddフローはschema・定数のtest除外境界を固定" || ng "tddフローのschema・定数test除外境界が不正"
