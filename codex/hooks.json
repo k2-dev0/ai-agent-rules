@@ -57,16 +57,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(Bash|exec_command|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$|^mcp__deepseek[-_]worker__(start_task|continue_task|wait_task|abort_task)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deepseek-worker.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "^apply_patch$",
         "hooks": [
           {
@@ -162,7 +152,7 @@
         ]
       },
       {
-        "matcher": "^(Bash|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$|^mcp__deepseek[-_]worker__(start_task|continue_task)$",
+        "matcher": "^(Bash|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent)$|(^|[._])spawn_agent$|^collaborationspawn_agent$",
         "hooks": [
           {
             "type": "command",
@@ -177,18 +167,6 @@
           {
             "type": "command",
             "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/protect-git.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "^mcp__deepseek[-_]worker__(start_task|continue_task|wait_task|abort_task)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/.codex/hooks/shell/deepseek-worker.sh\"",
             "timeout": 5
           }
         ]
