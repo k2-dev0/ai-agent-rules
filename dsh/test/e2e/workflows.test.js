@@ -91,16 +91,16 @@ function runProbe(name = 'workflows') {
     reviewBase: ctx.base,
     reviewHead: ctx.head,
     reviewRequirements: ctx.requirements,
-    // One-shot consumption is a durable fact: the probe reads it back from the
-    // state the policy plugin persists, because a route tool the loopback mock
-    // cannot complete may still consume its intent.
+    // The run record is durable: the probe reads it back from the state the
+    // policy plugin persists, because a route tool the loopback mock cannot
+    // complete still records the call it authorized.
     intentStatePath: join(ctx.env.home, 'dsh-main-policy', 'routing-intents.json'),
     // Recorded by the probe, not asserted: whether the booted tree can reach
     // this provider is an environment fact, and the turn-based cases report how
     // they ended their turn rather than failing on it.
     mockBaseURL: ctx.mock.baseURL,
     // A case is bounded, but the bounds must leave room for a turn to close:
-    // `turn-end-closes-the-intent` waits on the turn's own end, so its case
+    // `turn-end-keeps-the-authorization` waits on the turn's own end, so its case
     // budget has to exceed that wait.
     caseTimeoutMs: 30_000,
     turnCloseWaitMs: 20_000,
@@ -258,7 +258,7 @@ test('e2e: the installed bundle publishes its skills and the workspace stays cle
   }
 })
 
-test('e2e: the four commands, one-shot intents, and the routing boundary behave', () => {
+test('e2e: the four commands, repeatable intents, and the routing boundary behave', () => {
   expectCases(
     runProbe().results,
     'command-registered:external-plan',
@@ -270,12 +270,12 @@ test('e2e: the four commands, one-shot intents, and the routing boundary behave'
     'external-tool-without-command-is-required-to-be-started-by-a-command',
     'the-command-path-needs-no-open-turn',
     'command-records-intent-and-delivers-task-text',
-    'external-tool-uses-its-intent-once',
-    'plan-command-conflict-is-denied',
+    'external-tool-uses-its-intent-repeatably',
+    'a-plan-command-replaces-the-other-plan-route',
     'review-base-head-hash-mismatch-is-rejected',
     'tool-output-text-cannot-open-a-route',
     'nested-agent-cannot-start-an-external-route',
-    'turn-end-closes-the-intent',
+    'turn-end-keeps-the-authorization',
   )
 })
 
@@ -326,7 +326,7 @@ test('e2e: the reviewer is read-only and never starts another route', () => {
   expectCases(
     runProbe('reviewer').results,
     'the-reviewer-is-read-only',
-    'a-critical-finding-does-not-start-a-second-reviewer',
+    'a-finding-does-not-start-a-second-reviewer-on-its-own',
     'mutation-lock-was-settled',
   )
 })

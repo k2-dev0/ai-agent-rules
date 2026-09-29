@@ -30,6 +30,16 @@ import { registeredCommandNames } from './routing-intent.js'
  * resolve to the planner's, and every coder guard would deny the work it exists
  * to allow. {@link assertRouteCommandConsistency} refuses a duplicate at
  * activation rather than letting that happen quietly.
+ *
+ * A route carries no step budget. A design run reads a task's whole surface —
+ * the files it names and the files those reference — before it can return its
+ * ordered handoff, and a review reads a diff, follows up on what it found, and
+ * then answers. Counting steps cannot know either shape in advance: the recorded
+ * budgets cancelled children mid-investigation and made a route look unusable
+ * rather than unfinished. What bounds a route's cost is the
+ * output-token cap its own tool row declares (`maxTokens` in
+ * `cordis.patch.yml`), which is a fact about the answer rather than about how
+ * many steps it took to reach it.
  */
 export const EXTERNAL_TOOLS = Object.freeze({
   external_research_design: Object.freeze({
@@ -37,35 +47,24 @@ export const EXTERNAL_TOOLS = Object.freeze({
     provider: 'zai',
     model: 'glm-5.3',
     effort: 'max',
-    // A design run reads a task's whole surface — the files it names and the
-    // files those reference — before it can return its ordered handoff. At 4 a
-    // recorded run was cancelled at step 5 while still reading, so the budget
-    // only covered the investigation, never the answer.
-    maxSteps: 8,
   }),
   external_opus_design: Object.freeze({
     command: 'opus-plan',
     provider: 'anthropic',
     model: 'claude-opus-5-5',
     effort: 'high',
-    maxSteps: 8,
   }),
   external_code: Object.freeze({
     command: 'external-code',
     provider: 'zai',
     model: 'glm-5.3-code',
     effort: 'high',
-    maxSteps: 6,
   }),
   review_change: Object.freeze({
     command: 'review',
     provider: 'openai',
     model: 'gpt-6-sol',
     effort: 'high',
-    // A review reads a diff, follows up on what it found, and then answers. At 2
-    // the child was cancelled while it was still assembling its verdict, and the
-    // caller saw only `subagent run was cancelled`.
-    maxSteps: 6,
   }),
 })
 
@@ -151,7 +150,17 @@ const PROTECTED_BASENAMES = new Set([
 
 const MUTATING_SHELL = /(?:^|[;&|\s])(rm|rmdir|unlink|shred|srm|mv|cp|rsync|install|dd|truncate|tee|ln|mkdir|touch|chmod|chown|chgrp|sed\s+[^;&|]*-i)(?:\s|$)/i
 const PROTECTED_SHELL_TOKEN = /(?:^|[\s"'=/])(?:\.git|\.agents|\.dsh|\.codex|\.claude|hooks|skills|AGENTS(?:\.local|\.override)?\.md|CLAUDE(?:\.local)?\.md|cordis(?:\.patch)?\.yml|settings\.yaml|\.credentials\.yaml|\.env(?:\.[^\s"']+)?|(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|Cargo\.lock|poetry\.lock|composer\.lock|Gemfile\.lock)|[^\s"']*review-state[^\s"']*)(?:[\s"'/]|$)/i
-const SHELL_CONTROL = /[\n\r;&|<>`]|\$\(/
+/**
+ * The single characters that make one line unreadable as a chain of commands.
+ *
+ * A redirection (`>`, `>>`), a command substitution (`` ` ``, `$( )`), a
+ * newline, or a bare `&` all hand the shell text this policy never sees — the
+ * file a segment writes, a command built at run time, or a second command whose
+ * lifetime is not the line's. `&&` and `||` are deliberately absent: they are
+ * {@link CHAIN_SEPARATOR}s, and every segment they produce is judged on its own.
+ */
+const UNBOUNDED_SHELL_CHAR = /[\n\r<>`]/
+
 /*
  * The literal allowlisted npm/pnpm/yarn/bun script names. Kept as an explicit
  * list rather than a pattern so widening it is always a deliberate, reviewable
@@ -182,6 +191,7 @@ const ALLOWED_SCRIPT_PATTERN = ALLOWED_PACKAGE_SCRIPTS
 
 const SAFE_MAIN_COMMAND = new RegExp(
   '^(?:pwd|ls(?:\\s|$)|find(?:\\s|$)|rg(?:\\s|$)|grep(?:\\s|$)|head(?:\\s|$)|tail(?:\\s|$)|wc(?:\\s|$)'
+  + '|sort(?:\\s|$)|uniq(?:\\s|$)|cut(?:\\s|$)|tr(?:\\s|$)|echo(?:\\s|$)'
   + '|sed\\s+-n(?:\\s|$)'
   + '|git\\s+(?:status|diff|show|log|rev-parse|ls-files|branch\\s+--show-current)(?:\\s|$)'
   + `|${PACKAGE_YARD}\\s+run\\s+(?:${ALLOWED_SCRIPT_PATTERN})${SCRIPT_END}`
@@ -319,30 +329,126 @@ export function protectedPathReason(inputPath, cwd, extraProtected = []) {
 export function shellProtectedMutationReason(command) {
   if (typeof command !== 'string' || command.trim() === '') return 'empty command'
   if (!PROTECTED_SHELL_TOKEN.test(command)) return undefined
+  // A mutation anywhere in the line is enough: a chain's other segments do not
+  // make the one that names a protected path any less of a mutation. A
+  // redirection counts here rather than only in the chain grammar: the file it
+  // writes is named by this command, so `echo x > .env` must be refused as a
+  // protected-path mutation and not merely as an unreadable chain.
   if (MUTATING_SHELL.test(command) || /(?:^|[^<])>>?/.test(command) || /--delete(?:\s|=|$)/.test(command)) {
     return 'shell command can mutate a protected path'
   }
   return undefined
 }
 
+/**
+ * Split one command line into the segments a chain is judged by.
+ *
+ * Quoting is honoured so a separator inside a quoted argument stays part of that
+ * argument. A redirection, a substitution, a bare `&`, a newline, or an
+ * unbalanced quote makes the whole line unsegmentable, and the caller then
+ * refuses it: those constructs decide what the shell runs from text this policy
+ * would otherwise read as an ordinary argument.
+ *
+ * @param command - the raw shell command.
+ * @returns the trimmed non-empty segments, or `undefined` when the line cannot
+ *   be split into independently judgeable commands.
+ */
+export function shellSegments(command) {
+  const source = String(command ?? '')
+  if (source.trim() === '') return undefined
+  const segments = []
+  let current = ''
+  let quote = ''
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (quote) {
+      current += character
+      if (character === '\\' && quote !== "'") {
+        current += source[index + 1] ?? ''
+        index += 1
+        continue
+      }
+      if (character === quote) quote = ''
+      continue
+    }
+    if (character === '\\') {
+      // An escaped separator is part of the argument, not a chain boundary.
+      current += character
+      if (index + 1 < source.length) {
+        current += source[index + 1]
+        index += 1
+      }
+      continue
+    }
+    if (character === "'" || character === '"') {
+      quote = character
+      current += character
+      continue
+    }
+    if (character === '&') {
+      // `&&` separates two commands; a bare `&` backgrounds the command on its
+      // left and starts another on its right, which is a process graph this
+      // policy does not model, so the line stops being readable at all.
+      if (source[index + 1] !== '&') return undefined
+      index += 1
+      segments.push(current.trim())
+      current = ''
+      continue
+    }
+    if (character === '|' || character === ';') {
+      // `||` and a single `|` both separate commands. A pipeline's exit status is
+      // its last command's, but every command in it still runs, so each segment
+      // is judged on its own text exactly like an `&&` chain's.
+      if (character === '|' && source[index + 1] === '|') index += 1
+      segments.push(current.trim())
+      current = ''
+      continue
+    }
+    // A redirection, a substitution, or a newline: the segment text a caller
+    // would judge is not the command the shell runs, so the line is unreadable.
+    if (UNBOUNDED_SHELL_CHAR.test(character) || (character === '$' && source[index + 1] === '(')) {
+      return undefined
+    }
+    current += character
+  }
+  if (quote !== '') return undefined
+  segments.push(current.trim())
+  return segments.filter(segment => segment !== '')
+}
+
 export function needsRawShellApproval(command) {
   if (typeof command !== 'string' || command.trim() === '') return true
-  if (SHELL_CONTROL.test(command)) return true
-  return !SAFE_MAIN_COMMAND.test(command.trim())
+  const segments = shellSegments(command)
+  if (!segments) return true
+  return segments.some(segment => !SAFE_MAIN_COMMAND.test(segment))
 }
 
 export function isExternalCodeCommand(command) {
-  const source = String(command ?? '').trim()
-  return source.length > 0 && !SHELL_CONTROL.test(source) && EXTERNAL_CODE_COMMAND.test(source)
+  const segments = shellSegments(command)
+  if (!segments || segments.length === 0) return false
+  return segments.every(segment => EXTERNAL_CODE_COMMAND.test(segment))
 }
 
+/**
+ * The tokens of a command that is exactly one simple command.
+ *
+ * A chain has no single token list, so it is reported as such rather than
+ * flattened: every caller of this helper asks a question about one command's
+ * argv (`git add` paths, a git read pinned to a SHA), and a flattened answer
+ * would attribute one segment's arguments to another's.
+ *
+ * @returns the tokens, `{ chained: true }` for a chain, or `undefined` when the
+ *   text carries a construct this helper cannot read.
+ */
 export function splitSimpleCommand(command) {
-  if (SHELL_CONTROL.test(command)) return undefined
+  const segments = shellSegments(command)
+  if (!segments) return undefined
+  if (segments.length !== 1) return { chained: true }
   const tokens = []
   let current = ''
   let quote = ''
   let escaped = false
-  for (const character of command.trim()) {
+  for (const character of segments[0]) {
     if (escaped) {
       current += character
       escaped = false
@@ -373,9 +479,20 @@ export function splitSimpleCommand(command) {
   return tokens
 }
 
-export function gitCommandPolicy(command) {
-  const tokens = splitSimpleCommand(command)
-  if (!tokens || tokens[0] !== 'git' || !tokens[1]) return { kind: 'not-git' }
+/**
+ * The Git verdict for one shell segment.
+ *
+ * A Git mutation is judged on the command that performs it, so every mutation
+ * kind requires the segment to be exactly one simple command: `git add x && git
+ * commit` has no single argv for the staged-file and one-path rules to read, and
+ * admitting it would let one segment's arguments satisfy another segment's check.
+ *
+ * @param tokens - the segment's argv, as {@link splitSimpleCommand} returns it.
+ * @returns `{ kind }` — `read`, `add`, `commit`, `restore-staged`, `not-git`, or
+ *   `deny` with the reason.
+ */
+function gitTokensPolicy(tokens) {
+  if (tokens[0] !== 'git' || !tokens[1]) return { kind: 'not-git' }
   const subcommand = tokens[1]
   if (READ_ONLY_GIT.has(subcommand)) return { kind: 'read' }
   if (subcommand === 'add') {
@@ -394,6 +511,81 @@ export function gitCommandPolicy(command) {
   }
   if (subcommand === 'restore' && tokens.includes('--staged')) return { kind: 'restore-staged' }
   return { kind: 'deny', reason: `git ${subcommand} is not allowed` }
+}
+
+/**
+ * The Git verdict for a whole command line.
+ *
+ * The line's first segment decides, because a Git verdict describes an argv: a
+ * chain that starts with a Git read is a Git read only if every later segment is
+ * judged on its own, which is {@link shellChainPolicy}'s job rather than this
+ * one's.
+ */
+export function gitCommandPolicy(command) {
+  const tokens = splitSimpleCommand(command)
+  if (!tokens) return { kind: 'deny', reason: 'shell command cannot be read as a simple command' }
+  if (tokens.chained) return { kind: 'deny', reason: 'this Git command must be a single command, not a chained one' }
+  return gitTokensPolicy(tokens)
+}
+
+/**
+ * Whether every segment of one line is an allowlisted read/test command.
+ *
+ * The allowlist patterns are anchored, so they are matched against each segment's
+ * own text rather than against a rebuilt token string: a rebuilt string could
+ * turn a quoted argument into an unquoted one and satisfy a pattern the shell
+ * would not have run.
+ */
+function mainCommandAllowlisted(segments) {
+  return segments.length > 0 && segments.every(segment => SAFE_MAIN_COMMAND.test(segment))
+}
+
+/**
+ * How one command line may run, with every segment judged on its own text.
+ *
+ * The grammar is `&&`, `||`, `;`, and `|`; a redirection, a substitution, a bare
+ * `&`, or a newline makes the line unreadable instead, because those decide what
+ * the shell runs from text this policy would otherwise read as an argument.
+ *
+ * This is the one place a chain's safety is decided, and it decides by uniform
+ * inspection rather than by inspection of a prefix: a forbidden command hidden
+ * behind an allowed one (`git status && curl …`) is refused exactly as if it had
+ * been called alone. Three rules make that hold for any chain:
+ *
+ * 1. a leading Git verdict decides the line only up to the Git command itself:
+ *    `read` may admit it, `add`/`commit`/`restore-staged` require an escalation,
+ *    and `deny` refuses it;
+ * 2. every other segment is admitted only when it is an allowlisted read/test
+ *    command, whatever the leading verdict was — so the default for a segment
+ *    nobody recognizes is refusal, not admission;
+ * 3. a segment this function cannot read as a simple command (an unbalanced
+ *    quote, or any construct {@link UNBOUNDED_SHELL_CHAR} names) refuses the
+ *    whole line, which is what stops a substitution from smuggling text past the
+ *    other two rules.
+ *
+ * @param command - the raw shell command.
+ * @returns `{ segments, git }` — `git` is the leading verdict, absent for a
+ *   chain whose first segment is not Git; `trailingAllowlisted` says whether
+ *   every segment after the Git one is an allowlisted command, and `unreadable`
+ *   marks a line no rule can read, which every caller must refuse.
+ */
+export function shellChainPolicy(command) {
+  if (typeof command !== 'string' || command.trim() === '') {
+    return { segments: [], unreadable: 'empty command' }
+  }
+  const segments = shellSegments(command)
+  if (!segments || segments.length === 0) return { segments: [], unreadable: 'unreadable shell construct' }
+  const argv = segments.map(segment => splitSimpleCommand(segment))
+  if (argv.some(tokens => !tokens || tokens.chained)) {
+    return { segments, unreadable: 'a segment is not a simple command' }
+  }
+  const git = gitTokensPolicy(argv[0])
+  if (git.kind !== 'not-git') {
+    // A single Git command has no trailing segment to judge, which is not the
+    // same as having one that failed the allowlist.
+    return { segments, git, trailingAllowlisted: segments.length === 1 || mainCommandAllowlisted(segments.slice(1)) }
+  }
+  return { segments, needsEscalation: !mainCommandAllowlisted(segments) }
 }
 
 function extractTaggedJson(prompt, tag) {
@@ -666,8 +858,18 @@ export function isInsideAllowedPath(target, cwd, allowedPaths, forbiddenPaths = 
   return allowed && !forbidden
 }
 
+/**
+ * Whether every command in a line is exactly one allowlisted command.
+ *
+ * The allowlist names whole commands, so a chain satisfies it only when each of
+ * its segments is itself listed. Matching the raw line would make an entry like
+ * `npm test` authorize `npm test && rm -rf src`; matching segment by segment
+ * keeps every entry's meaning its own.
+ */
 export function commandMatchesAllowlist(command, allowedCommands) {
-  return allowedCommands.includes(String(command ?? '').trim())
+  const segments = shellSegments(command)
+  if (!segments || segments.length === 0) return false
+  return segments.every(segment => allowedCommands.includes(segment))
 }
 
 /**
@@ -677,11 +879,18 @@ export function commandMatchesAllowlist(command, allowedCommands) {
  * Git read: `status` and `ls-files` are inherently range-free reads that cannot
  * change the worktree, the index, or the object database; every other accepted
  * read must name the supplied base or head so the reviewer can never inspect an
- * unpinned revision.
+ * unpinned revision. A chain is admitted only when every one of its segments is
+ * such a read, so no segment can widen another's scope.
  */
 export function reviewGitCommandAllowed(command, input) {
+  const segments = shellSegments(command)
+  if (!segments || segments.length === 0) return false
+  return segments.every(segment => reviewGitSegmentAllowed(segment, input))
+}
+
+function reviewGitSegmentAllowed(command, input) {
   const tokens = splitSimpleCommand(command)
-  if (!tokens || tokens[0] !== 'git' || !READ_ONLY_GIT.has(tokens[1])) return false
+  if (!tokens || tokens.chained || tokens[0] !== 'git' || !READ_ONLY_GIT.has(tokens[1])) return false
   const rest = tokens.slice(2)
   // Nothing that writes to the worktree, the index, or the object database.
   if (rest.some(token => /^(?:-[a-zA-Z]*[wWaAdDfF]|--(?:force|hard|mixed|soft|merge|keep|delete|prune|update-ref))/.test(token))) {
@@ -698,35 +907,6 @@ export function outputText(value) {
     .filter(block => block && block.type === 'text' && typeof block.text === 'string')
     .map(block => block.text)
     .join('')
-}
-
-/**
- * Add a policy cancellation reason to the failure a route tool reported.
- *
- * A child the policy cancelled reaches the caller as the tool's own fixed
- * wording (`subagent run was cancelled`), and the reason it was cancelled — a
- * step budget, in practice — is what makes that actionable. The reason is
- * appended rather than substituted: the tool's own failure stays the headline,
- * and a policy note must not relabel a provider error as a policy verdict.
- *
- * @param result - the route tool's result.
- * @param reason - the recorded policy reason, when one exists for this run.
- * @returns the result, annotated only when a reason applies.
- */
-export function annotateCancelledRun(result, reason) {
-  if (typeof reason !== 'string' || reason === '') return result
-  if (!result || result.isError !== true) return result
-  const note = `\nDSH policy: ${reason}`
-  const content = Array.isArray(result.content) && result.content.length > 0
-    ? result.content.map((block, index) => (index === result.content.length - 1
-      && block?.type === 'text' && typeof block.text === 'string'
-      ? { ...block, text: `${block.text}${note}` }
-      : block))
-    : [{ type: 'text', text: `Error:${note}` }]
-  const message = typeof result.error?.message === 'string' && result.error.message !== ''
-    ? `${result.error.message}${note}`
-    : `route run cancelled${note}`
-  return { ...result, error: { ...result.error, message }, content }
 }
 
 export function resolveWorkspacePath(cwd, input) {

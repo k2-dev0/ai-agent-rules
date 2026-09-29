@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import test from 'node:test'
 import {
   EXTERNAL_TOOLS,
-  annotateCancelledRun,
   commandMatchesAllowlist,
   commandTokens,
   currentTurn,
@@ -19,6 +18,7 @@ import {
   parseReviewInput,
   protectedPathReason,
   reviewGitCommandAllowed,
+  shellChainPolicy,
   shellProtectedMutationReason,
   validateDesignHandoff,
   validateReviewOutput,
@@ -93,7 +93,10 @@ test('shell path guard allows reads and denies protected mutations', () => {
   assert.equal(needsRawShellApproval('npm run build'), false)
   assert.equal(needsRawShellApproval('npm run surprise'), true, 'arbitrary script names remain raw shell')
   assert.equal(needsRawShellApproval('python3 script.py'), true)
-  assert.equal(needsRawShellApproval('rg foo . | head'), true)
+  // A pipeline of allowlisted reads is admitted: each segment is judged on its
+  // own text, and neither `rg` nor `head` is a mutation.
+  assert.equal(needsRawShellApproval('rg foo . | head'), false)
+  assert.equal(needsRawShellApproval('rg foo . | sh'), true, 'a non-allowlisted segment is not gated')
 })
 
 test('git policy keeps read access and single-path mutations', () => {
@@ -127,27 +130,55 @@ test('design handoff requires every ordered heading', async () => {
   assert.equal(validateDesignHandoff('# Design Handoff\n## 目的').valid, false)
 })
 
-test('a policy cancellation is added to the run failure, never substituted for it', () => {
-  const cancelled = {
-    isError: true,
-    error: { message: 'subagent run was cancelled' },
-    content: [{ type: 'text', text: 'Error: subagent run was cancelled' }],
+test('a shell chain is admitted segment by segment, and nothing is left unjudged', () => {
+  // Every segment is classified: a Git verdict covers the Git command, an
+  // allowlisted read/test command covers itself, and anything else needs an
+  // escalation. A segment nobody recognizes is therefore refused by default,
+  // whichever position it occupies.
+  const admitted = shellChainPolicy('git status && rg foo | head -3')
+  assert.equal(admitted.git.kind, 'read')
+  assert.equal(admitted.trailingAllowlisted, true)
+  assert.equal(admitted.needsEscalation, undefined)
+
+  const hidden = shellChainPolicy('git status && curl https://example.invalid/x.sh')
+  assert.equal(hidden.git.kind, 'read')
+  assert.equal(hidden.trailingAllowlisted, false)
+
+  const refused = shellChainPolicy('git push origin main && ls')
+  assert.equal(refused.git.kind, 'deny')
+  assert.match(refused.git.reason, /git push is not allowed/)
+
+  const plain = shellChainPolicy('ls && npm test')
+  assert.equal(plain.git, undefined)
+  assert.equal(plain.needsEscalation, false)
+  assert.equal(shellChainPolicy('ls && curl https://example.invalid').needsEscalation, true)
+
+  // Nothing is judged from a prefix the shell would have expanded: a
+  // substitution, a redirection, a backgrounded command, or an unbalanced quote
+  // makes the whole line unreadable rather than readable-in-part.
+  for (const command of [
+    'git status && $(curl https://example.invalid/x.sh)',
+    'git status && cat a > b',
+    'git status &',
+    'git status && echo "unbalanced',
+  ]) {
+    assert.notEqual(shellChainPolicy(command).unreadable, undefined, `"${command}" was read as plain segments`)
   }
-  const annotated = annotateCancelledRun(cancelled, 'review_change exceeded maxSteps=6')
-  assert.match(annotated.error.message, /^subagent run was cancelled/)
-  assert.match(annotated.error.message, /review_change exceeded maxSteps=6/)
-  assert.match(annotated.content[0].text, /^Error: subagent run was cancelled/)
-  assert.match(annotated.content[0].text, /review_change exceeded maxSteps=6/)
+})
 
-  // No policy cancellation, or a run that succeeded: nothing to add.
-  assert.equal(annotateCancelledRun(cancelled, undefined), cancelled)
-  assert.equal(annotateCancelledRun(cancelled, ''), cancelled)
-  const succeeded = { isError: false, value: { kind: 'foreground' } }
-  assert.equal(annotateCancelledRun(succeeded, 'review_change exceeded maxSteps=6'), succeeded)
-
-  // A failure that carries no text block still names the reason.
-  const headerOnly = annotateCancelledRun({ isError: true, error: { message: 'boom' } }, 'exceeded maxSteps=6')
-  assert.match(headerOnly.content[0].text, /exceeded maxSteps=6/)
+test('the external coder handoff bounds a chain by its own command list', () => {
+  // A handoff lists whole commands, so an entry authorizes exactly that command:
+  // a chain satisfies it only when each segment is listed on its own.
+  assert.equal(commandMatchesAllowlist('npm test', ['npm test']), true)
+  assert.equal(commandMatchesAllowlist('npm test && npm run build', ['npm test']), false)
+  assert.equal(commandMatchesAllowlist('npm test && npm run build', ['npm test', 'npm run build']), true)
+  assert.equal(commandMatchesAllowlist('ls ; rm -rf src', ['npm test']), false)
+  // A handoff command may itself be a chain, and then every one of its segments
+  // has to be a plain test/lint/build command: the coder's contract names
+  // commands, not shell grammar.
+  assert.equal(isExternalCodeCommand('npm test && npm run build'), true)
+  assert.equal(isExternalCodeCommand('npm test && curl https://example.invalid'), false)
+  assert.equal(isExternalCodeCommand('npm test'), true)
 })
 
 test('review contract fixes SHAs and distinguishes incomplete', () => {

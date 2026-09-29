@@ -8,6 +8,7 @@ import {
   RoutingIntentStore,
   authorizeRouteTool,
   commandForRouteTool,
+  intentCallCount,
   intentContextText,
   registeredCommandNames,
   routeToolForCommand,
@@ -146,7 +147,7 @@ test('a nested agent cannot open or use a routing intent', () => {
   }).allowed, false)
 })
 
-test('the route tool runs once against its own intent only', () => {
+test('a route tool runs repeatably for its session, whatever turn it is', () => {
   const store = new RoutingIntentStore()
   const { intent } = openDelivered(store, 1)
   assert.equal(authorizeRouteTool({
@@ -161,12 +162,14 @@ test('the route tool runs once against its own intent only', () => {
     tool: 'external_research_design',
     openIntent: intent,
   }).allowed, false)
+  // A later turn is the route's own session asking again, which is exactly the
+  // case the turn boundary used to refuse.
   assert.equal(authorizeRouteTool({
     sessionId: 'session-a',
     turn: 2,
     tool: 'external_research_design',
     openIntent: intent,
-  }).allowed, false, 'the intent authorized a turn it never received')
+  }).allowed, true, 'the authorization was refused in a later turn')
   assert.equal(authorizeRouteTool({
     sessionId: 'session-a',
     turn: 1,
@@ -174,16 +177,81 @@ test('the route tool runs once against its own intent only', () => {
     openIntent: intent,
   }).allowed, true)
 
-  assert.equal(store.consume('session-a', intent.id).ok, true)
-  const reuse = authorizeRouteTool({
+  // Authorization is repeatable: a second call in the same turn is allowed, and
+  // the intent stays open for as many runs as the task needs.
+  assert.equal(store.authorize('session-a', intent.id).ok, true)
+  assert.equal(store.get('session-a', intent.id).status, 'open')
+  assert.equal(store.openIntent('session-a').id, intent.id)
+  assert.equal(authorizeRouteTool({
     sessionId: 'session-a',
     turn: 1,
     tool: 'external_research_design',
     openIntent: store.openIntent('session-a'),
+  }).allowed, true, 'a second run in the same turn was refused')
+
+  const second = store.authorize('session-a', intent.id)
+  assert.equal(second.ok, true)
+  assert.equal(intentCallCount(second.intent), 2)
+
+  // The turn ending does not settle the route: the authorization outlives it, so
+  // a run the model never got to start stays reachable in the next turn.
+  store.endTurn('session-a', 1)
+  assert.equal(store.get('session-a', intent.id).status, 'open')
+  const nextTurn = authorizeRouteTool({
+    sessionId: 'session-a',
+    turn: 2,
+    tool: 'external_research_design',
+    openIntent: store.openIntent('session-a'),
   })
-  assert.equal(reuse.allowed, false)
-  assert.equal(store.consume('session-a', intent.id).ok, false)
-  assert.match(store.consume('session-a', intent.id).reason, /使用済み|終了済み/)
+  assert.equal(nextTurn.allowed, true, 'the authorization died with the turn that carried its task text')
+
+  // What does settle it is the task ending: a new command supersedes the route.
+  assert.equal(open(store, { command: 'external-code' }).ok, true)
+  const settled = authorizeRouteTool({
+    sessionId: 'session-a',
+    turn: 2,
+    tool: 'external_research_design',
+    openIntent: store.openIntent('session-a'),
+    settledIntent: store.settledIntent('session-a', 'external_research_design'),
+  })
+  assert.equal(settled.allowed, false)
+  // The settled plan route is refused, and the refusal names the route that now
+  // owns the task rather than the one that was replaced.
+  assert.match(settled.reason, /既に終了しました|対応しません/)
+})
+
+test('an authorized run is recorded without spending the authorization', () => {
+  const store = new RoutingIntentStore()
+  const { intent } = openDelivered(store, 1)
+  const authorized = store.authorize('session-a', intent.id)
+  assert.equal(authorized.ok, true)
+  assert.equal(intentCallCount(authorized.intent), 1)
+
+  // A run that reported nothing is recorded as such, because that is the fact a
+  // later refusal has to state rather than reporting a completed review.
+  store.recordCall(authorized.intent, { runId: undefined, resultStatus: 'error' })
+  assert.equal(authorized.intent.calls.length, 1)
+  assert.equal(authorized.intent.calls[0].runId, null)
+
+  // The authorization survives the failed run, so the same task can retry.
+  const retry = store.authorize('session-a', intent.id)
+  assert.equal(retry.ok, true, `the failed run spent the authorization: ${retry.reason}`)
+  assert.equal(intentCallCount(retry.intent), 2)
+  store.recordCall(retry.intent, { runId: 'run-2', resultStatus: 'terminal' })
+  assert.equal(retry.intent.calls.at(-1).resultStatus, 'terminal')
+
+  store.endTurn('session-a', 1)
+  store.closeSession('session-a', 'agent-disposed')
+  const settled = authorizeRouteTool({
+    sessionId: 'session-a',
+    turn: 2,
+    tool: 'external_research_design',
+    openIntent: store.openIntent('session-a'),
+    settledIntent: store.settledIntent('session-a', 'external_research_design'),
+  })
+  assert.equal(settled.allowed, false)
+  assert.match(settled.reason, /2回のrun/)
+  assert.match(settled.reason, /terminal/)
 })
 
 test('no intent at all means no external route, not a fallback', () => {
@@ -205,37 +273,59 @@ test('no intent at all means no external route, not a fallback', () => {
   }).allowed, false)
 })
 
-test('the mutually exclusive plan commands conflict in one task in both orders', () => {
-  // Each command line is its own turn, so the conflict is decided across turns
-  // by the earlier route being admitted and not yet settled.
+test('the newest plan command replaces the other plan route, one at a time', () => {
+  // The exclusion is satisfied by the supersede rather than by a refusal: a task
+  // never holds both plan routes, and the newer command is the instruction the
+  // human means. Refusing instead would strand the task on a route the human has
+  // already replaced — the same dead end the turn-scoped authorization produced.
   for (const [first, second] of [['external-plan', 'opus-plan'], ['opus-plan', 'external-plan']]) {
     const store = new RoutingIntentStore()
-    const opened = open(store, { command: first })
+    const opened = openDelivered(store, 1, { command: first })
     assert.equal(opened.ok, true)
-    const conflict = open(store, { command: second })
-    assert.equal(conflict.ok, false, `${second} after ${first} must conflict`)
-    assert.match(conflict.reason, /併用できません/)
+    const replacement = open(store, { command: second })
+    assert.equal(replacement.ok, true, `${second} after ${first} was refused: ${replacement.reason}`)
+    assert.equal(store.get('session-a', opened.intent.id).status, 'closed')
+    assert.equal(store.get('session-a', opened.intent.id).closedReason, 'superseded-by-command')
+    assert.equal(store.openIntent('session-a').command, second)
+    // Exactly one of the two plan tools is live: the replaced one is not.
+    const liveTools = ROUTE_TOOLS.filter(tool => store.hasUnsettledIntent('session-a', [tool]))
+    assert.deepEqual(liveTools, [routeToolForCommand(second)],
+      `the task holds the wrong live routes: ${JSON.stringify(liveTools)}`)
   }
   assert.deepEqual([...MUTUALLY_EXCLUSIVE_COMMANDS], ['external-plan', 'opus-plan'])
 })
 
-test('a settled plan route no longer blocks the other plan command', () => {
+test('a plan route keeps the exclusive slot across turns until the task ends', () => {
   const store = new RoutingIntentStore()
   const first = openDelivered(store, 1, { command: 'external-plan' })
-  const consumed = store.consume('session-a', first.intent.id)
-  assert.equal(consumed.ok, true)
-  // A turn end settles the route, which is what frees the exclusive slot.
-  store.closeTurn('session-a', 1, 'turn-end:completed')
+  const authorized = store.authorize('session-a', first.intent.id)
+  assert.equal(authorized.ok, true)
+  // The turn ending does not free the slot: the plan route is still the task's
+  // route, and the other plan command replaces it rather than joining it.
+  store.endTurn('session-a', 1)
+  assert.equal(store.hasUnsettledIntent('session-a', ['external_research_design']), true,
+    'a turn end freed the exclusive plan slot')
+  const replacement = open(store, { command: 'opus-plan' })
+  assert.equal(replacement.ok, true, `the replacement was refused: ${replacement.reason}`)
+  assert.equal(store.get('session-a', first.intent.id).closedReason, 'superseded-by-command')
+  assert.equal(store.hasUnsettledIntent('session-a', ['external_research_design']), false,
+    'the replaced plan route is still live')
+
+  // Disposal ends the task, which is what frees the slot for the next task.
+  store.closeSession('session-a', 'agent-disposed')
   const second = open(store, { command: 'opus-plan' })
-  assert.equal(second.ok, true, `a finished plan route still conflicted: ${second.reason}`)
+  assert.equal(second.ok, true, `a finished plan task still conflicted: ${second.reason}`)
 })
 
-test('an undelivered route still blocks the exclusive command', () => {
+test('a command delivered but not yet answered is still replaced, not duplicated', () => {
   const store = new RoutingIntentStore()
   const admitted = open(store, { command: 'external-plan' })
   assert.equal(admitted.ok, true)
-  const conflict = open(store, { command: 'opus-plan' })
-  assert.equal(conflict.ok, false, 'an admitted but undelivered plan route did not conflict')
+  const replacement = open(store, { command: 'opus-plan' })
+  assert.equal(replacement.ok, true, `the replacement was refused: ${replacement.reason}`)
+  assert.equal(store.get('session-a', admitted.intent.id).status, 'closed')
+  assert.equal(store.openIntent('session-a').command, 'opus-plan')
+  assert.equal(store.size, 2, 'the replacement duplicated rather than replaced the route')
 })
 
 test('the same command twice supersedes rather than duplicating the route', () => {
@@ -249,34 +339,32 @@ test('the same command twice supersedes rather than duplicating the route', () =
   assert.equal(store.size, 2)
 })
 
-test('turn end settles the intent that turn received and forbids reuse', () => {
-  for (const [reason, expected] of [
-    ['turn-end:completed', 'turn-end:completed'],
-    ['cancelled:user', 'cancelled:user'],
-  ]) {
-    const store = new RoutingIntentStore()
-    const { intent } = openDelivered(store, 1)
-    assert.equal(store.deliveredIntentForTurn('session-a', 1).id, intent.id)
-    const closed = store.closeTurn('session-a', 1, reason)
-    assert.equal(closed.length, 1)
-    assert.equal(closed[0].id, intent.id)
-    assert.equal(store.get('session-a', intent.id).closedReason, expected)
-    assert.equal(store.deliveredIntentForTurn('session-a', 1), undefined)
+test('a turn end keeps the authorization and only forgets the delivery', () => {
+  const store = new RoutingIntentStore()
+  const { intent } = openDelivered(store, 1)
+  assert.equal(store.deliveredIntentForTurn('session-a', 1).id, intent.id)
+  store.endTurn('session-a', 1)
+  // The delivery record is per turn, so it is dropped; the authorization is not.
+  assert.equal(store.deliveredIntentForTurn('session-a', 1), undefined)
+  assert.equal(store.get('session-a', intent.id).status, 'open')
+  assert.equal(store.get('session-a', intent.id).closedReason, null)
+  assert.equal(store.openIntent('session-a').id, intent.id)
+  for (const turn of [1, 2, 7]) {
     assert.equal(authorizeRouteTool({
       sessionId: 'session-a',
-      turn: 1,
+      turn,
       tool: 'external_research_design',
       openIntent: store.openIntent('session-a'),
-    }).allowed, false)
+    }).allowed, true, `the authorization was refused in turn ${turn}`)
   }
 })
 
-test('a turn end does not cancel a route whose task text has not arrived yet', () => {
+test('a route whose task text has not arrived survives a turn end and binds later', () => {
   // The Web composer submits a command in its own turn and the task text is the
   // next turn, so settling the undelivered intent here would silently drop it.
   const store = new RoutingIntentStore()
   const { intent } = open(store)
-  assert.deepEqual(store.closeTurn('session-a', 1, 'turn-end:completed'), [])
+  store.endTurn('session-a', 1)
   assert.equal(store.openIntent('session-a').id, intent.id)
   assert.equal(store.bindDelivery('session-a', intent.id, 2).ok, true)
   assert.equal(store.get('session-a', intent.id).status, 'open')
@@ -291,33 +379,60 @@ test('disposal closes every open intent', () => {
   assert.equal(store.deliveredIntentForTurn('session-a', 1), undefined)
 })
 
-test('a later turn does not inherit an earlier intent', () => {
+test('the newest command owns the route and retires the earlier one', () => {
   const store = new RoutingIntentStore()
-  openDelivered(store, 1)
-  store.closeTurn('session-a', 1, 'turn-end:completed')
-  const second = openDelivered(store, 2, { command: 'external-code' })
+  const plan = openDelivered(store, 1)
+  store.endTurn('session-a', 1)
+  // A different route replaces the plan route rather than running beside it, so
+  // one task still owns exactly one route.
+  assert.equal(open(store, { command: 'opus-plan' }).ok, true)
+  assert.equal(store.get('session-a', plan.intent.id).status, 'closed')
+  assert.equal(store.get('session-a', plan.intent.id).closedReason, 'superseded-by-command')
+
+  // Disposal settles what is live, and the next plan command then owns the slot
+  // for a fresh task.
+  store.closeSession('session-a', 'agent-disposed')
+  const second = openDelivered(store, 2, { command: 'opus-plan' })
   assert.equal(second.intent.deliveredTurn, 2)
+  // The retired route is refused and reports what it did, and the new one is the
+  // only route reachable.
+  const retired = authorizeRouteTool({
+    sessionId: 'session-a',
+    turn: 3,
+    tool: 'external_research_design',
+    openIntent: store.openIntent('session-a'),
+    settledIntent: store.settledIntent('session-a', 'external_research_design'),
+  })
+  assert.equal(retired.allowed, false, 'the superseded route ran again')
+  assert.match(retired.reason, /既に終了しました|対応しません/)
   assert.equal(authorizeRouteTool({
     sessionId: 'session-a',
-    turn: 1,
-    tool: 'external_code',
+    turn: 3,
+    tool: 'external_opus_design',
     openIntent: store.openIntent('session-a'),
-  }).allowed, false, 'an intent delivered in turn 2 authorized turn 1')
+  }).allowed, true, 'the newest route was not reachable in a later turn')
+  assert.equal(store.openIntent('session-a').tool, 'external_opus_design')
 })
 
-test('restart never resumes a persisted intent, and keeps the consumed fact', () => {
+test('restart never resumes a persisted intent, and keeps the run record', () => {
   const store = new RoutingIntentStore()
   const first = openDelivered(store, 1)
-  store.consume('session-a', first.intent.id)
-  // The snapshot that survives a restart records the one-shot consumption.
+  store.authorize('session-a', first.intent.id)
+  store.recordCall(first.intent, { runId: undefined, resultStatus: 'error' })
+  // The snapshot that survives a restart records the authorized run and its
+  // outcome, which is what lets a later refusal say the run reported nothing.
   const live = JSON.parse(JSON.stringify(store.toState()))
-  assert.equal(live.intents.find(intent => intent.id === first.intent.id).status, 'consumed')
+  const persisted = live.intents.find(intent => intent.id === first.intent.id)
+  assert.equal(persisted.status, 'open')
+  assert.equal(persisted.callCount, 1)
+  assert.deepEqual(persisted.calls.map(call => call.resultStatus), ['error'])
 
-  // The consumed route settles when its turn ends; until then it still owns its
-  // exclusive slot, which is why the review is admitted only after that turn ends.
-  store.closeTurn('session-a', 1, 'turn-end:completed')
-  const other = open(store, { command: 'review' })
-  assert.equal(other.ok, true, `the review route was refused: ${other.reason}`)
+  // Disposal is what ends a route; a closed session leaves nothing live behind,
+  // so the next plan command is admitted for a fresh task.
+  store.closeSession('session-a', 'agent-disposed')
+
+  const other = open(store, { command: 'opus-plan' })
+  assert.equal(other.ok, true, `the plan route was refused: ${other.reason}`)
 
   const restored = RoutingIntentStore.fromState(JSON.parse(JSON.stringify(store.toState())))
   assert.equal(restored.size, 2)

@@ -141,7 +141,7 @@ async function makeAgent(ctx, spec, { parent, depth = 0, agentOptions } = {}) {
 }
 
 /** The exact wording of a routing-intent refusal, used to tell it apart from a tool failure. */
-const GUARD_DENIAL = /direct user|routing intent|1回|使用済み|終了済み|外部agent/
+const GUARD_DENIAL = /direct user|routing intent|既に終了|何度でも|外部agent/
 
 /** The text one tool result carries, whether it succeeded or was refused. */
 function resultText(result) {
@@ -520,7 +520,7 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
     return `intent ${plan.id} bound to turn ${String(plan.deliveredTurn)}; ${delivered.split('\n')[0]}`
   })
 
-  await check('external-tool-uses-its-intent-once', async () => {
+  await check('external-tool-uses-its-intent-repeatably', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
     const hash = `sha256:${createHash('sha256').update(spec.reviewRequirements, 'utf8').digest('hex')}`
     const input = `<review_input>${JSON.stringify({
@@ -529,7 +529,7 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
       requirementsHash: hash,
       requirements: spec.reviewRequirements,
     })}</review_input>`
-    const { turn } = await admitAndDeliverCommand(ctx, agent, spec, '/review single use')
+    const { turn } = await admitAndDeliverCommand(ctx, agent, spec, '/review repeatable use')
     // The guard's own verdict first: an authorized call must not be refused by
     // the policy. Reading the guard before executing keeps the two facts apart.
     const authorized = guardDecision(ctx, agent, 'review_change', { prompt: input })
@@ -537,23 +537,47 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
 
     // The loopback mock has no credential for the route's configured provider, so
     // the child cannot complete and the tool reports its own failure. What this
-    // case asserts is the one-shot decision: the first call was authorized, and
-    // that call consumes the intent whatever the run then reports.
+    // case asserts is the authorization: the call runs, the intent survives it,
+    // and neither the failure nor the recording spends the turn's route.
     await callTool(ctx, agent, 'review_change', { prompt: input })
 
-    // Consumption is durable and independent of the tool result, so it is read
+    // The run is recorded durably and independently of its outcome, so it is read
     // back from the state the policy plugin persisted.
     const review = persistedIntent(spec, agent.id, 'review')
     expect(review !== undefined, 'no review intent was persisted for this session')
     expect(review.deliveredTurn === turn,
       `the intent is bound to turn ${String(review.deliveredTurn)}, expected ${String(turn)}`)
-    expect(review.status === 'consumed',
-      `the review intent is "${String(review.status)}" after one authorized call, expected "consumed"`)
+    expect(review.status === 'open',
+      `the review intent is "${String(review.status)}" after one authorized call, expected "open"`)
+    expect(review.callCount >= 1, `the authorized run was not recorded: ${JSON.stringify(review)}`)
 
-    const reuse = guardDecision(ctx, agent, 'review_change', { prompt: input })
-    expect(reuse.denied, 'a second call against the consumed intent was allowed')
-    expect(/使用済み/.test(reuse.reason), `the second call was not refused as reuse: ${reuse.reason}`)
-    return `intent ${review.id} is ${String(review.status)}; second call: ${reuse.reason.slice(0, 100)}`
+    // A second call in the same turn is admitted: the route is bounded by its
+    // task, not by one call.
+    const again = guardDecision(ctx, agent, 'review_change', { prompt: input })
+    expect(!again.denied, `a second call in the same turn was refused: ${again.reason}`)
+
+    // The turn ending does not end the authorization: a run the model never got
+    // to start stays reachable, which is the defect this case exists for.
+    agent.cancel({ kind: 'user' })
+    const closed = await waitForTurnClose(agent, spec, spec.turnCloseWaitMs ?? 20000)
+    expect(closed, 'the turn did not close, so the post-turn branch cannot be observed')
+    const afterTurn = guardDecision(ctx, agent, 'review_change', { prompt: input })
+    expect(!afterTurn.denied,
+      `the authorization died with the turn that carried its task text: ${afterTurn.reason}`)
+    const stillOpen = persistedIntent(spec, agent.id, 'review')
+    expect(stillOpen.status === 'open',
+      `the intent is "${String(stillOpen.status)}" after its turn closed, expected "open"`)
+
+    // A new command is what ends it, and it supersedes rather than stacking.
+    await admitAndDeliverCommand(ctx, agent, spec, '/review a fresh task')
+    const settled = persistedIntent(spec, agent.id, 'review')
+    expect(settled.status === 'open', `the newest intent is "${String(settled.status)}"`)
+    expect(settled.id !== review.id, 'the newest command reused the earlier intent')
+    const superseded = readIntentState(spec).filter(intent => intent.id === review.id)[0]
+    expect(superseded.closedReason === 'superseded-by-command',
+      `the superseded intent is "${String(superseded.closedReason)}"`)
+    return `intent ${review.id} stayed open across the turn end; the next command superseded it `
+      + `(${String(superseded.closedReason)})`
   })
 
   await check('external-tool-without-command-is-required-to-be-started-by-a-command', async () => {
@@ -570,16 +594,25 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
     return reason.slice(0, 140)
   })
 
-  await check('plan-command-conflict-is-denied', async () => {
+  await check('a-plan-command-replaces-the-other-plan-route', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
     // The first command is admitted and delivered in its own turn, exactly as a
     // human's two composer submissions would be.
     await admitAndDeliverCommand(ctx, agent, spec, '/external-plan first route')
     const second = await executeCommand(ctx, agent, '/opus-plan second route')
-    expect(second !== undefined, 'the conflicting command was not admitted at all')
-    expect(second.result.kind === 'error', 'the conflicting command was admitted as success')
-    expect(/併用/.test(second.result.text), `conflict message was: ${second.result.text}`)
-    return second.result.text.slice(0, 140)
+    expect(second !== undefined, 'the replacing command was not admitted at all')
+    expect(second.result.kind === 'success', `the replacing command failed: ${second.result.text}`)
+    // One task owns one route: the plan route is retired, not left live beside
+    // the new one, so a task can never hold both plan routes.
+    await waitForDelivery(agent, spec)
+    const intents = readIntentState(spec).filter(intent => intent.sessionId === String(agent.id))
+    const live = intents.filter(intent => intent.status === 'open')
+    expect(live.length === 1, `the task holds ${live.length} live routes: ${JSON.stringify(live.map(i => i.command))}`)
+    expect(live[0].command === 'opus-plan', `the live route is /${String(live[0].command)}`)
+    const retired = intents.find(intent => intent.command === 'external-plan')
+    expect(retired.closedReason === 'superseded-by-command',
+      `the replaced plan route is "${String(retired.closedReason)}"`)
+    return `live=${live[0].command}; replaced=${String(retired.closedReason)}`
   })
 
   await check('review-base-head-hash-mismatch-is-rejected', async () => {
@@ -596,14 +629,14 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
     return mismatch.reason.slice(0, 140)
   })
 
-  await check('turn-end-closes-the-intent', async () => {
+  await check('turn-end-keeps-the-authorization', async () => {
     const agent = (await makeAgent(ctx, spec)).agent
     await admitAndDeliverCommand(ctx, agent, spec, '/review base/head')
     // The turn is left to close on its own first. A booted tree that cannot
     // reach its provider (see `mock-provider-observation`) never finishes a
     // step, so the turn is then ended the way the user's own stop ends it:
     // `agent.cancel()` reaches the loop as the same `turn/end` event, which is
-    // the event the policy closes an intent on.
+    // the event the policy observes a turn ending on.
     let endedBy = 'the model'
     if (!(await waitForTurnClose(agent, spec, spec.modelTurnWaitMs ?? 2000))) {
       endedBy = 'the user stop'
@@ -616,18 +649,28 @@ async function runCommandCases(ctx, spec, { check, expect, record }) {
     expect(closed && turn === undefined,
       `the turn was still open after ${budget}ms (turn=${String(turn)}); `
       + `${events.length} events: ${events.map(event => event.type).join(',')}`)
-    // That turn end is what closed the intent, and the durable state is what
-    // says so: the route tool's refusal below could also mean no intent ever
-    // existed.
+    // The authorization outlives the turn on purpose: a command the model never
+    // got to execute would otherwise be lost, which is the reported defect. The
+    // durable state is what says so — a route tool's own failure could also mean
+    // no intent ever existed.
     const intents = readIntentState(spec).filter(intent => intent.sessionId === String(agent.id))
     expect(intents.length > 0, `no routing intent was persisted for this session`)
-    expect(intents.every(intent => intent.status !== 'open'),
-      `an intent stayed open after the turn ended: ${JSON.stringify(intents)}`)
-    const { denied, reason } = await callTool(ctx, agent, 'review_change', { prompt: '{}' })
-    expect(denied, 'review_change still ran after its turn closed')
-    expect(GUARD_DENIAL.test(reason), `unexpected denial after the turn closed: ${reason}`)
+    expect(intents.every(intent => intent.status === 'open'),
+      `an intent was settled by its turn ending: ${JSON.stringify(intents)}`)
+    // The policy verdict is read through the guard stage rather than by
+    // dispatching the route: this boot mounts only the four route tools globally,
+    // so the mock child a dispatch would spawn cannot apply its own `toolFilter`
+    // (read/grep/glob/bash are preset-mounted, not global here) and the harness
+    // failure would mask the policy answer this case is about.
+    const afterTurn = guardDecision(ctx, agent, 'review_change', { prompt: reviewInput(spec) })
+    expect(!afterTurn.denied, `the route was refused after its turn ended: ${afterTurn.reason}`)
+    // A new command is what retires it, which the next case asserts.
+    await admitAndDeliverCommand(ctx, agent, spec, '/review a second task')
+    const after = readIntentState(spec).filter(intent => intent.sessionId === String(agent.id))
+    expect(after.filter(intent => intent.status === 'open').length === 1,
+      `the newest command did not leave exactly one live route: ${JSON.stringify(after.map(i => i.status))}`)
     return `turn ended by ${endedBy}; `
-      + intents.map(intent => `${intent.command}=${String(intent.status)}`).join(', ')
+      + after.map(intent => `${intent.command}=${String(intent.status)}`).join(', ')
   })
 
   record('probe-command-cases', true, `${listed.length} commands in the catalog`)
@@ -1085,18 +1128,35 @@ async function runReviewerCases(ctx, spec, { check, expect }) {
     return `the pinned range was readable while the review held its freeze (${dispatch})`
   })
 
-  await check('a-critical-finding-does-not-start-a-second-reviewer', async () => {
+  await check('a-finding-does-not-start-a-second-reviewer-on-its-own', async () => {
     // The reviewer's verdict is data, not a trigger. Nothing in the policy reads
-    // findings, so a critical finding leaves the review lock exactly as it was
-    // and starts no further work.
+    // findings, so a critical finding starts no further work by itself: the same
+    // route runs again only when the caller asks again inside the turn that holds
+    // the authorization, and no other route becomes available at all.
     const owner = (await makeAgent(ctx, spec)).agent
     await admitAndDeliverCommand(ctx, owner, spec, '/review critical finding case')
     await callTool(ctx, owner, 'review_change', { prompt: input })
+
+    // The route itself is still the caller's to use while its turn lasts.
     const second = guardDecision(ctx, owner, 'review_change', { prompt: input })
-    expect(second.denied, 'a second reviewer was started for the same workspace')
+    expect(!second.denied, `the caller could not repeat its own route: ${second.reason}`)
+
+    // What a finding may not do is unlock a different route: the intent names one
+    // tool, and escalation to another model is not a policy action.
     const other = guardDecision(ctx, owner, 'external_research_design', { prompt: 'research' })
     expect(other.denied, 'a review finding escalated to another model route')
-    return second.reason.slice(0, 140)
+    expect(/routing intent/.test(other.reason), `unexpected escalation refusal: ${other.reason}`)
+
+    // A reviewer under a live review is read-only and starts nothing: its own tool
+    // is refused because no route is reachable from a delegated depth.
+    const reviewer = (await makeAgent(ctx, spec, {
+      parent: owner,
+      depth: 1,
+      agentOptions: { provider: 'openai', model: 'gpt-6-sol' },
+    })).agent
+    const nested = guardDecision(ctx, reviewer, 'review_change', { prompt: input })
+    expect(nested.denied, 'a reviewer started another reviewer')
+    return `repeat allowed (${second.reason ?? 'no verdict'}); escalation refused: ${other.reason.slice(0, 100)}`
   })
 }
 

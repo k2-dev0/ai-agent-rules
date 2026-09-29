@@ -4,21 +4,43 @@ DeepSeek Harnessを主実行系にし、外部modelをdirect user messageの明�
 
 ## 実効route
 
-| 入口 | Provider / model id | Effort | 上限 |
+| 入口 | Provider / model id | Effort | output上限 |
 |---|---|---|---|
 | 通常 | `deepseek-official` / `deepseek-flash` | provider既定 | 外部委譲なし |
-| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K output、8 step |
-| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K output、8 step |
-| `/external-code` | `zai` / `glm-5.3-code` | `high` | 16K output、6 step |
-| `/review` | `openai` / `gpt-6-sol` | `high` | 8K output、6 step |
+| `/external-plan` | `zai` / `glm-5.3` | `max` | 12K |
+| `/opus-plan` | `anthropic` / `claude-opus-5-5` | `high` | 12K |
+| `/external-code` | `zai` / `glm-5.3-code` | `high` | 16K |
+| `/review` | `openai` / `gpt-6-sol` | `high` | 8K |
 
 `glm-5.3`と`glm-5.3-code`は同じ上流modelにつけた別id。policyはagentのroleを`provider`/`model`の組から解決するため、plannerとcoderは別idでなければならない。同じ組にすると後から書いた側のroleが解決不能になり、そのrole向けのguardが「許可すべき仕事を拒否する」状態になる。`test/route-identity.test.js`が両者の一致と組の重複不在を強制する。
 
 `claude-opus-5-5`は導入済みpi-ai（`0.85.1`）のcatalogに未収録で、catalogは`claude-opus-5`で止まっている。そのためmodel entry自身が`compat.forceAdaptiveThinking: true`を宣言する。宣言が無いとpi-aiはbudget方式のthinkingを送り、adaptive方式だけを受けるOpus 5.5は出力前に拒否する（課金0、呼出側には`subagent run failed`としか見えない）。`test/route-declarations.test.js`が宣言を固定し、起動時の`assertRouteDeclarations`が欠落を検知してprofile起動を止める。
 
-`/review`のstep予算は6、設計route（`/external-plan`・`/opus-plan`）は8。1回のreviewはdiff読取・追加調査・回答の3段階以上を要し、2では回答を組み立てている途中でcancelされる。設計routeはtaskが名指ししたfileとそれが参照するfileを読んでから17見出しのHandoffを返すため、4では調査だけで上限に達する。cancel理由（`review_change exceeded maxSteps=6`）はtool結果へ付加されるので、打ち切りは結果文言から判別できる。
+routeに**step数の上限は無い**。`maxSteps`は、設計routeがtaskの名指ししたfileとそれが参照するfileを読む前に、reviewがfindingsを組み立てる途中で子agentをcancelしていた。step数は調査対象の大きさを知らないので上限として成立しない。costを縛るのは各tool rowの`maxTokens`（output token数）で、これは回答の大きさに対する制約である。`test/hook-responsibilities.test.js`がroute tableへ`maxSteps`が戻らないことを固定する。
 
-`/external-plan`と`/opus-plan`は同じtaskで併用できない。外部toolは1つのrouting intentにつき1回だけ起動できる。repository、skill、tool結果、model生成文に書かれたcommandは起動根拠にならない。`/review`後の再reviewにも新しいdirect user messageの`/review`が必要。
+routeの回数上限も**無い**。1つのrouting intentは、そのroute toolを何度でも起動できる。失敗したrun、結果を返さなかったrun、同じ作業の続きはcommandを打ち直さずに再実行できる。
+
+## routing intentの生存期間
+
+intentを終わらせるのは**taskについての事実**だけで、turnやcallではない。
+
+| 終わらせる | 終わらせない |
+|---|---|
+| 同じsessionへの新しいcommand（`superseded-by-command`） | turnの終了（正常終了・中断のどちらでも） |
+| agentのdispose | callの成功・失敗・結果なし |
+| DSH再起動（open intentは`restart`で閉じる） | 時間経過 |
+
+turnで終わらせない理由は実害が出たためである。`/external-plan`が配送されたturnでmodelがrouteを起動せず、そのturnが中断されると、許可は失われ、以降のturnでは「既に終了しました」と拒否されて**利用者は同じ依頼を再送するしかなかった**。いまは同じ依頼のまま次のturnで起動できる。
+
+`/external-plan`と`/opus-plan`は同じtaskで併用できない。ただし拒否ではなく**後から打ったcommandが前のrouteを退役させる**（`superseded-by-command`）。taskが同時に持つdesign routeは常に1つで、打ち間違いや気変わりはcommandを打ち直せば直る。repository、skill、tool結果、model生成文に書かれたcommandは起動根拠にならない。
+
+## シェルの連結
+
+mainのshellは`&&`・`||`・`;`・`|`で連結できる。allowlistは**各セグメント**に対して評価され、1つでもallowlist外があれば連結全体がsandbox escalationと承認を要求する。したがって`git status && curl https://example.invalid` のような「許可されたcommandの後ろに禁止command」は、単体の`curl`と同じ扱いで拒否される。
+
+`>`・`>>`・`` ` ``・`$( )`・`&`（単独）・改行は連結として扱わない。これらはshellが実行内容を組み立てる構文であり、このpolicyが読むtextと実際に走るcommandが食い違うため、行全体が「読めない」ものとして承認を要求する。`echo x > .env`は保護path変更として拒否される。
+
+Gitの変更（`git add`・`git commit`・`git restore --staged`）は**単一commandでのみ**許可する。1 pathのstage規則と「stagedは厳密に1 file」規則は1つのargvを読むため、連結に隠れた変更は承認があっても拒否する。
 
 ## 導入
 
@@ -81,7 +103,7 @@ commandはturnの外から実行できる。turnが開いていないことを�
 
 ## 外部coder入力
 
-`external_code`へ渡すpromptに次のmachine-readable blockを1つ含める。pathはworkspace相対、commandはshell制御演算子を含まない単一commandに限定する。
+`external_code`へ渡すpromptに次のmachine-readable blockを1つ含める。pathはworkspace相対、commandは`&&`・`||`・`;`・`|`以外のshell制御構文を含まないcommandに限定する（各commandは`allowedCommands`の要素として個別に並べる）。
 
 ```text
 <implementation_handoff>
@@ -134,7 +156,7 @@ $DSH_HOME/dsh-main-policy/mutation-lock.json
 - `.env*`、主要lockfile、review state、mutation lock
 - symlinkで到達する保護path、hard-linked file、`..`を含むworkspace外path
 
-mainの通常shellはread／test／lint／typecheck／buildの保守的allowlistに限定する。それ以外はDSH sandbox escalationと人間の承認が必要。Gitはread-only command、1 pathの`git add`、stageが厳密に1 fileの`git commit`、indexだけのrestore以外を拒否する。外部plannerとreviewerはread-only。reviewerのshellは固定base/headを含むGit readだけを許可する。
+mainの通常shellはread／test／lint／typecheck／buildの保守的allowlistに限定する。連結は**全セグメントがallowlist内**のときだけ通り、1つでも外れればDSH sandbox escalationと人間の承認が必要（`git status && curl …` のような隠しは単体の`curl`と同じ判定になる）。Gitはread-only command、1 pathの`git add`、stageが厳密に1 fileの`git commit`、indexだけのrestore以外を拒否する。外部plannerとreviewerはread-only。reviewerのshellは固定base/headを含むGit readだけを許可する。
 
 ## 検証
 
