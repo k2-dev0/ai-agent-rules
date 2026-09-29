@@ -155,8 +155,8 @@ def main():
     if args.case == 'source-review':
         base, head = source_review_fixture(root)
         brief = dict(repository=str(root),review_base=base,review_head=head,requirements=(
-            "Migrate Codex to DeepSeek repository work with a Sol/high parent and Astra/medium design and review. "
-            "Remove Codex difficulty routing and preserve fixed-commit review input validation, "
+            "Keep Codex repository work on a Sol/high parent with Astra/medium design and review. "
+            "Preserve fixed-commit review input validation, "
             "actual child identity binding, independent review results and .git protection. "
             "Keep model instructions sufficient for correct workflows. Tests must exercise real hooks and not mistake "
             "component or simulated success for a completed live workflow. Do not modify distribution targets or user settings."))
