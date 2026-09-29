@@ -1,5 +1,7 @@
 # 独立レビューの起動・結果処理
 
+ユーザーが明示的に要求した場合だけ実行する。実装・検証・commitの完了だけを理由に起動しない。
+
 起動入力を組み立てる前に[子の起動手順](SUBAGENT_RULES.md)の未読分を読む。
 
 変更前HEADはhookが`.[agent_name]/tmp/independent-review.<session_id>.json`の`base`へ保存する。現在sessionの状態を読み、`review_base`に使う。状態がなければ編集前に保持したHEADまたはユーザー指定の比較元を使い、不明なら確認する。現在HEADや直前の1commitを根拠なく比較元にしない。状態ファイルは直接編集しない。
