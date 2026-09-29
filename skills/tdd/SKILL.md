@@ -10,7 +10,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, Agent
 
 Codexは[作業分担](../WORKFLOW_ROUTING.md)と[DeepSeekの実行](../DEEPSEEK_WORKFLOW.md)の未読分を読む。調査・設計・シナリオ選択・診断分類・Gitは親、test作成・実装・通常修正・検証はDeepSeekが行う。Claudeの調査・実装・修正・検証はメインが行う。依頼の識別子・path・番号・固有名詞は変えない。承認範囲外のDB・依存・公開API変更、または新しい設計判断が必要なら編集を止めて報告する。
 
-開始時に[子の起動可否](../SUBAGENT_RULES.md#開始時の可用性確認)を確認する。独立レビュー用roleと、CodexはDeepSeekの4 tool、Claudeはユーザーによるモデル指定がなければ難度評価用roleが必要。利用不能ならシナリオの承認を求めず報告する。
+開始時に[子の起動可否](../SUBAGENT_RULES.md#開始時の可用性確認)を確認する。CodexはDeepSeekの4 tool、Claudeはユーザーによるモデル指定がなければ難度評価用roleが必要。独立レビュー用roleはユーザーがレビューを明示的に要求した場合だけ確認する。必要なtoolまたはroleが利用不能ならシナリオの承認を求めず報告する。
 
 ## 調査
 
@@ -48,4 +48,4 @@ CodexはRed確認後にworkerを返却させ、親がtest差分・失敗理由�
 
 ## 完了
 
-通常起動は検証とcommit後に[独立レビューの起動・結果処理](../INDEPENDENT_REVIEW.md)を読み、専用reviewerで独立レビューする。共通基準の作業対象とGit状態を再照合し、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、レビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
+独立レビューは自動実行しない。ユーザーが明示的に要求した場合だけ、検証とcommit後に[独立レビューの起動・結果処理](../INDEPENDENT_REVIEW.md)を読み、専用reviewerで実行する。共通基準の作業対象とGit状態を再照合し、要求、選択済みシナリオ、Red・Greenまたはtest除外、実差分、検証結果、未実行・残作業、commit、実行した場合のレビュー結果を簡潔に報告する。`--from-doc`は[設計書モード](FROM_DOC.md)の完了処理へ進む。
