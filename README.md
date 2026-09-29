@@ -4,27 +4,9 @@ Claude Code／Codex向けの規約・skill・hookの配布テンプレート。
 
 ## Codexの動線
 
-repository調査・原因診断は親が行い、実装・test・通常修正・検証は別repositoryの`deepseek-bridge`へ渡す。親は確認済み事実、要件、設計、指摘採否、Git、報告を保持する。通常・調査・設計はSol / high、設計監査・実装レビューと再指摘箇所の直接修正はAstra / mediumを使う。難度採点によるモデル振り分けは行わない。
-
-設計を伴う変更とTDDは、親Sol / highの調査・設計→DeepSeek実装・検証→親のcommitまで行う。独立実装レビューは自動実行せず、ユーザーが明示的に要求した場合だけfreshなAstra / medium `code-reviewer`を使う。実装レビューでcriticalが出たら同じAstra / mediumの`code-reviewer-critical`で対象を再レビューし、そのタスクの修正後レビューも同設定を維持する。独立設計監査（ponytail）はAstra / medium `design-reviewer`を使う。同じ関数・section・testへの成立指摘が修正後も再発した場合だけ、その箇所と直接必要な依存を親Astra / mediumへ移す。他の初回箇所はDeepSeekを維持し、DeepSeek→Astraの順に直列修正する。
+repository調査・原因診断・設計・実装・test・通常修正・検証・Git・報告は親Sol / highが行う。独立実装レビューは自動実行せず、ユーザーが明示的に要求した場合だけfreshなAstra / medium `code-reviewer`を使う。実装レビューでcriticalが出たら同じAstra / mediumの`code-reviewer-critical`で対象を再レビューし、そのタスクの修正後レビューも同設定を維持する。独立設計監査（ponytail）はAstra / medium `design-reviewer`を使う。難度採点によるモデル振り分けは行わない。
 
 Claudeの既存動線は維持する。共通文書内の難度評価・メイン実装・nesting-reviewerはClaude用であり、Codexへ適用しない。
-
-### DeepSeek bridgeの接続
-
-別repositoryで検証済みの`deepseek-bridge`をインストールし、Codex起動環境のPATHから解決できるようにする。絶対pathをMCPのargsへ指定してもよい。`deepseek-launch.sh`は設定済みの`DEEPSEEK_API_KEY`を優先し、未設定ならzshの`.zshrc`を読み込む。キー値とrcの出力はMCPの標準出力・logへ出さず、環境変数として渡す。必要な場合だけ`DEEPSEEK_BASE_URL`を設定する。配置先repository rootで`mcp-protected.sh`へ引き継ぎ、主担当model・effortは配布設定のSol / highを使う。
-
-公開契約は`start_task(brief,title?)`、`wait_task(task_id)`、`continue_task(task_id,message)`、`abort_task(task_id)`。返却の`task_id`と`status`（running/completed/needs_decision/failed/aborted/interrupted）をhookが照合する。`wait_task`は途中経過を返さずterminal結果まで1回のtool callを保持し、MCP timeoutはworkerの20分上限と回収時間を超える1,300秒とする。起動が成功しても実装・privacy・DSH停止の検証済みとは扱わない。
-
-DSH version固定、sdk-minimal、model/effort、privacy設定・送信検査、session保存と取消はbridge側で実施する。この配布元では4 toolの契約とhook接続をfixtureで検証する。`tests/probe_deepseek_bridge.py --bridge-root <bridge path>`をbridgeのPythonでsandbox外実行すると、実MCP/DSH・模擬API・配布hookを通して編集・test・Git保護・session継続・取消・回収失敗を検証できる。実API課金・model品質はこのprobeの対象外。
-
-### 非同期workerの保護
-
-`deepseek-worker.sh`はworker起動前に予約し、実行中は親のshell・編集・Git操作・native子起動を拒否する。所有するCodex session、tool call、task IDと結果を照合し、停止を示す結果で予約を解放する。`failed`でも`abort_error`・未知error・error欠落なら停止未確認として解放しない。旧wait結果、別taskの結果、timeout・不正応答でも解放しない。`independent-review.sh`はworker開始前のHEADを記録し、continue時も古いレビュー証跡を失効させる。
-
-起動結果不明やCodex終了で予約が残ったら、親から状態fileを書き換えて続行しない。ユーザーが該当bridge・DSHと子processの停止を確認し、実差分を確認した後に、配置先`.codex/tmp/deepseek-worker.json`を退避して新しいCodexタスクを開始する。停止未確認でtime-to-liveやSessionEndから自動解放しない。
-
-この保護は配布hookを通るtoolに限定される。外部editor、未対応tool、開始済みのshell processの継続はOS-levelの排他では防がない。workflowでは先行process・reviewerを完了してからworkerを起動する。再指摘の意味上の同一箇所判定と採否は親が行い、機械判定済みとは扱わない。
 
 ## 配置
 
@@ -85,9 +67,9 @@ $bootstrap codex
 4. Claudeはproject rootの`.mcp.json`にあるchrome-devtools・context-dictionaryを承認する
    - 両環境ともcontextのsearch/getは自動、upsert/follow_upは確認する
 
-更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
+更新前に利用先の設定・設計書・`AGENTS.override.md`を比較する。旧`require-test.sh`と登録、`skills/tdd/preflight-implementer.sh`、旧bootstrapの`[NOTE]`処理、`require-implementer.sh workflow`登録、旧implementer定義・`IMPLEMENTER_CONTRACT.md`・`IMPLEMENTER_LAUNCH.md`、`skills/DEEPSEEK_WORKFLOW.md`、`.codex/hooks/shell/deepseek-*`、`.codex/tmp/deepseek-worker.json`は削除し、設定・hook・skillの版を揃える。`skills/errand/`・`skills/SCENARIO_FLOW.md`・`rules/typescript/tdd-pattern.md`も削除し、設計書実装の起動を`$tdd --from-doc`へ変更する。外部`setup-agent`の更新・削除処理は本リポジトリの検証対象外。
 
-Codex更新では旧`.codex/agents/difficulty-evaluator.toml`・`deep-reviewer.toml`・`nesting-reviewer.toml`と登録を除去する。Claude側の同名資産と共通のClaude向け文書は保持する。bridge未完成・未導入の配置先ではworker作業を開始せず、親実装へ自動代替しない。
+Codex更新では旧`.codex/agents/difficulty-evaluator.toml`・`deep-reviewer.toml`・`nesting-reviewer.toml`と登録を除去する。Claude側の同名資産と共通のClaude向け文書は保持する。
 
 bootstrapは配置先だけで実行する。`.[agent_name]`のdotはplaceholderの外へ置く。置換・残存検査・自己削除は`bootstrap.sh`が行う。ClaudeのルートCLAUDE.mdは`@AGENTS.md`を参照し、CodexはAGENTS.mdを直接読む。
 
@@ -110,9 +92,8 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 
 | 正本 | 読む時点・責務 |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Codex/worker/Claudeの作業分担への入口 |
+| [AGENTS.md](AGENTS.md) | Codex/Claudeの作業分担への入口 |
 | [WORKFLOW_ROUTING.md](skills/WORKFLOW_ROUTING.md) | Codexの機械的変更・設計・レビューの動線と役割別のAstra effort |
-| [DEEPSEEK_WORKFLOW.md](skills/DEEPSEEK_WORKFLOW.md) | DeepSeekへの依頼、継続・待機・停止、workerの担当 |
 | [IMPLEMENTATION_RULES.md](skills/IMPLEMENTATION_RULES.md) | 調査後・方針決定前の共通判断、規約・作業対象とGit状態への入口 |
 | [MODEL_SELECTION.md](skills/MODEL_SELECTION.md) | Claudeの編集前評価・採用モデル・適用確認 |
 | [SUBAGENT_RULES.md](skills/SUBAGENT_RULES.md) | 起動入力を組み立てる前に親が読む。role・完了待ち・入力訂正・利用不能時の行動 |
@@ -139,7 +120,6 @@ cowlick・ponytail・polish・unwindの内部工程は各`PROCEDURE.md`を読む
 | 設計形式・子の共通制約と専用契約・role起動 | `load-required-contract.sh`・`load-operation-context.sh`・`require-implementer.sh` |
 | 検証済みの子入力・実child IDへの結合 | `agent-input.py`・`agent-input.sh`・`load-operation-context.sh` |
 | shellを含む変更前HEAD・起動済み独立レビューの証跡 | `independent-review.sh`・`safe-files.py` |
-| DeepSeek実行中の親操作制限・非同期結果の照合 | `deepseek-worker.sh`・`deepseek-worker.py`・`codex/hooks.json` |
 | Codexの子を1回の完了待ちへ補正 | `agent-wait.sh` |
 
 hook名だけの項目は`hooks/shell/`配下。MCPの接続先・version・tool権限は設定を正本とする。録画条件・passwordの扱いは[E2E手順](skills/e2e/SKILL.md)に従う。
@@ -195,7 +175,7 @@ Claude／Codexへの一時配置・bootstrap・hookの決定と子への文書�
 
 `python3 tests/test_role_runtime.py`はsandbox外で実行し、一時Codex領域・local模擬API・実CLIで入力準備→native起動→配布hook→子契約→結果受理を通し、app-serverで`agentRole`／`agent_role`を照合する。要求されたmodel・effort、未信頼project、未対応の切替を成功にしないことも検査する。外部モデルの評価は行わない。`--probe-permissions`は子の実書き込みも試す追加診断で、role登録の成功をOS read-onlyの成功とは扱わない。
 
-`python3 tests/probe_agent_workflow.py --case source-review`は認証済みCodexで配布元差分の独立Astraレビューと結果受理を検査する。旧difficulty/workflow probeは廃止。workerを含む実動作はbridge完成後の接続検証とし、通常suiteや模擬応答の成功で代替しない。`test_deepseek_worker.py`は起動前baseline・writer予約・結果照合・旧wait拒否を配布hookで検証する。
+`python3 tests/probe_agent_workflow.py --case source-review`は認証済みCodexで配布元差分の独立Astraレビューと結果受理を検査する。旧difficulty/workflow probeは廃止。
 
 skill形式は`python3 tests/validate-skills.py skills/<skill名>`で検査する。`tests/run-tests.sh`は全体suite経由で使う。
 
