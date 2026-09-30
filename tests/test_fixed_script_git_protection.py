@@ -116,6 +116,91 @@ class FixedScriptGitProtection(unittest.TestCase):
                     after = {str(p.relative_to(root)): p.read_bytes() for p in (root / ".git").rglob("*") if p.is_file()}
                     self.assertEqual(before, after)
 
+    def test_published_rebase_requires_opt_in_and_preserves_recovery(self):
+        for agent in ("claude", "codex"):
+            with self.subTest(agent=agent), tempfile.TemporaryDirectory() as parent:
+                root, product, skills = self.fixture(parent, agent)
+                base, commits = self.commits(root)
+                original = commits[-1]
+                self.git(root, "update-ref", "refs/remotes/origin/published", original)
+                script = skills / "rebase/rebase.sh"
+
+                def run(*args):
+                    return subprocess.run(["bash", str(script), *args], cwd=root,
+                                          env=self.environment, capture_output=True, text=True)
+
+                for args in (
+                    ("--check", "--base", base),
+                    ("--base", base, "--group", "feature: 統合", ",".join(commits)),
+                    ("--check", "--allow-pushed"),
+                    ("--allow-pushed", "--group", "feature: 統合", ",".join(commits)),
+                ):
+                    result = run(*args)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertEqual(self.git(root, "rev-parse", "HEAD"), original)
+                result = run("--check", "--allow-pushed", "--base", base)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("PUSHED_IN_BASE_RANGE 2", result.stdout)
+                self.assertEqual(self.git(root, "rev-parse", "HEAD"), original)
+
+                # The opt-in must not bypass exactly-once or replay conflict checks.
+                for groups, error in (
+                    (["--group", "feature: 欠落", commits[0]], "exactly-once"),
+                    (["--group", "feature: 重複", ",".join(commits + commits)], "exactly-once"),
+                    (["--group", "feature: 後を先に", commits[1],
+                      "--group", "feature: 前を後に", commits[0]], "コンフリクト"),
+                ):
+                    result = run("--allow-pushed", "--base", base, *groups)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(error, result.stderr)
+                    self.assertEqual(self.git(root, "rev-parse", "HEAD"), original)
+                    self.assertEqual((root / "file.txt").read_text(), "2\n")
+                    self.assertEqual(self.git(root, "diff", "--cached"), "")
+                    self.assertEqual(self.git(root, "worktree", "list", "--porcelain").count("worktree "), 1)
+
+                result = run("--allow-pushed", "--base", base,
+                             "--group", "feature: 統合", ",".join(commits))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.git(root, "rev-list", "--count", base + "..HEAD"), "1")
+                self.assertEqual(self.git(root, "rev-parse", "HEAD^{tree}"),
+                                 self.git(root, "rev-parse", original + "^{tree}"))
+                backup = self.git(root, "for-each-ref", "--format=%(objectname)", "refs/heads/backup/")
+                self.assertEqual(backup, original)
+                self.assertEqual(self.git(root, "rev-parse", "refs/remotes/origin/published"), original)
+                self.assertIn("backup 保持:", result.stdout)
+
+    def test_published_rebase_rejects_changed_result_tree(self):
+        for agent in ("claude", "codex"):
+            with self.subTest(agent=agent), tempfile.TemporaryDirectory() as parent:
+                root, product, skills = self.fixture(parent, agent)
+                base, commits = self.commits(root)
+                self.git(root, "update-ref", "refs/remotes/origin/published", commits[-1])
+                binary = Path(parent) / "bin"
+                binary.mkdir()
+                wrapper = binary / "git"
+                wrapper.write_text('''#!/bin/bash
+if [ "$1" = -C ] && [ "${3:-}" = commit ]; then
+  "$REAL_GIT" "$@" || exit $?
+  printf 'unexpected content\\n' > "$2/file.txt"
+  "$REAL_GIT" -C "$2" add file.txt
+  exec "$REAL_GIT" -C "$2" commit --amend --no-edit --quiet
+fi
+exec "$REAL_GIT" "$@"
+''')
+                wrapper.chmod(0o755)
+                environment = dict(self.environment, REAL_GIT=shutil.which("git"),
+                                   PATH=str(binary) + os.pathsep + os.environ["PATH"])
+                result = subprocess.run(["bash", str(skills / "rebase/rebase.sh"),
+                                         "--allow-pushed", "--base", base,
+                                         "--group", "feature: 統合", ",".join(commits)],
+                                        cwd=root, env=environment, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("tree が元 HEAD と一致しない", result.stderr)
+                self.assertEqual(self.git(root, "rev-parse", "HEAD"), commits[-1])
+                self.assertEqual((root / "file.txt").read_text(), "2\n")
+                self.assertEqual(self.git(root, "diff", "--cached"), "")
+                self.assertEqual(self.git(root, "worktree", "list", "--porcelain").count("worktree "), 1)
+
     def test_fixed_rebase_does_not_run_external_git_helpers(self):
         for agent in ("claude", "codex"):
             with self.subTest(agent=agent), tempfile.TemporaryDirectory() as parent:
