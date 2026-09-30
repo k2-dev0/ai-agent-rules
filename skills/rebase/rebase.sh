@@ -1,12 +1,12 @@
 #!/bin/bash
 # rebase スキルの決定的実行スクリプト。
-# 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、未 push 範囲だけ
+# 「[<エージェント名>]: {ファイル名}/{変更内容}」の 1 ファイル = 1 コミット履歴を、既定では未 push 範囲だけ
 # 機能単位の squash 履歴へ組み替える。履歴書き換えの唯一の公認経路
 # （生の rebase / filter-branch / force push は git-policy.py が deny する）。
 #
 # 使い方:
-#   rebase.sh --check [--base <ref>]  # 前提検査と対象範囲の報告（履歴を変更しない）
-#   rebase.sh [--base <ref>] --group <subject> <sha[,sha...]> [--group ...]
+#   rebase.sh --check [--base <ref>] [--allow-pushed]  # 前提検査と対象範囲の報告（履歴を変更しない）
+#   rebase.sh [--base <ref>] [--allow-pushed] --group <subject> <sha[,sha...]> [--group ...]
 #                                      # group 指定に従いリプレイ実行
 #
 # 安全設計（verify-then-swap）:
@@ -17,8 +17,8 @@
 #   消すだけでよく、復元パスが存在しない。
 # 失敗の扱い: 検査・リプレイ・検証のどこで落ちても ERROR を stderr へ出して exit 1
 #   （成功したふりの禁止）。push は本スクリプトは行わない。
-# backup ブランチ: swap（update-ref）の間だけ ORIG へ名前を張る一時的な足場であり、
-#   swap 成功後は削除する。成功時に残さないので、backup が残っていれば swap 失敗の証拠になる。
+# backup ブランチ: swap（update-ref）前に ORIG を保存する。
+#   swap 成功後は既定モードで削除し、--allow-pushed では復旧用に保持する。
 set -u
 SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
 . "$SCRIPT_DIR/../../../.[agent_name]/hooks/shell/git-safe-env.sh" || exit 1
@@ -26,7 +26,7 @@ SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && builtin pwd -P) || exit 1
 err() { echo "ERROR: $*" >&2; }
 die() { err "$*"; exit 1; }
 
-MODE="" BASE_ARG="" GROUP_COUNT=0
+MODE="" BASE_ARG="" GROUP_COUNT=0 ALLOW_PUSHED=false
 GROUP_SUBJECTS=()
 GROUP_COMMITS=()
 while [ $# -gt 0 ]; do
@@ -35,6 +35,7 @@ while [ $# -gt 0 ]; do
       [ -z "$MODE" ] || die "--check と --group は同時に指定できない"
       MODE=check
       ;;
+    --allow-pushed) ALLOW_PUSHED=true ;;
     --base) shift; BASE_ARG="${1:?--base には ref が必要}" ;;
     --group)
       [ "$MODE" != check ] || die "--check と --group は同時に指定できない"
@@ -54,7 +55,9 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -n "$MODE" ] || die "usage: rebase.sh --check [--base <ref>] | rebase.sh [--base <ref>] --group <subject> <sha[,sha...]> [--group ...]"
+[ -n "$MODE" ] || die "usage: rebase.sh --check [--base <ref>] [--allow-pushed] | rebase.sh [--base <ref>] [--allow-pushed] --group <subject> <sha[,sha...]> [--group ...]"
+
+[ "$ALLOW_PUSHED" = false ] || [ -n "$BASE_ARG" ] || die "--allow-pushed には --base <ref> が必要"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "git リポジトリ内で実行すること"
 [ "$(git rev-parse --abbrev-ref HEAD)" != "HEAD" ] || die "detached HEAD では実行しない"
@@ -96,11 +99,12 @@ git merge-base --is-ancestor "$BASE" "$ORIG" || die "base($BASE) が HEAD の祖
 [ -z "$(git rev-list --merges "$BASE..$ORIG")" ] || die "範囲に merge コミットがある。本スキルの対象外"
 
 # 「未 push」の判定は upstream 比較では不十分（PR ブランチ等へ push 済みでも @{u}..HEAD に残る）。
-# 範囲の全コミットが全リモート追跡 ref から不可視であることを要求する
+# 既定では範囲の全コミットが全リモート追跡 ref から不可視であることを要求する
 TOTAL=$(git rev-list --count "$BASE..$ORIG")
 INVISIBLE=$(git rev-list --count "$BASE..$ORIG" --not --remotes)
-[ "$TOTAL" -eq "$INVISIBLE" ] || \
-  die "範囲内にリモートへ push 済みのコミットが $((TOTAL - INVISIBLE)) 件ある。共有履歴は書き換えない"
+PUSHED=$((TOTAL - INVISIBLE))
+[ "$ALLOW_PUSHED" = true ] || [ "$PUSHED" -eq 0 ] || \
+  die "範囲内にリモートへ push 済みのコミットが $PUSHED 件ある。明示許可がある場合だけ --allow-pushed --base <ref> を指定すること"
 
 # 契約外のコミットは境界: 最新の契約外コミットより古い側は対象から外す
 EFFECTIVE_BASE=$BASE
@@ -114,6 +118,8 @@ if [ "$MODE" = check ]; then
   echo "BASE $EFFECTIVE_BASE"
   echo "HEAD $ORIG"
   echo "COMMITS $COUNT"
+  echo "PUSHED_IN_BASE_RANGE $PUSHED"
+  echo "ALLOW_PUSHED $ALLOW_PUSHED"
   echo "SUBJECT_FORMAT $(commit_message_format)"
   if [ "$COUNT" -lt 2 ]; then
     echo "NOTHING-TO-DO: squash 対象が 2 コミット未満"
@@ -165,7 +171,7 @@ fi
 
 BACKUP="backup/rebase-$(git rev-parse --short=7 "$ORIG")"
 git show-ref --verify --quiet "refs/heads/$BACKUP" && \
-  die "backup ブランチが既に存在する: ${BACKUP}。成功時は自動削除されるので、これは前回の swap が失敗した証拠。確認と削除は人間の仕事"
+  die "backup ブランチが既に存在する: ${BACKUP}。保持済みbackupと衝突するため停止"
 
 python3 "$REPO_ROOT/.[agent_name]/hooks/shell/safe-files.py" "[agent_name]" check "${TMPDIR:-/tmp}/rebase.XXXXXX" || exit 1
 WT=$(mktemp -d "${TMPDIR:-/tmp}/rebase.XXXXXX") || die "temp dir を作れない"
@@ -233,13 +239,18 @@ if ! git update-ref -m "rebase: squash verified history" "$ORIGINAL_BRANCH" "$NE
   cleanup
   die "swap(update-ref) に失敗。並行変更は上書きせず、元HEADは $BACKUP と reflog に保持した"
 fi
-# swap 成功。backup はここまでの足場であり、成果物ではないので削除する。
-# 削除に失敗しても swap 自体は成功しているので、警告に留めて成功扱いにする
-git branch -D "$BACKUP" >/dev/null 2>&1 || \
-  echo "WARN: backup ブランチを削除できなかった: $BACKUP (手動で削除すること)" >&2
+# 明示許可モードは復旧用backupを保持する。既定モードは従来どおり削除する。
+BACKUP_STATUS="保持: $BACKUP"
+if [ "$ALLOW_PUSHED" = false ]; then
+  if git branch -D "$BACKUP" >/dev/null 2>&1; then
+    BACKUP_STATUS="削除済み。reflog から辿れる"
+  else
+    echo "WARN: backup ブランチを削除できなかった: $BACKUP" >&2
+  fi
+fi
 cleanup
 
 echo "OK: $COUNT commits -> $NGROUPS commits"
-echo "元 HEAD: $ORIG (backup ブランチは削除済み。reflog から辿れる)"
+echo "元 HEAD: $ORIG (backup $BACKUP_STATUS)"
 echo "検証: tree 一致(元 HEAD と diff 空) / 全コミット exactly-once 消費"
 git log --no-show-signature --reverse --format='%h%x09%s' "$EFFECTIVE_BASE..HEAD"
